@@ -2992,6 +2992,9 @@ task.spawn(function()
 			LastFullbrightUpdate = 0,
 			TriggerBusy = false,
 			TriggerGeneration = 0,
+			TriggerMousePressed = false,
+			TriggerVirtualPressed = false,
+			TriggerPressPoint = nil,
 			FullbrightOriginal = nil,
 			FullbrightApplying = false,
 			XRayOriginal = setmetatable({}, {__mode = "k"}),
@@ -3313,8 +3316,22 @@ task.spawn(function()
 		local TriggerMouse = LocalPlayer:GetMouse()
 		local TriggerVirtualInputManager = nil
 		pcall(function() TriggerVirtualInputManager = game:GetService("VirtualInputManager") end)
-		local TRIGGER_INTERVAL = MOBILE_DEVICE and 0.14 or 0.10
-		local TRIGGER_PRESS_TIME = 0.012
+
+		local function releaseTriggerInput()
+			if State.TriggerMousePressed and type(mouse1release) == "function" then
+				pcall(mouse1release)
+			end
+			State.TriggerMousePressed = false
+
+			local point = State.TriggerPressPoint
+			if State.TriggerVirtualPressed and TriggerVirtualInputManager and point then
+				pcall(function()
+					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
+				end)
+			end
+			State.TriggerVirtualPressed = false
+			State.TriggerPressPoint = nil
+		end
 
 		local function getPlayerFromTargetPart(targetPart)
 			local current = targetPart
@@ -3338,11 +3355,11 @@ task.spawn(function()
 
 		local function getTriggerTarget()
 			local camera = workspace.CurrentCamera
-			if not camera or UserInputService:GetFocusedTextBox() then return nil, nil end
+			if not camera then return nil, nil end
 
 			local point
 			local ray
-			if MOBILE_DEVICE or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+			if MOBILE_DEVICE then
 				point = camera.ViewportSize / 2
 				ray = camera:ViewportPointToRay(point.X, point.Y)
 			else
@@ -3350,7 +3367,6 @@ task.spawn(function()
 				local ok, mouseRay = pcall(function() return TriggerMouse.UnitRay end)
 				ray = ok and mouseRay or camera:ViewportPointToRay(point.X, point.Y)
 			end
-			if not ray then return nil, point end
 
 			if isTriggerPointOverPanel(point) then return nil, point end
 
@@ -3374,37 +3390,54 @@ task.spawn(function()
 		end
 
 		local function fireTriggerShot(point)
+			-- Libera cualquier pulsación sintética anterior antes de crear otra.
+			releaseTriggerInput()
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
-			if not tool or not tool.Parent or not tool.Enabled then return false end
 			local fired = false
 
-			-- En celular se usa solamente Tool:Activate para no generar toques
-			-- artificiales que puedan interferir con la cámara o la interfaz.
-			if MOBILE_DEVICE then
-				return pcall(function() tool:Activate() end)
-			end
-
-			-- mouse1click completa pulsación y liberación en una sola llamada,
-			-- evitando que un error deje el botón del ratón presionado.
-			if type(mouse1click) == "function" then
-				fired = pcall(mouse1click)
-			end
-
-			if not fired and tool.Enabled then
+			-- Tool:Activate es el método más estable en celular y en Delta.
+			if MOBILE_DEVICE and tool and tool.Enabled then
 				fired = pcall(function() tool:Activate() end)
 			end
 
-			if not fired and TriggerVirtualInputManager and point and tool.Enabled then
+			if not fired and type(mouse1click) == "function" then
+				fired = pcall(mouse1click)
+				-- Algunos ejecutores implementan mouse1click como una pulsación
+				-- incompleta. Forzar MouseUp evita que bloquee cámara o movimiento.
+				if fired and type(mouse1release) == "function" then pcall(mouse1release) end
+			end
+
+			if not fired and type(mouse1press) == "function" and type(mouse1release) == "function" then
+				local pressed = pcall(mouse1press)
+				if pressed then
+					State.TriggerMousePressed = true
+					task.wait(0.012)
+					local released = pcall(mouse1release)
+					State.TriggerMousePressed = not released
+					if not released then releaseTriggerInput() end
+					fired = released
+				end
+			end
+
+			if not fired and tool and tool.Enabled then
+				fired = pcall(function() tool:Activate() end)
+			end
+
+			if not fired and TriggerVirtualInputManager and point then
 				local pressed = pcall(function()
 					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
 				end)
 				if pressed then
-					task.wait(TRIGGER_PRESS_TIME)
-					pcall(function()
+					State.TriggerVirtualPressed = true
+					State.TriggerPressPoint = point
+					task.wait(0.012)
+					local released = pcall(function()
 						TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
 					end)
-					fired = true
+					State.TriggerVirtualPressed = not released
+					if released then State.TriggerPressPoint = nil else releaseTriggerInput() end
+					fired = released
 				end
 			end
 
@@ -3412,11 +3445,7 @@ task.spawn(function()
 		end
 
 		local function updateTriggerbot(now)
-			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < TRIGGER_INTERVAL then return end
-			if UserInputService:GetFocusedTextBox() then return end
-			local character = LocalPlayer.Character
-			local tool = character and character:FindFirstChildOfClass("Tool")
-			if not tool or not tool.Parent or not tool.Enabled then return end
+			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < 0.10 then return end
 			local targetPart, triggerPoint = getTriggerTarget()
 			if not targetPart or not targetPart.Parent then return end
 			local targetPlayer, targetCharacter = getPlayerFromTargetPart(targetPart)
@@ -4058,7 +4087,7 @@ task.spawn(function()
 
 		local function suspend()
 			stopDrone()
-			State.TriggerGeneration += 1
+			releaseTriggerInput()
 			State.TriggerBusy = false
 			restoreWeapons()
 			restoreFullbright()
@@ -4134,11 +4163,10 @@ task.spawn(function()
 		end)
 		bindToggle(AutoReloadButton, "AutoReload")
 		bindToggle(TriggerButton, "Triggerbot", function(enabled)
-			if enabled then
-				State.LastTriggerClick = 0
-			else
+			if not enabled then
 				State.TriggerGeneration += 1
 				State.TriggerBusy = false
+				releaseTriggerInput()
 			end
 		end)
 		bindToggle(InfiniteAmmoButton, "InfiniteAmmo", function(enabled)
