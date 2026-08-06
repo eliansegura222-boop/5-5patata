@@ -2991,6 +2991,7 @@ task.spawn(function()
 			LastTriggerClick = 0,
 			LastFullbrightUpdate = 0,
 			TriggerBusy = false,
+			TriggerGeneration = 0,
 			FullbrightOriginal = nil,
 			FullbrightApplying = false,
 			XRayOriginal = setmetatable({}, {__mode = "k"}),
@@ -3291,7 +3292,7 @@ task.spawn(function()
 			return HexaSharedTargetFilters:AllowsPlayer(player, true)
 		end
 
-		local function isVisible(part)
+		local function isVisible(part, targetCharacter)
 			if not HexaSharedTargetFilters.WallCheck then return true end
 			local camera = workspace.CurrentCamera
 			if not camera or not part or not part.Parent then return false end
@@ -3303,40 +3304,124 @@ task.spawn(function()
 			params.FilterDescendantsInstances = excluded
 			params.IgnoreWater = true
 			local result = workspace:Raycast(origin, part.Position - origin, params)
-			return result == nil or result.Instance:IsDescendantOf(part.Parent)
+			return result == nil
+				or result.Instance == part
+				or (targetCharacter and result.Instance:IsDescendantOf(targetCharacter))
+				or result.Instance:IsDescendantOf(part.Parent)
 		end
 
 		local TriggerMouse = LocalPlayer:GetMouse()
+		local TriggerVirtualInputManager = nil
+		pcall(function() TriggerVirtualInputManager = game:GetService("VirtualInputManager") end)
+
+		local function getPlayerFromTargetPart(targetPart)
+			local current = targetPart
+			while current and current ~= workspace do
+				if current:IsA("Model") then
+					local player = Players:GetPlayerFromCharacter(current)
+					if player then return player, current end
+				end
+				current = current.Parent
+			end
+			return nil, nil
+		end
+
+		local function isTriggerPointOverPanel(point)
+			if not MainFrame.Visible or MainFrame.Size.X.Offset <= 0 or MainFrame.Size.Y.Offset <= 0 then return false end
+			local panelPosition = MainFrame.AbsolutePosition
+			local panelSize = MainFrame.AbsoluteSize
+			return point.X >= panelPosition.X and point.X <= panelPosition.X + panelSize.X
+				and point.Y >= panelPosition.Y and point.Y <= panelPosition.Y + panelSize.Y
+		end
+
+		local function getTriggerTarget()
+			local camera = workspace.CurrentCamera
+			if not camera then return nil, nil end
+
+			local point
+			local ray
+			if MOBILE_DEVICE then
+				point = camera.ViewportSize / 2
+				ray = camera:ViewportPointToRay(point.X, point.Y)
+			else
+				point = Vector2.new(TriggerMouse.X, TriggerMouse.Y)
+				local ok, mouseRay = pcall(function() return TriggerMouse.UnitRay end)
+				ray = ok and mouseRay or camera:ViewportPointToRay(point.X, point.Y)
+			end
+
+			if isTriggerPointOverPanel(point) then return nil, point end
+
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			local excluded = {camera}
+			if LocalPlayer.Character then table.insert(excluded, LocalPlayer.Character) end
+			params.FilterDescendantsInstances = excluded
+			params.IgnoreWater = true
+
+			local result = workspace:Raycast(ray.Origin, ray.Direction * 5000, params)
+			if result and result.Instance and result.Instance.Parent then
+				return result.Instance, point
+			end
+
+			-- Respaldo para juegos que administran el objetivo mediante Mouse.Target.
+			if not MOBILE_DEVICE and TriggerMouse.Target and TriggerMouse.Target.Parent then
+				return TriggerMouse.Target, point
+			end
+			return nil, point
+		end
+
+		local function fireTriggerShot(point)
+			local character = LocalPlayer.Character
+			local tool = character and character:FindFirstChildOfClass("Tool")
+			local fired = false
+
+			-- Tool:Activate es el método más estable en celular y en Delta.
+			if MOBILE_DEVICE and tool and tool.Enabled then
+				fired = pcall(function() tool:Activate() end)
+			end
+
+			if not fired and type(mouse1click) == "function" then
+				fired = pcall(mouse1click)
+			elseif not fired and type(mouse1press) == "function" and type(mouse1release) == "function" then
+				fired = pcall(function()
+					mouse1press()
+					task.wait(0.012)
+					mouse1release()
+				end)
+			end
+
+			if not fired and tool and tool.Enabled then
+				fired = pcall(function() tool:Activate() end)
+			end
+
+			if not fired and TriggerVirtualInputManager and point then
+				fired = pcall(function()
+					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
+					task.wait(0.012)
+					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
+				end)
+			end
+
+			return fired
+		end
 
 		local function updateTriggerbot(now)
 			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < 0.10 then return end
-			local targetPart = TriggerMouse.Target
+			local targetPart, triggerPoint = getTriggerTarget()
 			if not targetPart or not targetPart.Parent then return end
-			local targetCharacter = targetPart:FindFirstAncestorOfClass("Model")
-			local targetPlayer = targetCharacter and Players:GetPlayerFromCharacter(targetCharacter)
+			local targetPlayer, targetCharacter = getPlayerFromTargetPart(targetPart)
 			if not targetPlayer or not HexaSharedTargetFilters:AllowsPlayer(targetPlayer, true) then return end
-			if not isVisible(targetPart) then return end
+			if not isVisible(targetPart, targetCharacter) then return end
 
 			State.TriggerBusy = true
 			State.LastTriggerClick = now
+			local generation = State.TriggerGeneration
 			task.spawn(function()
-				local clicked = false
-				if type(mouse1click) == "function" then
-					clicked = pcall(mouse1click)
-				elseif type(mouse1press) == "function" and type(mouse1release) == "function" then
-					clicked = pcall(function()
-						mouse1press()
-						task.wait(0.01)
-						mouse1release()
-					end)
-				end
-				if not clicked then
-					local character = LocalPlayer.Character
-					local tool = character and character:FindFirstChildOfClass("Tool")
-					if tool then pcall(function() tool:Activate() end) end
+				if Settings.Triggerbot and generation == State.TriggerGeneration then
+					pcall(fireTriggerShot, triggerPoint)
 				end
 				task.wait(0.08)
-				State.TriggerBusy = false
+				if generation == State.TriggerGeneration then State.TriggerBusy = false end
 			end)
 		end
 
@@ -4038,7 +4123,10 @@ task.spawn(function()
 		end)
 		bindToggle(AutoReloadButton, "AutoReload")
 		bindToggle(TriggerButton, "Triggerbot", function(enabled)
-			if not enabled then State.TriggerBusy = false end
+			if not enabled then
+				State.TriggerGeneration += 1
+				State.TriggerBusy = false
+			end
 		end)
 		bindToggle(InfiniteAmmoButton, "InfiniteAmmo", function(enabled)
 			if not enabled then
