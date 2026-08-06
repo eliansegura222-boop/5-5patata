@@ -3313,6 +3313,8 @@ task.spawn(function()
 		local TriggerMouse = LocalPlayer:GetMouse()
 		local TriggerVirtualInputManager = nil
 		pcall(function() TriggerVirtualInputManager = game:GetService("VirtualInputManager") end)
+		local TRIGGER_INTERVAL = MOBILE_DEVICE and 0.14 or 0.10
+		local TRIGGER_PRESS_TIME = 0.012
 
 		local function getPlayerFromTargetPart(targetPart)
 			local current = targetPart
@@ -3336,11 +3338,11 @@ task.spawn(function()
 
 		local function getTriggerTarget()
 			local camera = workspace.CurrentCamera
-			if not camera then return nil, nil end
+			if not camera or UserInputService:GetFocusedTextBox() then return nil, nil end
 
 			local point
 			local ray
-			if MOBILE_DEVICE then
+			if MOBILE_DEVICE or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
 				point = camera.ViewportSize / 2
 				ray = camera:ViewportPointToRay(point.X, point.Y)
 			else
@@ -3348,6 +3350,7 @@ task.spawn(function()
 				local ok, mouseRay = pcall(function() return TriggerMouse.UnitRay end)
 				ray = ok and mouseRay or camera:ViewportPointToRay(point.X, point.Y)
 			end
+			if not ray then return nil, point end
 
 			if isTriggerPointOverPanel(point) then return nil, point end
 
@@ -3373,40 +3376,47 @@ task.spawn(function()
 		local function fireTriggerShot(point)
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
+			if not tool or not tool.Parent or not tool.Enabled then return false end
 			local fired = false
 
-			-- Tool:Activate es el método más estable en celular y en Delta.
-			if MOBILE_DEVICE and tool and tool.Enabled then
-				fired = pcall(function() tool:Activate() end)
+			-- En celular se usa solamente Tool:Activate para no generar toques
+			-- artificiales que puedan interferir con la cámara o la interfaz.
+			if MOBILE_DEVICE then
+				return pcall(function() tool:Activate() end)
 			end
 
-			if not fired and type(mouse1click) == "function" then
+			-- mouse1click completa pulsación y liberación en una sola llamada,
+			-- evitando que un error deje el botón del ratón presionado.
+			if type(mouse1click) == "function" then
 				fired = pcall(mouse1click)
-			elseif not fired and type(mouse1press) == "function" and type(mouse1release) == "function" then
-				fired = pcall(function()
-					mouse1press()
-					task.wait(0.012)
-					mouse1release()
-				end)
 			end
 
-			if not fired and tool and tool.Enabled then
+			if not fired and tool.Enabled then
 				fired = pcall(function() tool:Activate() end)
 			end
 
-			if not fired and TriggerVirtualInputManager and point then
-				fired = pcall(function()
+			if not fired and TriggerVirtualInputManager and point and tool.Enabled then
+				local pressed = pcall(function()
 					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
-					task.wait(0.012)
-					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
 				end)
+				if pressed then
+					task.wait(TRIGGER_PRESS_TIME)
+					pcall(function()
+						TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
+					end)
+					fired = true
+				end
 			end
 
 			return fired
 		end
 
 		local function updateTriggerbot(now)
-			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < 0.10 then return end
+			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < TRIGGER_INTERVAL then return end
+			if UserInputService:GetFocusedTextBox() then return end
+			local character = LocalPlayer.Character
+			local tool = character and character:FindFirstChildOfClass("Tool")
+			if not tool or not tool.Parent or not tool.Enabled then return end
 			local targetPart, triggerPoint = getTriggerTarget()
 			if not targetPart or not targetPart.Parent then return end
 			local targetPlayer, targetCharacter = getPlayerFromTargetPart(targetPart)
@@ -4048,6 +4058,7 @@ task.spawn(function()
 
 		local function suspend()
 			stopDrone()
+			State.TriggerGeneration += 1
 			State.TriggerBusy = false
 			restoreWeapons()
 			restoreFullbright()
@@ -4123,7 +4134,9 @@ task.spawn(function()
 		end)
 		bindToggle(AutoReloadButton, "AutoReload")
 		bindToggle(TriggerButton, "Triggerbot", function(enabled)
-			if not enabled then
+			if enabled then
+				State.LastTriggerClick = 0
+			else
 				State.TriggerGeneration += 1
 				State.TriggerBusy = false
 			end
