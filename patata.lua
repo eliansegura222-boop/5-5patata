@@ -1810,7 +1810,7 @@ mkStroke(CategoryUI.Frame, Theme.Accent, 0.78, 1)
 
 if MOBILE_DEVICE then
 	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 110)
-	CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 58)
+	CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 68)
 else
 	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 110)
 	CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -116)
@@ -1834,12 +1834,12 @@ CategoryUI.Scroll = Instance.new("ScrollingFrame")
 CategoryUI.Scroll.Name = "HexaCategoryButtons"
 CategoryUI.Scroll.BackgroundTransparency = 1
 CategoryUI.Scroll.BorderSizePixel = 0
-CategoryUI.Scroll.Position = MOBILE_DEVICE and UDim2.new(0, 7, 0, 7) or UDim2.new(0, 8, 0, 30)
-CategoryUI.Scroll.Size = MOBILE_DEVICE and UDim2.new(1, -14, 1, -14) or UDim2.new(1, -16, 1, -36)
+CategoryUI.Scroll.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 6) or UDim2.new(0, 8, 0, 30)
+CategoryUI.Scroll.Size = MOBILE_DEVICE and UDim2.new(1, -16, 1, -12) or UDim2.new(1, -16, 1, -36)
 CategoryUI.Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 CategoryUI.Scroll.AutomaticCanvasSize = MOBILE_DEVICE and Enum.AutomaticSize.X or Enum.AutomaticSize.Y
 CategoryUI.Scroll.ScrollingDirection = MOBILE_DEVICE and Enum.ScrollingDirection.X or Enum.ScrollingDirection.Y
-CategoryUI.Scroll.ScrollBarThickness = MOBILE_DEVICE and 2 or 3
+CategoryUI.Scroll.ScrollBarThickness = MOBILE_DEVICE and 0 or 3
 CategoryUI.Scroll.ScrollBarImageColor3 = Theme.Accent
 CategoryUI.Scroll.ScrollBarImageTransparency = 0.38
 CategoryUI.Scroll.ZIndex = 4
@@ -1849,6 +1849,7 @@ CategoryUI.Layout = Instance.new("UIListLayout")
 CategoryUI.Layout.FillDirection = MOBILE_DEVICE and Enum.FillDirection.Horizontal or Enum.FillDirection.Vertical
 CategoryUI.Layout.SortOrder = Enum.SortOrder.LayoutOrder
 CategoryUI.Layout.HorizontalAlignment = MOBILE_DEVICE and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Center
+CategoryUI.Layout.VerticalAlignment = MOBILE_DEVICE and Enum.VerticalAlignment.Center or Enum.VerticalAlignment.Top
 CategoryUI.Layout.Padding = UDim.new(0, MOBILE_DEVICE and 6 or 2)
 CategoryUI.Layout.Parent = CategoryUI.Scroll
 
@@ -1933,8 +1934,8 @@ Content = Instance.new("ScrollingFrame")
 Content.Name = "HexaFunctionPanel"
 Content.BackgroundTransparency = 1
 Content.BorderSizePixel = 0
-Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 172) or UDim2.new(0, 168, 0, 108)
-Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -174) or UDim2.new(1, -170, 1, -110)
+Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 182) or UDim2.new(0, 168, 0, 108)
+Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -184) or UDim2.new(1, -170, 1, -110)
 Content.ScrollBarThickness = MOBILE_DEVICE and 6 or 4
 Content.ScrollBarImageColor3 = Theme.Accent
 Content.CanvasSize = UDim2.new(0, 0, 0, 0)
