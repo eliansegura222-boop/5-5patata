@@ -190,6 +190,7 @@ local AllSliders = {}
 local VipControls = {}
 local VipStateListeners = {}
 local notifyVipLocked = function() end
+local BUTTON_TEXT_COLOR = Color3.fromRGB(255, 255, 255)
 
 local function addVipStateListener(callback)
 	table.insert(VipStateListeners, callback)
@@ -201,7 +202,7 @@ local function refreshVipControls()
 			local locked = not HEXA_IS_VIP
 			if control:IsA("TextButton") then
 				control.BackgroundColor3 = locked and Color3.fromRGB(70, 65, 45) or Color3.fromRGB(245, 245, 245)
-				control.TextColor3 = locked and Color3.fromRGB(165, 160, 140) or Color3.fromRGB(12, 12, 12)
+				control.TextColor3 = BUTTON_TEXT_COLOR
 			else
 				for _, child in ipairs(control:GetDescendants()) do
 					if child:IsA("TextLabel") and child.Name ~= "HexaVipBadge" and child.Name ~= "HexaSliderValue" then
@@ -265,9 +266,6 @@ local Theme = {
 	VipGold = Color3.fromRGB(255, 211, 46),
 	Danger = Color3.fromRGB(220, 50, 50),
 }
-
--- Fondo completamente invisible: solo permanecen texto, iconos y bordes.
-local BUTTON_BACKGROUND_TRANSPARENCY = 1
 
 local DEFAULT_WALK_SPEED = 16
 local DEFAULT_JUMP_POWER = 50
@@ -396,9 +394,9 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	btn.Size = size
 	btn.Position = pos
 	btn.BackgroundColor3 = Theme.Panel2
-	btn.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
+	btn.BackgroundTransparency = 1
 	btn.Text = text
-	btn.TextColor3 = Theme.TextOff
+	btn.TextColor3 = BUTTON_TEXT_COLOR
 	btn.TextSize = 12
 	btn.Font = Enum.Font.GothamSemibold
 	btn.AutoButtonColor = false
@@ -423,9 +421,9 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	btn.Size = size
 	btn.Position = pos
 	btn.BackgroundColor3 = Theme.Panel2
-	btn.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
+	btn.BackgroundTransparency = 1
 	btn.Text = text
-	btn.TextColor3 = Theme.TextOff
+	btn.TextColor3 = BUTTON_TEXT_COLOR
 	btn.TextSize = 12
 	btn.Font = Enum.Font.GothamSemibold
 	btn.TextXAlignment = Enum.TextXAlignment.Left
@@ -521,18 +519,18 @@ local function setActive(button: TextButton, active: boolean)
 				BackgroundColor3 = active and Theme.ToggleOn or Theme.ToggleOff 
 			})
 		end
-		button.TextColor3 = active and Theme.ActiveText or Theme.TextOff
+		button.TextColor3 = BUTTON_TEXT_COLOR
 	else
 		local title = button:GetAttribute("BaseText")
 		if typeof(title) == "string" then
 			button.Text = active and (title .. (Lang.Current == "EN" and "  •  ON" or "  •  ACTIVO")) or title
 		end
 		tween(button, ti, { BackgroundColor3 = active and Theme.Active or Theme.Panel2 })
-		button.TextColor3 = active and Theme.ActiveText or Theme.TextOff
+		button.TextColor3 = BUTTON_TEXT_COLOR
 	end
 	if button:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
 		button.BackgroundColor3 = Color3.fromRGB(70, 65, 45)
-		button.TextColor3 = Color3.fromRGB(165, 160, 140)
+		button.TextColor3 = BUTTON_TEXT_COLOR
 	end
 end
 
@@ -841,21 +839,6 @@ if not parentedScreenGui or not ScreenGui.Parent then
 	ScreenGui.Parent = PlayerGui
 end
 TargetParent = ScreenGui.Parent
-
-local function applyTransparentButtonStyle(object)
-	if not (object:IsA("TextButton") or object:IsA("ImageButton")) then return end
-	if object:GetAttribute("HexaKeepButtonTransparency") == true then return end
-	object.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
-end
-
-for _, object in ipairs(ScreenGui:GetDescendants()) do
-	applyTransparentButtonStyle(object)
-end
-ScreenGui.DescendantAdded:Connect(function(object)
-	task.defer(function()
-		if object and object.Parent then applyTransparentButtonStyle(object) end
-	end)
-end)
 
 local MobileMovementControls = nil
 local mobileFlyVertical = 0
@@ -1588,22 +1571,22 @@ do
 end
 
 local CloseButton = neonButton(Header, "X", UDim2.new(0, 34, 0, 34), UDim2.new(1, -46, 0, 12), 4)
-CloseButton.TextColor3 = Theme.Danger
+CloseButton.TextColor3 = BUTTON_TEXT_COLOR
 CloseButton.BackgroundColor3 = Theme.Panel2
 
 local MinButton = neonButton(Header, "-", UDim2.new(0, 34, 0, 34), UDim2.new(1, -86, 0, 12), 4)
-MinButton.TextColor3 = Theme.TextOff
+MinButton.TextColor3 = BUTTON_TEXT_COLOR
 MinButton.BackgroundColor3 = Theme.Panel2
 MinButton:SetAttribute("HexaNoFavorite", true)
 CloseButton:SetAttribute("HexaNoFavorite", true)
 
 local TutorialBtn = neonButton(Header, "?", UDim2.new(0, 34, 0, 34), UDim2.new(1, -126, 0, 12), 4)
-TutorialBtn.TextColor3 = Theme.TextOff
+TutorialBtn.TextColor3 = BUTTON_TEXT_COLOR
 TutorialBtn.BackgroundColor3 = Theme.Panel2
 TutorialBtn:SetAttribute("HexaNoFavorite", true)
 
 Lang.MainButton = neonButton(Header, "ES", UDim2.new(0, 42, 0, 34), UDim2.new(1, -176, 0, 12), 4)
-Lang.MainButton.TextColor3 = Theme.TextOff
+Lang.MainButton.TextColor3 = BUTTON_TEXT_COLOR
 Lang.MainButton.BackgroundColor3 = Theme.Panel2
 Lang.MainButton:SetAttribute("HexaNoTranslate", true)
 Lang.MainButton:SetAttribute("HexaNoFavorite", true)
@@ -1646,7 +1629,7 @@ if HEXA_IS_OWNER then
 		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -274, 0, 18)
 	end
 	OwnerVipButton = neonButton(Header, "★ VIP", UDim2.new(0, 58, 0, 34), UDim2.new(1, -246, 0, 12), 4)
-	OwnerVipButton.TextColor3 = Color3.fromRGB(255, 211, 46)
+	OwnerVipButton.TextColor3 = BUTTON_TEXT_COLOR
 	OwnerVipButton.BackgroundColor3 = Color3.fromRGB(40, 34, 15)
 	mkStroke(OwnerVipButton, Color3.fromRGB(255, 211, 46), 0.2, 1)
 
@@ -1682,7 +1665,7 @@ if HEXA_IS_OWNER then
 	ownerTitle.Parent = OwnerFrame
 
 	local ownerClose = neonButton(OwnerFrame, "X", UDim2.new(0, 34, 0, 34), UDim2.new(1, -46, 0, 10), 152)
-	ownerClose.TextColor3 = Theme.Danger
+	ownerClose.TextColor3 = BUTTON_TEXT_COLOR
 
 	local ownerInfo = Instance.new("TextLabel")
 	ownerInfo.BackgroundTransparency = 1
@@ -1729,7 +1712,7 @@ if HEXA_IS_OWNER then
 	mkStroke(ownerUserBox, Theme.Accent, 0.5, 1)
 
 	local ownerGenerate = neonButton(OwnerFrame, "GENERAR CÓDIGO VIP", UDim2.new(1, -32, 0, 40), UDim2.new(0, 16, 0, 222), 151)
-	ownerGenerate.TextColor3 = Color3.fromRGB(255, 211, 46)
+	ownerGenerate.TextColor3 = BUTTON_TEXT_COLOR
 
 	local ownerCodeBox = Instance.new("TextBox")
 	ownerCodeBox.Position = UDim2.new(0, 16, 0, 270)
@@ -1937,8 +1920,8 @@ function CategoryUI:RefreshButtons()
 		local selected = key == self.Active
 		button:SetAttribute("IsActive", selected)
 		button.BackgroundColor3 = Theme.Panel2
-		button.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
-		button.TextColor3 = Theme.TextMain
+		button.BackgroundTransparency = 1
+		button.TextColor3 = BUTTON_TEXT_COLOR
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
 			stroke.Color = Theme.Accent
@@ -1966,10 +1949,10 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.LayoutOrder = index
 	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(78, #definition.Label * 6 + 22), 32) or UDim2.new(1, -8, 0, 25)
 	button.BackgroundColor3 = Theme.Panel2
-	button.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
+	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
 	button.Text = definition.Label
-	button.TextColor3 = Theme.TextMain
+	button.TextColor3 = BUTTON_TEXT_COLOR
 	button.TextSize = 10
 	button.Font = Enum.Font.GothamBold
 	button.AutoButtonColor = false
@@ -2123,7 +2106,7 @@ local function updateFavoriteStars()
 		if star and star.Parent then
 			star.Visible = HEXA_IS_VIP
 			star.Text = FavoriteIds[id] and "★" or "☆"
-			star.TextColor3 = FavoriteIds[id] and Theme.VipGold or Color3.fromRGB(125, 125, 125)
+			star.TextColor3 = BUTTON_TEXT_COLOR
 		end
 	end
 end
@@ -2149,10 +2132,10 @@ refreshFavoritesCard = function()
 		shortcut.Position = UDim2.new(0, 16, 0, y)
 		shortcut.Size = UDim2.new(1, -32, 0, 36)
 		shortcut.BackgroundColor3 = Theme.Panel2
-		shortcut.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
+		shortcut.BackgroundTransparency = 1
 		shortcut.BorderSizePixel = 0
 		shortcut.Text = item.label
-		shortcut.TextColor3 = Theme.TextOff
+		shortcut.TextColor3 = BUTTON_TEXT_COLOR
 		shortcut.TextSize = 11
 		shortcut.Font = Enum.Font.GothamSemibold
 		shortcut.AutoButtonColor = false
@@ -2543,11 +2526,11 @@ ConfirmTitle.Parent = ConfirmFrame
 
 local YesBtn = neonButton(ConfirmFrame, "SÍ", UDim2.new(0, 110, 0, 38), UDim2.new(0.5, -116, 1, -56), 51)
 YesBtn.BackgroundColor3 = Theme.Danger
-YesBtn.TextColor3 = Theme.ActiveText
+YesBtn.TextColor3 = BUTTON_TEXT_COLOR
 
 local NoBtn = neonButton(ConfirmFrame, "CANCELAR", UDim2.new(0, 110, 0, 38), UDim2.new(0.5, 6, 1, -56), 51)
 NoBtn.BackgroundColor3 = Theme.Panel2
-NoBtn.TextColor3 = Theme.TextOff
+NoBtn.TextColor3 = BUTTON_TEXT_COLOR
 
 local Tutorial = {}
 function Tutorial.getTargetSize()
@@ -2646,7 +2629,7 @@ Tutorial.Text.Parent = Tutorial.Scroll
 
 Tutorial.CloseButton = neonButton(Tutorial.Frame, "ENTENDIDO", UDim2.new(0, 140, 0, 38), UDim2.new(0.5, -70, 1, -50), 62)
 Tutorial.CloseButton.BackgroundColor3 = Theme.Panel2
-Tutorial.CloseButton.TextColor3 = Theme.TextOff
+Tutorial.CloseButton.TextColor3 = BUTTON_TEXT_COLOR
 Tutorial.CloseButton:SetAttribute("HexaNoFavorite", true)
 
 do
@@ -2960,9 +2943,9 @@ local function rebuildPlayerList()
 			local item = Instance.new("TextButton")
 			item.Size = UDim2.new(1, 0, 0, 32)
 			item.BackgroundColor3 = Theme.Panel2
-			item.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
+			item.BackgroundTransparency = 1
 			item.Text = ("  %s (@%s)"):format(player.DisplayName, player.Name)
-			item.TextColor3 = Theme.TextOff
+			item.TextColor3 = BUTTON_TEXT_COLOR
 			item.TextSize = 12
 			item.Font = Enum.Font.GothamMedium
 			item.AutoButtonColor = false
@@ -5808,10 +5791,10 @@ task.spawn(function()
 			self.PanicButton.Size = UDim2.new(1, -32, 0, 38)
 			self.PanicButton.Position = UDim2.new(0, 16, 0, 44)
 			self.PanicButton.BackgroundColor3 = Theme.Danger
-			self.PanicButton.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
+			self.PanicButton.BackgroundTransparency = 1
 			self.PanicButton.BorderSizePixel = 0
 			self.PanicButton.Text = "ACTIVAR MODO PÁNICO"
-			self.PanicButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+			self.PanicButton.TextColor3 = BUTTON_TEXT_COLOR
 			self.PanicButton.TextSize = 12
 			self.PanicButton.Font = Enum.Font.GothamBold
 			self.PanicButton.AutoButtonColor = false
