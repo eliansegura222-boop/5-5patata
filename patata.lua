@@ -266,6 +266,9 @@ local Theme = {
 	Danger = Color3.fromRGB(220, 50, 50),
 }
 
+-- Transparencia uniforme para los botones sin afectar texto, estados ni clics.
+local BUTTON_BACKGROUND_TRANSPARENCY = 0.24
+
 local DEFAULT_WALK_SPEED = 16
 local DEFAULT_JUMP_POWER = 50
 local GUI_VIEWPORT_SIZE = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
@@ -393,7 +396,7 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	btn.Size = size
 	btn.Position = pos
 	btn.BackgroundColor3 = Theme.Panel2
-	btn.BackgroundTransparency = 0.04
+	btn.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 	btn.Text = text
 	btn.TextColor3 = Theme.TextOff
 	btn.TextSize = 12
@@ -420,7 +423,7 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	btn.Size = size
 	btn.Position = pos
 	btn.BackgroundColor3 = Theme.Panel2
-	btn.BackgroundTransparency = 0.04
+	btn.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 	btn.Text = text
 	btn.TextColor3 = Theme.TextOff
 	btn.TextSize = 12
@@ -839,6 +842,21 @@ if not parentedScreenGui or not ScreenGui.Parent then
 end
 TargetParent = ScreenGui.Parent
 
+local function applyTransparentButtonStyle(object)
+	if not (object:IsA("TextButton") or object:IsA("ImageButton")) then return end
+	if object:GetAttribute("HexaKeepButtonTransparency") == true then return end
+	object.BackgroundTransparency = math.max(object.BackgroundTransparency, BUTTON_BACKGROUND_TRANSPARENCY)
+end
+
+for _, object in ipairs(ScreenGui:GetDescendants()) do
+	applyTransparentButtonStyle(object)
+end
+ScreenGui.DescendantAdded:Connect(function(object)
+	task.defer(function()
+		if object and object.Parent then applyTransparentButtonStyle(object) end
+	end)
+end)
+
 local MobileMovementControls = nil
 local mobileFlyVertical = 0
 local mobileFlyVerticalInput = nil
@@ -1242,24 +1260,62 @@ function Lang.ReplacePlain(text, fromText, toText)
 	return text
 end
 
+local function isAsciiWordCharacter(character)
+	return character ~= "" and string.match(character, "^[%w_]$") ~= nil
+end
+
+function Lang.ReplacePlainBounded(text, fromText, toText)
+	local startIndex = 1
+	local sourceStartsAsWord = isAsciiWordCharacter(string.sub(fromText, 1, 1))
+	local sourceEndsAsWord = isAsciiWordCharacter(string.sub(fromText, -1))
+	while true do
+		local firstIndex, lastIndex = string.find(text, fromText, startIndex, true)
+		if not firstIndex then break end
+		local before = firstIndex > 1 and string.sub(text, firstIndex - 1, firstIndex - 1) or ""
+		local after = lastIndex < #text and string.sub(text, lastIndex + 1, lastIndex + 1) or ""
+		local insideAnotherWord = (sourceStartsAsWord and isAsciiWordCharacter(before))
+			or (sourceEndsAsWord and isAsciiWordCharacter(after))
+		if insideAnotherWord then
+			startIndex = lastIndex + 1
+		else
+			text = string.sub(text, 1, firstIndex - 1) .. toText .. string.sub(text, lastIndex + 1)
+			startIndex = firstIndex + #toText
+		end
+	end
+	return text
+end
+
+function Lang.ReplacePairsOnce(text, pairs, sourceIndex, targetIndex)
+	local translated = text
+	local replacements = {}
+	for index, pair in ipairs(pairs) do
+		local token = string.char(1) .. "HEXA_TRANSLATION_" .. tostring(index) .. string.char(2)
+		translated = Lang.ReplacePlainBounded(translated, pair[sourceIndex], token)
+		table.insert(replacements, {token, pair[targetIndex]})
+	end
+	for _, replacement in ipairs(replacements) do
+		translated = Lang.ReplacePlain(translated, replacement[1], replacement[2])
+	end
+	return translated
+end
+
 function Lang.ToEnglish(text)
 	if typeof(text) ~= "string" or text == "" then return text end
 	if Lang.English[text] then return Lang.English[text] end
-	local translated = text
-	for _, pair in ipairs(Lang.Pairs) do
-		translated = Lang.ReplacePlain(translated, pair[1], pair[2])
-	end
+	-- Si ya es un texto inglés exacto, no volver a traducirlo.
+	if Lang.Spanish[text] then return text end
+	local translated = Lang.ReplacePairsOnce(text, Lang.Pairs, 1, 2)
 	translated = Lang.ReplacePlain(translated, "  •  ACTIVO", "  •  ON")
 	return translated
 end
 
 function Lang.ToSpanish(text)
 	if typeof(text) ~= "string" or text == "" then return text end
+	-- Evita convertir COMBATE en COMBATEE, CANCELAR en CANCELARAR y
+	-- RED dentro de PAREDES/PREDICCIÓN. El texto ya está en español.
+	if Lang.English[text] then return text end
 	if Lang.Spanish[text] then return Lang.Spanish[text] end
-	local translated = text
-	for _, pair in ipairs(Lang.ReversePairs) do
-		translated = Lang.ReplacePlain(translated, pair[2], pair[1])
-	end
+	local translated = Lang.ReplacePairsOnce(text, Lang.ReversePairs, 2, 1)
 	translated = Lang.ReplacePlain(translated, "  •  ON", "  •  ACTIVO")
 	return translated
 end
@@ -1282,7 +1338,7 @@ function Lang.ApplyObject(object)
 
 	local spanishText = object:GetAttribute("HexaSpanishText")
 	if typeof(spanishText) ~= "string" then
-		spanishText = Lang.ToSpanish(object.Text)
+		spanishText = Lang.Current == "EN" and Lang.ToSpanish(object.Text) or object.Text
 		object:SetAttribute("HexaSpanishText", spanishText)
 	end
 	Lang.WriteProperty(object, "Text", Lang.Current == "EN" and Lang.ToEnglish(spanishText) or spanishText)
@@ -1290,7 +1346,7 @@ function Lang.ApplyObject(object)
 	if object:IsA("TextBox") then
 		local spanishPlaceholder = object:GetAttribute("HexaSpanishPlaceholder")
 		if typeof(spanishPlaceholder) ~= "string" then
-			spanishPlaceholder = Lang.ToSpanish(object.PlaceholderText)
+			spanishPlaceholder = Lang.Current == "EN" and Lang.ToSpanish(object.PlaceholderText) or object.PlaceholderText
 			object:SetAttribute("HexaSpanishPlaceholder", spanishPlaceholder)
 		end
 		Lang.WriteProperty(object, "PlaceholderText", Lang.Current == "EN" and Lang.ToEnglish(spanishPlaceholder) or spanishPlaceholder)
@@ -1300,7 +1356,7 @@ function Lang.ApplyObject(object)
 	if typeof(baseText) == "string" then
 		local spanishBase = object:GetAttribute("HexaSpanishBaseText")
 		if typeof(spanishBase) ~= "string" then
-			spanishBase = Lang.ToSpanish(baseText)
+			spanishBase = Lang.Current == "EN" and Lang.ToSpanish(baseText) or baseText
 			object:SetAttribute("HexaSpanishBaseText", spanishBase)
 		end
 		Lang.WriteAttribute(object, "BaseText", Lang.Current == "EN" and Lang.ToEnglish(spanishBase) or spanishBase)
@@ -1313,12 +1369,14 @@ function Lang.Bind(object)
 	Lang.Bound[object] = true
 	if object:GetAttribute("HexaNoTranslate") == true then return end
 
-	object:SetAttribute("HexaSpanishText", Lang.ToSpanish(object.Text))
+	object:SetAttribute("HexaSpanishText", Lang.Current == "EN" and Lang.ToSpanish(object.Text) or object.Text)
 	if object:IsA("TextBox") then
-		object:SetAttribute("HexaSpanishPlaceholder", Lang.ToSpanish(object.PlaceholderText))
+		object:SetAttribute("HexaSpanishPlaceholder", Lang.Current == "EN" and Lang.ToSpanish(object.PlaceholderText) or object.PlaceholderText)
 	end
 	local baseText = object:GetAttribute("BaseText")
-	if typeof(baseText) == "string" then object:SetAttribute("HexaSpanishBaseText", Lang.ToSpanish(baseText)) end
+	if typeof(baseText) == "string" then
+		object:SetAttribute("HexaSpanishBaseText", Lang.Current == "EN" and Lang.ToSpanish(baseText) or baseText)
+	end
 
 	object:GetPropertyChangedSignal("Text"):Connect(function()
 		if Lang.Updating[object] then return end
