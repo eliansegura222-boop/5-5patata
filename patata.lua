@@ -266,8 +266,8 @@ local Theme = {
 	Danger = Color3.fromRGB(220, 50, 50),
 }
 
--- Transparencia uniforme para los botones sin afectar texto, estados ni clics.
-local BUTTON_BACKGROUND_TRANSPARENCY = 0.24
+-- Fondo completamente invisible: solo permanecen texto, iconos y bordes.
+local BUTTON_BACKGROUND_TRANSPARENCY = 1
 
 local DEFAULT_WALK_SPEED = 16
 local DEFAULT_JUMP_POWER = 50
@@ -845,7 +845,7 @@ TargetParent = ScreenGui.Parent
 local function applyTransparentButtonStyle(object)
 	if not (object:IsA("TextButton") or object:IsA("ImageButton")) then return end
 	if object:GetAttribute("HexaKeepButtonTransparency") == true then return end
-	object.BackgroundTransparency = math.max(object.BackgroundTransparency, BUTTON_BACKGROUND_TRANSPARENCY)
+	object.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 end
 
 for _, object in ipairs(ScreenGui:GetDescendants()) do
@@ -1937,7 +1937,7 @@ function CategoryUI:RefreshButtons()
 		local selected = key == self.Active
 		button:SetAttribute("IsActive", selected)
 		button.BackgroundColor3 = Theme.Panel2
-		button.BackgroundTransparency = selected and 0.60 or 0.72
+		button.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 		button.TextColor3 = Theme.TextMain
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
@@ -1966,7 +1966,7 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.LayoutOrder = index
 	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(78, #definition.Label * 6 + 22), 32) or UDim2.new(1, -8, 0, 25)
 	button.BackgroundColor3 = Theme.Panel2
-	button.BackgroundTransparency = 0.72
+	button.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 	button.BorderSizePixel = 0
 	button.Text = definition.Label
 	button.TextColor3 = Theme.TextMain
@@ -2149,6 +2149,7 @@ refreshFavoritesCard = function()
 		shortcut.Position = UDim2.new(0, 16, 0, y)
 		shortcut.Size = UDim2.new(1, -32, 0, 36)
 		shortcut.BackgroundColor3 = Theme.Panel2
+		shortcut.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 		shortcut.BorderSizePixel = 0
 		shortcut.Text = item.label
 		shortcut.TextColor3 = Theme.TextOff
@@ -2959,6 +2960,7 @@ local function rebuildPlayerList()
 			local item = Instance.new("TextButton")
 			item.Size = UDim2.new(1, 0, 0, 32)
 			item.BackgroundColor3 = Theme.Panel2
+			item.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 			item.Text = ("  %s (@%s)"):format(player.DisplayName, player.Name)
 			item.TextColor3 = Theme.TextOff
 			item.TextSize = 12
@@ -5806,7 +5808,7 @@ task.spawn(function()
 			self.PanicButton.Size = UDim2.new(1, -32, 0, 38)
 			self.PanicButton.Position = UDim2.new(0, 16, 0, 44)
 			self.PanicButton.BackgroundColor3 = Theme.Danger
-			self.PanicButton.BackgroundTransparency = 0.02
+			self.PanicButton.BackgroundTransparency = BUTTON_BACKGROUND_TRANSPARENCY
 			self.PanicButton.BorderSizePixel = 0
 			self.PanicButton.Text = "ACTIVAR MODO PÁNICO"
 			self.PanicButton.TextColor3 = Color3.fromRGB(255, 255, 255)
