@@ -2992,9 +2992,13 @@ task.spawn(function()
 			LastFullbrightUpdate = 0,
 			TriggerBusy = false,
 			TriggerGeneration = 0,
+			LastTriggerPoint = nil,
 			FullbrightOriginal = nil,
 			FullbrightApplying = false,
-			XRayOriginal = setmetatable({}, {__mode = "k"}),
+			-- Debe ser una tabla fuerte: si las claves son débiles se pierden las
+			-- paredes y luego no se pueden actualizar ni restaurar al apagar X-Ray.
+			XRayOriginal = {},
+			XRayGeneration = 0,
 			LastEspRender = 0,
 			Connections = {},
 			EspCache = {},
@@ -3101,7 +3105,7 @@ task.spawn(function()
 				local transparency = math.clamp(value / 100, 0, 1)
 				for object in pairs(State.XRayOriginal) do
 					if object and object.Parent then
-						pcall(function() object.Transparency = transparency end)
+						pcall(function() object.LocalTransparencyModifier = transparency end)
 					end
 				end
 			end
@@ -3314,6 +3318,33 @@ task.spawn(function()
 		local TriggerVirtualInputManager = nil
 		pcall(function() TriggerVirtualInputManager = game:GetService("VirtualInputManager") end)
 
+		local function releaseTriggerInput(point)
+			-- Libera cualquier entrada que haya quedado presionada por una ejecución
+			-- anterior o por un ejecutor que haya fallado a mitad del disparo.
+			local character = LocalPlayer.Character
+			local equippedTool = character and character:FindFirstChildOfClass("Tool")
+			if equippedTool then
+				pcall(function() equippedTool:Deactivate() end)
+			end
+			if type(mouse1release) == "function" then
+				pcall(mouse1release)
+			end
+			if TriggerVirtualInputManager and point then
+				pcall(function()
+					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
+				end)
+			end
+		end
+		releaseTriggerInput(nil)
+
+		local function activateTriggerTool(tool)
+			if not tool or not tool.Enabled then return false end
+			local activated = pcall(function() tool:Activate() end)
+			if activated then task.wait(0.016) end
+			pcall(function() tool:Deactivate() end)
+			return activated
+		end
+
 		local function getPlayerFromTargetPart(targetPart)
 			local current = targetPart
 			while current and current ~= workspace do
@@ -3392,15 +3423,18 @@ task.spawn(function()
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
 			local pointOverPanel = point and isTriggerPointOverPanel(point)
+			State.LastTriggerPoint = point
+
+			-- En móvil nunca se inyectan clics de ratón: pueden capturar el joystick,
+			-- ocultar el TouchGui o dejar la entrada táctil bloqueada en ejecutores.
+			if MOBILE_DEVICE then
+				return activateTriggerTool(tool)
+			end
 
 			-- Si la mira está detrás del panel (común en móvil y primera persona),
 			-- activar la Tool evita que el clic sintético pulse botones de la interfaz.
 			if pointOverPanel then
-				if tool and tool.Enabled then
-					local ok = pcall(function() tool:Activate() end)
-					if ok then return true end
-				end
-				return false
+				return activateTriggerTool(tool)
 			end
 
 			-- Prioriza eventos de entrada reales: la mayoría de armas escuchan
@@ -3410,31 +3444,20 @@ task.spawn(function()
 				if ok then return true end
 			end
 
-			if type(mouse1press) == "function" and type(mouse1release) == "function" then
-				local ok = pcall(function()
-					mouse1press()
-					task.wait(0.016)
-					mouse1release()
-				end)
-				if ok then return true end
-			end
-
 			if TriggerVirtualInputManager and point then
-				local ok = pcall(function()
+				local pressed = pcall(function()
 					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
-					task.wait(0.016)
+				end)
+				if pressed then task.wait(0.016) end
+				local released = pcall(function()
 					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
 				end)
-				if ok then return true end
+				if pressed and released then return true end
+				releaseTriggerInput(point)
 			end
 
 			-- Respaldo para herramientas estándar y ejecutores sin inyección de ratón.
-			if tool and tool.Enabled then
-				local ok = pcall(function() tool:Activate() end)
-				if ok then return true end
-			end
-
-			return false
+			return activateTriggerTool(tool)
 		end
 
 		local function updateTriggerbot(now)
@@ -3563,40 +3586,46 @@ task.spawn(function()
 			return false
 		end
 
-		local function applyXRayToPart(object)
+		local function applyXRayToPart(object, expectedGeneration)
+			if expectedGeneration and expectedGeneration ~= State.XRayGeneration then return end
 			if not Settings.XRay or not object:IsA("BasePart") or isPlayerCharacterPart(object) then return end
 			local camera = workspace.CurrentCamera
 			if camera and object:IsDescendantOf(camera) then return end
 			if State.XRayOriginal[object] == nil then
 				State.XRayOriginal[object] = {
-					Transparency = object.Transparency,
-					Material = object.Material,
+					LocalTransparencyModifier = object.LocalTransparencyModifier,
 				}
 			end
 			pcall(function()
-				object.Transparency = math.clamp(Settings.XRayTransparency / 100, 0, 1)
-				object.Material = Enum.Material.Glass
+				object.LocalTransparencyModifier = math.clamp(Settings.XRayTransparency / 100, 0, 1)
 			end)
 		end
 
 		local function applyXRay()
-			local descendants = workspace:GetDescendants()
-			for index, object in ipairs(descendants) do
-				applyXRayToPart(object)
-				if index % 500 == 0 then task.wait() end
-			end
+			State.XRayGeneration += 1
+			local generation = State.XRayGeneration
+			task.spawn(function()
+				local descendants = workspace:GetDescendants()
+				for index, object in ipairs(descendants) do
+					if not Settings.XRay or generation ~= State.XRayGeneration then return end
+					applyXRayToPart(object, generation)
+					if index % 250 == 0 then task.wait() end
+				end
+			end)
 		end
 
 		local function restoreXRay()
-			for object, properties in pairs(State.XRayOriginal) do
+			State.XRayGeneration += 1
+			local originals = State.XRayOriginal
+			State.XRayOriginal = {}
+			for object, properties in pairs(originals) do
 				if object and object.Parent then
 					pcall(function()
-						object.Transparency = properties.Transparency
-						object.Material = properties.Material
+						object.LocalTransparencyModifier = properties.LocalTransparencyModifier
 					end)
 				end
 			end
-			State.XRayOriginal = setmetatable({}, {__mode = "k"})
+			table.clear(originals)
 		end
 
 		-- Disable any Silent Aim hook left by an older Hexa X execution in this Roblox session.
@@ -4081,6 +4110,9 @@ task.spawn(function()
 		local function suspend()
 			stopDrone()
 			State.TriggerBusy = false
+			State.TriggerGeneration += 1
+			releaseTriggerInput(State.LastTriggerPoint)
+			State.LastTriggerPoint = nil
 			restoreWeapons()
 			restoreFullbright()
 			restoreXRay()
@@ -4159,6 +4191,10 @@ task.spawn(function()
 			State.TriggerGeneration += 1
 			State.TriggerBusy = false
 			State.LastTriggerClick = 0
+			if not enabled then
+				releaseTriggerInput(State.LastTriggerPoint)
+				State.LastTriggerPoint = nil
+			end
 		end)
 		bindToggle(InfiniteAmmoButton, "InfiniteAmmo", function(enabled)
 			if not enabled then
