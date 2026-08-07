@@ -3313,8 +3313,6 @@ task.spawn(function()
 		local TriggerMouse = LocalPlayer:GetMouse()
 		local TriggerVirtualInputManager = nil
 		pcall(function() TriggerVirtualInputManager = game:GetService("VirtualInputManager") end)
-		local TRIGGER_INTERVAL = MOBILE_DEVICE and 0.14 or 0.10
-		local TRIGGER_PRESS_TIME = 0.012
 
 		local function getPlayerFromTargetPart(targetPart)
 			local current = targetPart
@@ -3338,21 +3336,32 @@ task.spawn(function()
 
 		local function getTriggerTarget()
 			local camera = workspace.CurrentCamera
-			if not camera or UserInputService:GetFocusedTextBox() then return nil, nil end
+			if not camera then return nil, nil end
 
 			local point
 			local ray
-			if MOBILE_DEVICE or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+			if MOBILE_DEVICE then
 				point = camera.ViewportSize / 2
 				ray = camera:ViewportPointToRay(point.X, point.Y)
 			else
-				point = Vector2.new(TriggerMouse.X, TriggerMouse.Y)
+				-- GetMouseLocation mantiene la posición correcta incluso cuando el
+				-- juego bloquea el cursor en el centro (primera persona / shift lock).
+				local okPoint, mousePoint = pcall(function()
+					return UserInputService:GetMouseLocation()
+				end)
+				point = okPoint and mousePoint or Vector2.new(TriggerMouse.X, TriggerMouse.Y)
 				local ok, mouseRay = pcall(function() return TriggerMouse.UnitRay end)
-				ray = ok and mouseRay or camera:ViewportPointToRay(point.X, point.Y)
+				ray = ok and mouseRay or camera:ScreenPointToRay(point.X, point.Y)
 			end
-			if not ray then return nil, point end
 
-			if isTriggerPointOverPanel(point) then return nil, point end
+			-- Con cursor libre, no dispara mientras el usuario está pulsando el panel.
+			-- En móvil o con el cursor bloqueado al centro, el panel suele cubrir la
+			-- mira; bloquear aquí hacía que el Triggerbot nunca detectara objetivos.
+			if isTriggerPointOverPanel(point)
+				and not MOBILE_DEVICE
+				and UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+				return nil, point
+			end
 
 			local params = RaycastParams.new()
 			params.FilterType = Enum.RaycastFilterType.Exclude
@@ -3362,13 +3371,19 @@ task.spawn(function()
 			params.IgnoreWater = true
 
 			local result = workspace:Raycast(ray.Origin, ray.Direction * 5000, params)
-			if result and result.Instance and result.Instance.Parent then
-				return result.Instance, point
-			end
+			local rayTarget = result and result.Instance
+			local mouseTarget = not MOBILE_DEVICE and TriggerMouse.Target or nil
 
-			-- Respaldo para juegos que administran el objetivo mediante Mouse.Target.
-			if not MOBILE_DEVICE and TriggerMouse.Target and TriggerMouse.Target.Parent then
-				return TriggerMouse.Target, point
+			-- Algunos juegos devuelven por el raycast una pieza auxiliar de la mira,
+			-- mientras Mouse.Target sí devuelve la parte real del personaje. Se usa
+			-- primero cualquier candidato que pertenezca a un Player válido.
+			if rayTarget and rayTarget.Parent then
+				local rayPlayer = getPlayerFromTargetPart(rayTarget)
+				if rayPlayer then return rayTarget, point end
+			end
+			if mouseTarget and mouseTarget.Parent then
+				local mousePlayer = getPlayerFromTargetPart(mouseTarget)
+				if mousePlayer then return mouseTarget, point end
 			end
 			return nil, point
 		end
@@ -3376,47 +3391,54 @@ task.spawn(function()
 		local function fireTriggerShot(point)
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
-			if not tool or not tool.Parent or not tool.Enabled then return false end
-			local fired = false
+			local pointOverPanel = point and isTriggerPointOverPanel(point)
 
-			-- En celular se usa solamente Tool:Activate para no generar toques
-			-- artificiales que puedan interferir con la cámara o la interfaz.
-			if MOBILE_DEVICE then
-				return pcall(function() tool:Activate() end)
-			end
-
-			-- mouse1click completa pulsación y liberación en una sola llamada,
-			-- evitando que un error deje el botón del ratón presionado.
-			if type(mouse1click) == "function" then
-				fired = pcall(mouse1click)
-			end
-
-			if not fired and tool.Enabled then
-				fired = pcall(function() tool:Activate() end)
-			end
-
-			if not fired and TriggerVirtualInputManager and point and tool.Enabled then
-				local pressed = pcall(function()
-					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
-				end)
-				if pressed then
-					task.wait(TRIGGER_PRESS_TIME)
-					pcall(function()
-						TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
-					end)
-					fired = true
+			-- Si la mira está detrás del panel (común en móvil y primera persona),
+			-- activar la Tool evita que el clic sintético pulse botones de la interfaz.
+			if pointOverPanel then
+				if tool and tool.Enabled then
+					local ok = pcall(function() tool:Activate() end)
+					if ok then return true end
 				end
+				return false
 			end
 
-			return fired
+			-- Prioriza eventos de entrada reales: la mayoría de armas escuchan
+			-- InputBegan/InputEnded y no Tool.Activated directamente.
+			if type(mouse1click) == "function" then
+				local ok = pcall(mouse1click)
+				if ok then return true end
+			end
+
+			if type(mouse1press) == "function" and type(mouse1release) == "function" then
+				local ok = pcall(function()
+					mouse1press()
+					task.wait(0.016)
+					mouse1release()
+				end)
+				if ok then return true end
+			end
+
+			if TriggerVirtualInputManager and point then
+				local ok = pcall(function()
+					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
+					task.wait(0.016)
+					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
+				end)
+				if ok then return true end
+			end
+
+			-- Respaldo para herramientas estándar y ejecutores sin inyección de ratón.
+			if tool and tool.Enabled then
+				local ok = pcall(function() tool:Activate() end)
+				if ok then return true end
+			end
+
+			return false
 		end
 
 		local function updateTriggerbot(now)
-			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < TRIGGER_INTERVAL then return end
-			if UserInputService:GetFocusedTextBox() then return end
-			local character = LocalPlayer.Character
-			local tool = character and character:FindFirstChildOfClass("Tool")
-			if not tool or not tool.Parent or not tool.Enabled then return end
+			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < 0.10 then return end
 			local targetPart, triggerPoint = getTriggerTarget()
 			if not targetPart or not targetPart.Parent then return end
 			local targetPlayer, targetCharacter = getPlayerFromTargetPart(targetPart)
@@ -4058,7 +4080,6 @@ task.spawn(function()
 
 		local function suspend()
 			stopDrone()
-			State.TriggerGeneration += 1
 			State.TriggerBusy = false
 			restoreWeapons()
 			restoreFullbright()
@@ -4134,12 +4155,10 @@ task.spawn(function()
 		end)
 		bindToggle(AutoReloadButton, "AutoReload")
 		bindToggle(TriggerButton, "Triggerbot", function(enabled)
-			if enabled then
-				State.LastTriggerClick = 0
-			else
-				State.TriggerGeneration += 1
-				State.TriggerBusy = false
-			end
+			-- Invalida cualquier disparo pendiente tanto al activar como al apagar.
+			State.TriggerGeneration += 1
+			State.TriggerBusy = false
+			State.LastTriggerClick = 0
 		end)
 		bindToggle(InfiniteAmmoButton, "InfiniteAmmo", function(enabled)
 			if not enabled then
