@@ -13,7 +13,6 @@ end
 
 -- == VARIABLES DE ESTADO ==
 local States = {
-    TriggerBot = false,
     Hitbox = false,
     HitboxSize = 5
 }
@@ -30,8 +29,8 @@ MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 MainFrame.BorderColor3 = Color3.fromRGB(138, 43, 226) -- Violeta neón
 MainFrame.BorderSizePixel = 2
-MainFrame.Position = UDim2.new(0.5, -150, 0.5, -150)
-MainFrame.Size = UDim2.new(0, 300, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+MainFrame.Size = UDim2.new(0, 300, 0, 175)
 MainFrame.Active = true
 
 local TitleBar = Instance.new("Frame")
@@ -74,14 +73,14 @@ MinBtn.TextSize = 18
 local ButtonContainer = Instance.new("Frame")
 ButtonContainer.Parent = MainFrame
 ButtonContainer.BackgroundTransparency = 1
-ButtonContainer.Position = UDim2.new(0, 0, 0, 40)
-ButtonContainer.Size = UDim2.new(1, 0, 1, -40)
+ButtonContainer.Position = UDim2.new(0, 0, 0, 30)
+ButtonContainer.Size = UDim2.new(1, 0, 1, -30)
 
 local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Parent = ButtonContainer
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 12)
+UIListLayout.Padding = UDim.new(0, 10)
 
 local UIPadding = Instance.new("UIPadding")
 UIPadding.Parent = ButtonContainer
@@ -102,7 +101,6 @@ local function createFeatureButton(name, text)
     return Btn
 end
 
-local TriggerBotBtn = createFeatureButton("TriggerBotBtn", "Trigger Bot: OFF")
 local HitboxBtn = createFeatureButton("HitboxBtn", "Hitbox Expander: OFF")
 
 -- Slider UI para el Hitbox
@@ -199,58 +197,7 @@ end
 
 -- == LÓGICA DE HACKS ==
 
--- 1. Trigger Bot Optimizado para Celular y PC (Sin bugs de cámara)
-local triggerCooldown = false
-RunService.RenderStepped:Connect(function()
-    if States.TriggerBot and not triggerCooldown then
-        local viewportSize = Camera.ViewportSize
-        local screenCenter = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
-        local radius = 65 -- Radio de tolerancia alrededor del centro de la pantalla para disparar
-
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local char = player.Character
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-
-                if humanoid and humanoid.Health > 0 and hrp then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                    if onScreen then
-                        local distance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-                        if distance <= radius then
-                            triggerCooldown = true
-                            
-                            -- Activar herramienta equipada de forma segura
-                            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                            if tool then
-                                pcall(function()
-                                    tool:Activate()
-                                end)
-                            end
-                            
-                            -- Compatibilidad con PC si se ejecuta
-                            if mouse1click then
-                                pcall(mouse1click)
-                            end
-
-                            task.wait(0.12) -- Pausa equilibrada para evitar bloqueos
-                            triggerCooldown = false
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
-TriggerBotBtn.MouseButton1Click:Connect(function()
-    States.TriggerBot = not States.TriggerBot
-    TriggerBotBtn.Text = "Trigger Bot: " .. (States.TriggerBot and "ON" or "OFF")
-    toggleColor(TriggerBotBtn, States.TriggerBot)
-end)
-
--- 2. Hitbox Expander Logic
+-- 1. Hitbox Expander Logic
 local function updateHitboxes()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -282,7 +229,7 @@ HitboxBtn.MouseButton1Click:Connect(function()
     if not States.Hitbox then updateHitboxes() end -- Revertir al apagar
 end)
 
--- 3. Lógica del Slider
+-- 2. Lógica del Slider
 local draggingSlider = false
 SliderBG.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
