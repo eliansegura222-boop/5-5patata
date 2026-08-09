@@ -199,54 +199,45 @@ end
 
 -- == LÓGICA DE HACKS ==
 
--- 1. Trigger Bot Universal (Compatible con Celular y PC mediante Raycast al centro de la pantalla)
+-- 1. Trigger Bot Optimizado para Celular y PC (Sin bugs de cámara)
 local triggerCooldown = false
 RunService.RenderStepped:Connect(function()
     if States.TriggerBot and not triggerCooldown then
         local viewportSize = Camera.ViewportSize
-        local centerScreen = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
-        
-        -- Lanzar un raycast desde el centro de la pantalla (funciona perfectamente en móviles)
-        local unitRay = Camera:ViewportPointToRay(centerScreen.X, centerScreen.Y)
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-        if LocalPlayer.Character then
-            raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
-        end
-        
-        local raycastResult = workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, raycastParams)
-        
-        if raycastResult and raycastResult.Instance then
-            local target = raycastResult.Instance
-            local character = target.Parent
-            
-            if character:IsA("Accessory") or (character:IsA("Model") and not character:FindFirstChild("Humanoid")) then
-                if character.Parent and character.Parent:FindFirstChild("Humanoid") then
-                    character = character.Parent
-                end
-            end
-            
-            local humanoid = character:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local player = Players:GetPlayerFromCharacter(character)
-                if player and player ~= LocalPlayer then
-                    triggerCooldown = true
-                    
-                    -- Activar la herramienta equipada (Funciona en Celular y PC para disparar armas)
-                    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                    if tool then
-                        pcall(function()
-                            tool:Activate()
-                        end)
+        local screenCenter = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+        local radius = 65 -- Radio de tolerancia alrededor del centro de la pantalla para disparar
+
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local char = player.Character
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+
+                if humanoid and humanoid.Health > 0 and hrp then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                    if onScreen then
+                        local distance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                        if distance <= radius then
+                            triggerCooldown = true
+                            
+                            -- Activar herramienta equipada de forma segura
+                            local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                            if tool then
+                                pcall(function()
+                                    tool:Activate()
+                                end)
+                            end
+                            
+                            -- Compatibilidad con PC si se ejecuta
+                            if mouse1click then
+                                pcall(mouse1click)
+                            end
+
+                            task.wait(0.12) -- Pausa equilibrada para evitar bloqueos
+                            triggerCooldown = false
+                            break
+                        end
                     end
-                    
-                    -- Si estás en PC, también simula el clic por seguridad
-                    if mouse1click then
-                        pcall(mouse1click)
-                    end
-                    
-                    task.wait(0.1) -- Cooldown para evitar bloqueos
-                    triggerCooldown = false
                 end
             end
         end
