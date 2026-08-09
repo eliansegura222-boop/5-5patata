@@ -3061,6 +3061,7 @@ task.spawn(function()
 			InfiniteAmmoValues = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
 			HitboxOriginal = setmetatable({}, {__mode = "k"}),
+			BodyHitboxCache = {},
 			HighlightCache = {},
 			VehicleCache = setmetatable({}, {__mode = "k"}),
 			Drone = {
@@ -4035,8 +4036,22 @@ task.spawn(function()
 			State.HitboxOriginal[part] = nil
 		end
 
+		local function destroyBodyHitbox(player)
+			local cached = State.BodyHitboxCache[player]
+			if cached and cached.Part then pcall(function() cached.Part:Destroy() end) end
+			State.BodyHitboxCache[player] = nil
+			local character = player and player.Character
+			local stale = character and character:FindFirstChild("HexaBodyHitbox")
+			if stale then pcall(function() stale:Destroy() end) end
+		end
+
+		local function destroyBodyHitboxes()
+			for player in pairs(State.BodyHitboxCache) do destroyBodyHitbox(player) end
+		end
+
 		local function restoreHitboxes()
 			for part in pairs(State.HitboxOriginal) do restoreHitboxPart(part) end
+			destroyBodyHitboxes()
 		end
 
 		local function applyHitboxToPart(part)
@@ -4077,20 +4092,95 @@ task.spawn(function()
 			end)
 		end
 
+		local function updateBodyHitbox(player, character, root)
+			local cached = State.BodyHitboxCache[player]
+			if cached and (cached.Root ~= root or cached.Character ~= character or not cached.Part or not cached.Part.Parent) then
+				destroyBodyHitbox(player)
+				cached = nil
+			end
+
+			if not cached then
+				local stale = character:FindFirstChild("HexaBodyHitbox")
+				if stale then pcall(function() stale:Destroy() end) end
+
+				local proxy = Instance.new("Part")
+				proxy.Name = "HexaBodyHitbox"
+				proxy.Anchored = true
+				proxy.CanCollide = false
+				proxy.CanTouch = false
+				proxy.CanQuery = true
+				proxy.Massless = true
+				proxy.CastShadow = false
+				proxy.Transparency = 0.6
+				proxy.Material = Enum.Material.Neon
+				proxy.CFrame = root.CFrame
+				proxy.Parent = character
+
+				local box = Instance.new("SelectionBox")
+				box.Name = "HexaHitboxBox"
+				box.Adornee = proxy
+				box.LineThickness = 0.05
+				box.SurfaceTransparency = 0.8
+				box.Parent = proxy
+
+				cached = {Part = proxy, Root = root, Character = character}
+				State.BodyHitboxCache[player] = cached
+			end
+
+			local maximum = HEXA_IS_VIP and 25 or 15
+			local size = math.clamp(Settings.HitboxSize, 2, maximum)
+			local color = HitboxColors[Settings.HitboxColorIndex] or HitboxColors[6]
+			local proxy = cached.Part
+			pcall(function()
+				proxy.Size = Vector3.new(size, size, size)
+				proxy.Color = color
+				proxy.Transparency = 0.6
+				proxy.Material = Enum.Material.Neon
+				proxy.CanCollide = false
+				proxy.CanTouch = false
+				proxy.CanQuery = true
+				proxy.Massless = true
+				local box = proxy:FindFirstChild("HexaHitboxBox")
+				if box then
+					box.Color3 = color
+					box.SurfaceColor3 = color
+				end
+			end)
+		end
+
+		local function updateBodyHitboxPositions()
+			for player, cached in pairs(State.BodyHitboxCache) do
+				local proxy = cached and cached.Part
+				local root = cached and cached.Root
+				if proxy and proxy.Parent and root and root.Parent then
+					pcall(function() proxy.CFrame = root.CFrame end)
+				else
+					destroyBodyHitbox(player)
+				end
+			end
+		end
+
 		local function updateHitboxes()
-			local desired = {}
+			local desiredHeads = {}
+			local desiredBodies = {}
 			for _, player in ipairs(Players:GetPlayers()) do
 				if player ~= LocalPlayer and HexaSharedTargetFilters:AllowsPlayer(player, true) then
 					local character = player.Character
 					local root = character and character:FindFirstChild("HumanoidRootPart")
 					local head = character and character:FindFirstChild("Head")
-					if Settings.Hitbox and root then desired[root] = true end
-					if Settings.HeadHitbox and head then desired[head] = true end
+					if Settings.Hitbox and character and root then
+						desiredBodies[player] = true
+						updateBodyHitbox(player, character, root)
+					end
+					if Settings.HeadHitbox and head then desiredHeads[head] = true end
 				end
 			end
-			for part in pairs(desired) do applyHitboxToPart(part) end
+			for player in pairs(State.BodyHitboxCache) do
+				if not desiredBodies[player] then destroyBodyHitbox(player) end
+			end
+			for part in pairs(desiredHeads) do applyHitboxToPart(part) end
 			for part in pairs(State.HitboxOriginal) do
-				if not desired[part] then restoreHitboxPart(part) end
+				if not desiredHeads[part] then restoreHitboxPart(part) end
 			end
 		end
 
@@ -4353,6 +4443,7 @@ task.spawn(function()
 		end)
 
 		connect(Players.PlayerRemoving, function(player)
+			destroyBodyHitbox(player)
 			local cache = State.EspCache[player]
 			if cache then
 				for _, object in pairs(cache) do if object and object.Parent then object:Destroy() end end
@@ -4400,6 +4491,7 @@ task.spawn(function()
 				State.LastHitboxUpdate = now
 				updateHitboxes()
 			end
+			if Settings.Hitbox then updateBodyHitboxPositions() end
 			if Settings.VehicleSpeed then updateVehicle() else restoreVehicle() end
 			applyCharacterControl()
 			updateDrone(dt)
