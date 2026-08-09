@@ -191,8 +191,8 @@ CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
 MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false FloatingCircle.Visible = true end)
 FloatingCircle.MouseButton1Click:Connect(function() FloatingCircle.Visible = false MainFrame.Visible = true end)
 
--- Lógica Slider
-local minSize, maxSize = 1, 15
+-- Lógica Slider (Modificado máximo a 25)
+local minSize, maxSize = 1, 25
 local hitboxSize = 3
 local sliderDragging = false
 
