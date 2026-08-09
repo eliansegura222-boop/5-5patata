@@ -4,9 +4,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
 
--- Limpieza previa
+-- Limpieza previa de la interfaz anterior para evitar duplicados
 if CoreGui:FindFirstChild("RuntimeErrorGUI") then
     CoreGui.RuntimeErrorGUI:Destroy()
 end
@@ -30,7 +29,7 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 MainFrame.BorderColor3 = Color3.fromRGB(138, 43, 226) -- Violeta neón
 MainFrame.BorderSizePixel = 2
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
-MainFrame.Size = UDim2.new(0, 300, 0, 175)
+MainFrame.Size = UDim2.new(0, 300, 0, 150) -- Tamaño reducido solo para Hitbox
 MainFrame.Active = true
 
 local TitleBar = Instance.new("Frame")
@@ -80,28 +79,24 @@ local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Parent = ButtonContainer
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 10)
+UIListLayout.Padding = UDim.new(0, 15)
 
 local UIPadding = Instance.new("UIPadding")
 UIPadding.Parent = ButtonContainer
-UIPadding.PaddingTop = UDim.new(0, 10)
+UIPadding.PaddingTop = UDim.new(0, 15)
 
-local function createFeatureButton(name, text)
-    local Btn = Instance.new("TextButton")
-    Btn.Name = name
-    Btn.Parent = ButtonContainer
-    Btn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    Btn.BorderColor3 = Color3.fromRGB(138, 43, 226)
-    Btn.BorderSizePixel = 1
-    Btn.Size = UDim2.new(0, 260, 0, 35)
-    Btn.Font = Enum.Font.Code
-    Btn.Text = text
-    Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Btn.TextSize = 14
-    return Btn
-end
-
-local HitboxBtn = createFeatureButton("HitboxBtn", "Hitbox Expander: OFF")
+-- Botón Hitbox
+local HitboxBtn = Instance.new("TextButton")
+HitboxBtn.Name = "HitboxBtn"
+HitboxBtn.Parent = ButtonContainer
+HitboxBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+HitboxBtn.BorderColor3 = Color3.fromRGB(138, 43, 226)
+HitboxBtn.BorderSizePixel = 1
+HitboxBtn.Size = UDim2.new(0, 260, 0, 35)
+HitboxBtn.Font = Enum.Font.Code
+HitboxBtn.Text = "Hitbox Expander: OFF"
+HitboxBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HitboxBtn.TextSize = 14
 
 -- Slider UI para el Hitbox
 local SliderContainer = Instance.new("Frame")
@@ -197,7 +192,7 @@ end
 
 -- == LÓGICA DE HACKS ==
 
--- 1. Hitbox Expander Logic
+-- Únicamente Hitbox Expander Logic
 local function updateHitboxes()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -229,7 +224,7 @@ HitboxBtn.MouseButton1Click:Connect(function()
     if not States.Hitbox then updateHitboxes() end -- Revertir al apagar
 end)
 
--- 2. Lógica del Slider
+-- Lógica del Slider
 local draggingSlider = false
 SliderBG.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
