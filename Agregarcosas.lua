@@ -14,7 +14,6 @@ end
 
 -- == VARIABLES DE ESTADO ==
 local States = {
-    Aimbot = false,
     TriggerBot = false,
     Hitbox = false,
     HitboxSize = 5
@@ -33,7 +32,7 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 MainFrame.BorderColor3 = Color3.fromRGB(138, 43, 226) -- Violeta neón
 MainFrame.BorderSizePixel = 2
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -150)
-MainFrame.Size = UDim2.new(0, 300, 0, 290)
+MainFrame.Size = UDim2.new(0, 300, 0, 250) -- Reducido ya que quitamos el botón de aimbot
 MainFrame.Active = true
 
 local TitleBar = Instance.new("Frame")
@@ -104,7 +103,6 @@ local function createFeatureButton(name, text)
     return Btn
 end
 
-local AimbotBtn = createFeatureButton("AimbotBtn", "Aimbot Mouse: OFF")
 local TriggerBotBtn = createFeatureButton("TriggerBotBtn", "Trigger Bot: OFF")
 local HitboxBtn = createFeatureButton("HitboxBtn", "Hitbox Expander: OFF")
 
@@ -202,68 +200,32 @@ end
 
 -- == LÓGICA DE HACKS ==
 
--- 1. Aimbot Logic (Corregido para mover el mouse, no la cámara)
-local function getClosestPlayer()
-    local closestDistance = math.huge
-    local closestTarget = nil
-    local mouseLocation = UserInputService:GetMouseLocation()
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
-            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-            if onScreen then
-                -- Calcula la distancia desde el cursor actual al enemigo en pantalla
-                local magnitude = (Vector2.new(mouseLocation.X, mouseLocation.Y) - Vector2.new(pos.X, pos.Y)).Magnitude
-                if magnitude < closestDistance then
-                    closestDistance = magnitude
-                    closestTarget = player.Character.HumanoidRootPart
-                end
-            end
-        end
-    end
-    return closestTarget
-end
-
+-- 1. Trigger Bot Logic (Arreglado y optimizado)
+local triggerCooldown = false
 RunService.RenderStepped:Connect(function()
-    if States.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        local target = getClosestPlayer()
-        if target then
-            local pos, onScreen = Camera:WorldToViewportPoint(target.Position)
-            if onScreen then
-                local mouseLocation = UserInputService:GetMouseLocation()
-                
-                -- Calcula cuánto se debe mover el mouse relativo a su posición actual
-                local moveX = (pos.X - mouseLocation.X)
-                local moveY = (pos.Y - mouseLocation.Y)
-                
-                -- Usa mousemoverel para arrastrar físicamente el cursor hacia el objetivo
-                -- (Para mayor suavidad, puedes dividir moveX y moveY por un número, ej: moveX/2)
-                if mousemoverel then
-                    mousemoverel(moveX, moveY)
-                end
-            end
-        end
-    end
-end)
-
-AimbotBtn.MouseButton1Click:Connect(function()
-    States.Aimbot = not States.Aimbot
-    AimbotBtn.Text = "Aimbot Mouse: " .. (States.Aimbot and "ON" or "OFF")
-    toggleColor(AimbotBtn, States.Aimbot)
-end)
-
--- 2. Trigger Bot Logic
-local triggerDelay = false
-RunService.RenderStepped:Connect(function()
-    if States.TriggerBot and not triggerDelay then
+    if States.TriggerBot and not triggerCooldown then
         local target = Mouse.Target
-        if target and target.Parent and target.Parent:FindFirstChild("Humanoid") and target.Parent.Name ~= LocalPlayer.Name then
-            if target.Parent.Humanoid.Health > 0 then
-                triggerDelay = true
-                -- Requiere executor para mouse1click()
-                if mouse1click then mouse1click() end 
-                task.wait(0.1) -- Delay entre disparos/clicks
-                triggerDelay = false
+        if target and target.Parent then
+            local character = target.Parent
+            -- Si el target es un accesorio o ropa, intentamos buscar el modelo del jugador principal
+            if character:IsA("Accessory") or character:IsA("Model") and not character:FindFirstChild("Humanoid") then
+                if character.Parent and character.Parent:FindFirstChild("Humanoid") then
+                    character = character.Parent
+                end
+            end
+            
+            local humanoid = character:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                -- Validar que no sea el jugador local
+                local player = Players:GetPlayerFromCharacter(character)
+                if player and player ~= LocalPlayer then
+                    triggerCooldown = true
+                    if mouse1click then 
+                        mouse1click() 
+                    end
+                    task.wait(0.08) -- Pequeña pausa estable para evitar bloqueos por spam de clics
+                    triggerCooldown = false
+                end
             end
         end
     end
@@ -275,7 +237,7 @@ TriggerBotBtn.MouseButton1Click:Connect(function()
     toggleColor(TriggerBotBtn, States.TriggerBot)
 end)
 
--- 3. Hitbox Expander Logic
+-- 2. Hitbox Expander Logic
 local function updateHitboxes()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -307,7 +269,7 @@ HitboxBtn.MouseButton1Click:Connect(function()
     if not States.Hitbox then updateHitboxes() end -- Revertir al apagar
 end)
 
--- 4. Lógica del Slider
+-- 3. Lógica del Slider
 local draggingSlider = false
 SliderBG.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
