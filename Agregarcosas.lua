@@ -4,7 +4,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 
 -- Limpieza previa
@@ -32,7 +31,7 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 MainFrame.BorderColor3 = Color3.fromRGB(138, 43, 226) -- Violeta neón
 MainFrame.BorderSizePixel = 2
 MainFrame.Position = UDim2.new(0.5, -150, 0.5, -150)
-MainFrame.Size = UDim2.new(0, 300, 0, 250) -- Reducido ya que quitamos el botón de aimbot
+MainFrame.Size = UDim2.new(0, 300, 0, 250)
 MainFrame.Active = true
 
 local TitleBar = Instance.new("Frame")
@@ -200,15 +199,28 @@ end
 
 -- == LÓGICA DE HACKS ==
 
--- 1. Trigger Bot Logic (Arreglado y optimizado)
+-- 1. Trigger Bot Universal (Compatible con Celular y PC mediante Raycast al centro de la pantalla)
 local triggerCooldown = false
 RunService.RenderStepped:Connect(function()
     if States.TriggerBot and not triggerCooldown then
-        local target = Mouse.Target
-        if target and target.Parent then
+        local viewportSize = Camera.ViewportSize
+        local centerScreen = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+        
+        -- Lanzar un raycast desde el centro de la pantalla (funciona perfectamente en móviles)
+        local unitRay = Camera:ViewportPointToRay(centerScreen.X, centerScreen.Y)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+        if LocalPlayer.Character then
+            raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+        end
+        
+        local raycastResult = workspace:Raycast(unitRay.Origin, unitRay.Direction * 1000, raycastParams)
+        
+        if raycastResult and raycastResult.Instance then
+            local target = raycastResult.Instance
             local character = target.Parent
-            -- Si el target es un accesorio o ropa, intentamos buscar el modelo del jugador principal
-            if character:IsA("Accessory") or character:IsA("Model") and not character:FindFirstChild("Humanoid") then
+            
+            if character:IsA("Accessory") or (character:IsA("Model") and not character:FindFirstChild("Humanoid")) then
                 if character.Parent and character.Parent:FindFirstChild("Humanoid") then
                     character = character.Parent
                 end
@@ -216,14 +228,24 @@ RunService.RenderStepped:Connect(function()
             
             local humanoid = character:FindFirstChild("Humanoid")
             if humanoid and humanoid.Health > 0 then
-                -- Validar que no sea el jugador local
                 local player = Players:GetPlayerFromCharacter(character)
                 if player and player ~= LocalPlayer then
                     triggerCooldown = true
-                    if mouse1click then 
-                        mouse1click() 
+                    
+                    -- Activar la herramienta equipada (Funciona en Celular y PC para disparar armas)
+                    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                    if tool then
+                        pcall(function()
+                            tool:Activate()
+                        end)
                     end
-                    task.wait(0.08) -- Pequeña pausa estable para evitar bloqueos por spam de clics
+                    
+                    -- Si estás en PC, también simula el clic por seguridad
+                    if mouse1click then
+                        pcall(mouse1click)
+                    end
+                    
+                    task.wait(0.1) -- Cooldown para evitar bloqueos
                     triggerCooldown = false
                 end
             end
