@@ -1083,8 +1083,12 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"SIN DISPERSIÓN", "NO SPREAD"},
 	{"RECARGA AUTOMÁTICA", "AUTO RELOAD"},
 	{"MUNICIÓN INFINITA", "INFINITE AMMO"},
+	{"HITBOX", "HITBOX"},
 	{"EXPANSOR DE HITBOX", "HITBOX EXPANDER"},
+	{"HITBOX DE CABEZA", "HEAD HITBOX"},
 	{"Tamaño del Hitbox", "Hitbox size"},
+	{"COLOR DEL HITBOX: MORADO", "HITBOX COLOR: PURPLE"},
+	{"COLOR DEL HITBOX:", "HITBOX COLOR:"},
 	{"FULLBRIGHT", "FULLBRIGHT"},
 	{"X-RAY", "X-RAY"},
 	{"Transparencia X-Ray", "X-Ray transparency"},
@@ -1104,6 +1108,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"CAJA ESP", "BOX ESP"},
 	{"NOMBRE ESP", "NAME ESP"},
 	{"BARRA DE VIDA ESP", "HEALTH BAR ESP"},
+	{"ESP HIGHLIGHT", "ESP HIGHLIGHT"},
 	{"IGNORAR AMIGOS", "IGNORE FRIENDS"},
 	{"USAR CÍRCULO FOV", "USE FOV CIRCLE"},
 	{"Radio del FOV", "FOV radius"},
@@ -3011,7 +3016,9 @@ task.spawn(function()
 			AutoReload = false,
 			InfiniteAmmo = false,
 			Hitbox = false,
+			HeadHitbox = false,
 			HitboxSize = 5,
+			HitboxColorIndex = 6,
 			Fullbright = false,
 			XRay = false,
 			XRayTransparency = 75,
@@ -3026,6 +3033,7 @@ task.spawn(function()
 			BoxESP = false,
 			NameESP = false,
 			HealthESP = false,
+			ESPHighlight = false,
 		}
 
 		local State = {
@@ -3053,6 +3061,7 @@ task.spawn(function()
 			InfiniteAmmoValues = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
 			HitboxOriginal = setmetatable({}, {__mode = "k"}),
+			HighlightCache = {},
 			VehicleCache = setmetatable({}, {__mode = "k"}),
 			Drone = {
 				Active = false,
@@ -3113,7 +3122,17 @@ task.spawn(function()
 			function(key) AimKeys.Smoothing = key end
 		)
 
-		local CombatAdvancedCard = sectionCard(572)
+		local HitboxColors = {
+			Color3.fromRGB(255, 255, 255),
+			Color3.fromRGB(255, 65, 65),
+			Color3.fromRGB(65, 255, 120),
+			Color3.fromRGB(70, 160, 255),
+			Color3.fromRGB(255, 220, 60),
+			Color3.fromRGB(205, 90, 255),
+		}
+		local HitboxColorNames = {"BLANCO", "ROJO", "VERDE", "AZUL", "AMARILLO", "MORADO"}
+
+		local CombatAdvancedCard = sectionCard(466)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -3131,21 +3150,29 @@ task.spawn(function()
 		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 366))
 		markVipControl(InfiniteAmmoButton)
 		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 412))
-		local HitboxButton = createToggleButton(CombatAdvancedCard, "EXPANSOR DE HITBOX", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 458))
-		createSlider(CombatAdvancedCard, "Tamaño del Hitbox", 2, 25, Settings.HitboxSize, 504, function(value)
-			Settings.HitboxSize = math.floor(value + 0.5)
-		end)
 
-		local EspAdvancedCard = sectionCard(294)
+		local HitboxCard = sectionCard(250)
+		HitboxCard.LayoutOrder = 23
+		sectionTitle(HitboxCard, "HITBOX", UDim2.new(0, 16, 0, 14))
+		local HitboxButton = createToggleButton(HitboxCard, "EXPANSOR DE HITBOX", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
+		local HeadHitboxButton = createToggleButton(HitboxCard, "HITBOX DE CABEZA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
+		createSlider(HitboxCard, "Tamaño del Hitbox", 2, 25, Settings.HitboxSize, 136, function(value)
+			Settings.HitboxSize = math.floor(value + 0.5)
+		end, false, 15)
+		local HitboxColorButton = neonButton(HitboxCard, "COLOR DEL HITBOX: MORADO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 196))
+
+		local EspAdvancedCard = sectionCard(340)
 		EspAdvancedCard.LayoutOrder = 31
 		sectionTitle(EspAdvancedCard, "ESP AVANZADO", UDim2.new(0, 16, 0, 14))
 		local BoxButton = createToggleButton(EspAdvancedCard, "CAJA ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 		local NameButton = createToggleButton(EspAdvancedCard, "NOMBRE ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 		local HealthButton = createToggleButton(EspAdvancedCard, "BARRA DE VIDA ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
-		local XRayButton = createToggleButton(EspAdvancedCard, "X-RAY", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
+		local HighlightButton = createToggleButton(EspAdvancedCard, "ESP HIGHLIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
+		HighlightButton:SetAttribute("HexaNoTranslate", true)
+		local XRayButton = createToggleButton(EspAdvancedCard, "X-RAY", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 228))
 		XRayButton:SetAttribute("HexaNoTranslate", true)
 		markVipControl(XRayButton)
-		createSlider(EspAdvancedCard, "Transparencia X-Ray", 0, 100, Settings.XRayTransparency, 228, function(value)
+		createSlider(EspAdvancedCard, "Transparencia X-Ray", 0, 100, Settings.XRayTransparency, 274, function(value)
 			Settings.XRayTransparency = value
 			if Settings.XRay then
 				local transparency = math.clamp(value / 100, 0, 1)
@@ -3196,6 +3223,7 @@ task.spawn(function()
 			InfiniteAmmo = InfiniteAmmoButton,
 			Fullbright = FullbrightButton,
 			Hitbox = HitboxButton,
+			HeadHitbox = HeadHitboxButton,
 			VehicleSpeed = VehicleButton,
 			DroneCamera = DroneButton,
 			Spin = SpinButton,
@@ -3204,6 +3232,7 @@ task.spawn(function()
 			BoxESP = BoxButton,
 			NameESP = NameButton,
 			HealthESP = HealthButton,
+			ESPHighlight = HighlightButton,
 			XRay = XRayButton,
 		}
 
@@ -3942,6 +3971,45 @@ task.spawn(function()
 			end
 		end
 
+		local function destroyHighlights()
+			for player, highlight in pairs(State.HighlightCache) do
+				if highlight then pcall(function() highlight:Destroy() end) end
+				State.HighlightCache[player] = nil
+			end
+		end
+
+		local function updateHighlights()
+			if not Settings.ESPHighlight then
+				destroyHighlights()
+				return
+			end
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer then
+					local character = player.Character
+					local allowed = character and HexaSharedTargetFilters:AllowsPlayer(player, true)
+					local highlight = State.HighlightCache[player]
+					if allowed then
+						if not highlight or not highlight.Parent then
+							highlight = Instance.new("Highlight")
+							highlight.Name = "HexaESPHighlight"
+							highlight.FillColor = Color3.fromRGB(255, 0, 0)
+							highlight.FillTransparency = 0.5
+							highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+							highlight.OutlineTransparency = 0
+							highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+							highlight.Parent = ScreenGui
+							State.HighlightCache[player] = highlight
+						end
+						highlight.Adornee = character
+						highlight.Enabled = true
+					elseif highlight then
+						pcall(function() highlight:Destroy() end)
+						State.HighlightCache[player] = nil
+					end
+				end
+			end
+		end
+
 
 		local function restoreHumanoid()
 			local _, humanoid = getLocalCharacter()
@@ -3950,19 +4018,25 @@ task.spawn(function()
 			pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true) end)
 		end
 
-		local function restoreHitboxes()
-			for part, original in pairs(State.HitboxOriginal) do
-				if part and part.Parent then
-					pcall(function()
-						part.Size = original.Size
-						part.Transparency = original.Transparency
-						part.BrickColor = original.BrickColor
-						part.Material = original.Material
-						part.CanCollide = original.CanCollide
-					end)
-				end
-				State.HitboxOriginal[part] = nil
+		local function restoreHitboxPart(part)
+			local original = State.HitboxOriginal[part]
+			if original and part and part.Parent then
+				pcall(function()
+					part.Size = original.Size
+					part.Transparency = original.Transparency
+					part.Color = original.Color
+					part.Material = original.Material
+					part.CanCollide = original.CanCollide
+					part.Massless = original.Massless
+				end)
+				local box = part:FindFirstChild("HexaHitboxBox")
+				if box then pcall(function() box:Destroy() end) end
 			end
+			State.HitboxOriginal[part] = nil
+		end
+
+		local function restoreHitboxes()
+			for part in pairs(State.HitboxOriginal) do restoreHitboxPart(part) end
 		end
 
 		local function applyHitboxToPart(part)
@@ -3971,28 +4045,52 @@ task.spawn(function()
 				State.HitboxOriginal[part] = {
 					Size = part.Size,
 					Transparency = part.Transparency,
-					BrickColor = part.BrickColor,
+					Color = part.Color,
 					Material = part.Material,
 					CanCollide = part.CanCollide,
+					Massless = part.Massless,
 				}
 			end
-			local size = math.clamp(Settings.HitboxSize, 2, 25)
+			local maximum = HEXA_IS_VIP and 25 or 15
+			local size = math.clamp(Settings.HitboxSize, 2, maximum)
+			local color = HitboxColors[Settings.HitboxColorIndex] or HitboxColors[6]
 			pcall(function()
 				part.Size = Vector3.new(size, size, size)
 				part.Transparency = 0.6
-				part.BrickColor = BrickColor.new("Bright purple")
+				part.Color = color
 				part.Material = Enum.Material.Neon
 				part.CanCollide = false
+				part.Massless = true
+			end)
+			local box = part:FindFirstChild("HexaHitboxBox")
+			if not box then
+				box = Instance.new("SelectionBox")
+				box.Name = "HexaHitboxBox"
+				box.Adornee = part
+				box.LineThickness = 0.05
+				box.SurfaceTransparency = 0.8
+				box.Parent = part
+			end
+			pcall(function()
+				box.Color3 = color
+				box.SurfaceColor3 = color
 			end)
 		end
 
 		local function updateHitboxes()
+			local desired = {}
 			for _, player in ipairs(Players:GetPlayers()) do
-				if player ~= LocalPlayer then
+				if player ~= LocalPlayer and HexaSharedTargetFilters:AllowsPlayer(player, true) then
 					local character = player.Character
 					local root = character and character:FindFirstChild("HumanoidRootPart")
-					if root then applyHitboxToPart(root) end
+					local head = character and character:FindFirstChild("Head")
+					if Settings.Hitbox and root then desired[root] = true end
+					if Settings.HeadHitbox and head then desired[head] = true end
 				end
+			end
+			for part in pairs(desired) do applyHitboxToPart(part) end
+			for part in pairs(State.HitboxOriginal) do
+				if not desired[part] then restoreHitboxPart(part) end
 			end
 		end
 
@@ -4019,6 +4117,7 @@ task.spawn(function()
 			stopDrone()
 			restoreWeapons()
 			restoreHitboxes()
+			destroyHighlights()
 			restoreFullbright()
 			restoreXRay()
 			restoreVehicle()
@@ -4064,8 +4163,30 @@ task.spawn(function()
 			end)
 		end
 
+		local function refreshHitboxColorButton()
+			local spanishText = "COLOR DEL HITBOX: " .. HitboxColorNames[Settings.HitboxColorIndex]
+			HitboxColorButton:SetAttribute("HexaSpanishText", spanishText)
+			HitboxColorButton:SetAttribute("HexaSpanishBaseText", spanishText)
+			HitboxColorButton:SetAttribute("BaseText", spanishText)
+			HitboxColorButton.Text = spanishText
+			Lang.ApplyObject(HitboxColorButton)
+		end
+
+		connect(HitboxColorButton.MouseButton1Click, function()
+			Settings.HitboxColorIndex = Settings.HitboxColorIndex % #HitboxColors + 1
+			refreshHitboxColorButton()
+			if Settings.Hitbox or Settings.HeadHitbox then updateHitboxes() end
+		end)
+		refreshHitboxColorButton()
+
 		bindToggle(WallButton, "WallCheck", function(enabled) HexaSharedTargetFilters.WallCheck = enabled end)
-		bindToggle(TeamButton, "TeamCheck", function(enabled) HexaSharedTargetFilters:SetTeamCheck(enabled); AimHighlight.Adornee = nil; renderEsp() end)
+		bindToggle(TeamButton, "TeamCheck", function(enabled)
+			HexaSharedTargetFilters:SetTeamCheck(enabled)
+			AimHighlight.Adornee = nil
+			renderEsp()
+			updateHitboxes()
+			updateHighlights()
+		end)
 		bindToggle(AimSmoothingButton, "AimSmoothing", function(enabled)
 			HexaSharedTargetFilters.AimSmoothing = enabled
 		end)
@@ -4101,7 +4222,15 @@ task.spawn(function()
 			if enabled then applyFullbright() else restoreFullbright() end
 		end)
 		bindToggle(HitboxButton, "Hitbox", function(enabled)
-			if enabled then
+			if enabled or Settings.HeadHitbox then
+				State.LastHitboxUpdate = 0
+				updateHitboxes()
+			else
+				restoreHitboxes()
+			end
+		end)
+		bindToggle(HeadHitboxButton, "HeadHitbox", function(enabled)
+			if enabled or Settings.Hitbox then
 				State.LastHitboxUpdate = 0
 				updateHitboxes()
 			else
@@ -4123,6 +4252,7 @@ task.spawn(function()
 		bindToggle(BoxButton, "BoxESP", function(enabled) if not enabled then renderEsp() end end)
 		bindToggle(NameButton, "NameESP", function(enabled) if not enabled then renderEsp() end end)
 		bindToggle(HealthButton, "HealthESP", function(enabled) if not enabled then renderEsp() end end)
+		bindToggle(HighlightButton, "ESPHighlight", function() updateHighlights() end)
 
 		-- Wall Check y Team Check deben iniciar apagados.
 		HexaSharedTargetFilters.WallCheck = false
@@ -4131,7 +4261,9 @@ task.spawn(function()
 		setActive(TeamButton, false)
 
 		addVipStateListener(function(isVip)
-			if isVip or State.Dead then return end
+			if State.Dead then return end
+			if Settings.Hitbox or Settings.HeadHitbox then updateHitboxes() end
+			if isVip then return end
 			if Settings.NoRecoil then
 				Settings.NoRecoil = false
 				restoreValues(State.NoRecoilValues)
@@ -4226,6 +4358,15 @@ task.spawn(function()
 				for _, object in pairs(cache) do if object and object.Parent then object:Destroy() end end
 				State.EspCache[player] = nil
 			end
+			local highlight = State.HighlightCache[player]
+			if highlight then pcall(function() highlight:Destroy() end) end
+			State.HighlightCache[player] = nil
+			local character = player.Character
+			if character then
+				for part in pairs(State.HitboxOriginal) do
+					if part and part:IsDescendantOf(character) then restoreHitboxPart(part) end
+				end
+			end
 		end)
 
 		local function bindPanicButton(object)
@@ -4255,7 +4396,7 @@ task.spawn(function()
 				State.LastFullbrightUpdate = now
 				applyFullbright()
 			end
-			if Settings.Hitbox and now - State.LastHitboxUpdate >= 0.10 then
+			if (Settings.Hitbox or Settings.HeadHitbox) and now - State.LastHitboxUpdate >= 0.10 then
 				State.LastHitboxUpdate = now
 				updateHitboxes()
 			end
@@ -4267,6 +4408,7 @@ task.spawn(function()
 			if now - State.LastEspRender >= 0.033 then
 				State.LastEspRender = now
 				renderEsp()
+				updateHighlights()
 			end
 		end)
 	end, function(errorMessage)
