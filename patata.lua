@@ -1083,7 +1083,8 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"SIN DISPERSIÓN", "NO SPREAD"},
 	{"RECARGA AUTOMÁTICA", "AUTO RELOAD"},
 	{"MUNICIÓN INFINITA", "INFINITE AMMO"},
-	{"TRIGGERBOT", "TRIGGERBOT"},
+	{"EXPANSOR DE HITBOX", "HITBOX EXPANDER"},
+	{"Tamaño del Hitbox", "Hitbox size"},
 	{"FULLBRIGHT", "FULLBRIGHT"},
 	{"X-RAY", "X-RAY"},
 	{"Transparencia X-Ray", "X-Ray transparency"},
@@ -3008,8 +3009,9 @@ task.spawn(function()
 			RapidFire = false,
 			NoSpread = false,
 			AutoReload = false,
-			Triggerbot = false,
 			InfiniteAmmo = false,
+			Hitbox = false,
+			HitboxSize = 5,
 			Fullbright = false,
 			XRay = false,
 			XRayTransparency = 75,
@@ -3031,11 +3033,8 @@ task.spawn(function()
 			LastWeaponScan = 0,
 			LastRapidShot = 0,
 			LastAutoReload = 0,
-			LastTriggerClick = 0,
+			LastHitboxUpdate = 0,
 			LastFullbrightUpdate = 0,
-			TriggerBusy = false,
-			TriggerGeneration = 0,
-			LastTriggerPoint = nil,
 			FullbrightOriginal = nil,
 			FullbrightApplying = false,
 			-- Debe ser una tabla fuerte: si las claves son débiles se pierden las
@@ -3053,6 +3052,7 @@ task.spawn(function()
 			RapidAttributes = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoValues = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
+			HitboxOriginal = setmetatable({}, {__mode = "k"}),
 			VehicleCache = setmetatable({}, {__mode = "k"}),
 			Drone = {
 				Active = false,
@@ -3113,7 +3113,7 @@ task.spawn(function()
 			function(key) AimKeys.Smoothing = key end
 		)
 
-		local CombatAdvancedCard = sectionCard(512)
+		local CombatAdvancedCard = sectionCard(572)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -3128,10 +3128,13 @@ task.spawn(function()
 		local RapidButton = createToggleButton(CombatAdvancedCard, "DISPARO RÁPIDO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 274))
 		markVipControl(RapidButton)
 		local AutoReloadButton = createToggleButton(CombatAdvancedCard, "RECARGA AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 320))
-		local TriggerButton = createToggleButton(CombatAdvancedCard, "TRIGGERBOT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 366))
-		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 412))
+		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 366))
 		markVipControl(InfiniteAmmoButton)
-		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 458))
+		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 412))
+		local HitboxButton = createToggleButton(CombatAdvancedCard, "EXPANSOR DE HITBOX", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 458))
+		createSlider(CombatAdvancedCard, "Tamaño del Hitbox", 2, 25, Settings.HitboxSize, 504, function(value)
+			Settings.HitboxSize = math.floor(value + 0.5)
+		end)
 
 		local EspAdvancedCard = sectionCard(294)
 		EspAdvancedCard.LayoutOrder = 31
@@ -3190,9 +3193,9 @@ task.spawn(function()
 			RapidFire = RapidButton,
 			NoSpread = NoSpreadButton,
 			AutoReload = AutoReloadButton,
-			Triggerbot = TriggerButton,
 			InfiniteAmmo = InfiniteAmmoButton,
 			Fullbright = FullbrightButton,
+			Hitbox = HitboxButton,
 			VehicleSpeed = VehicleButton,
 			DroneCamera = DroneButton,
 			Spin = SpinButton,
@@ -3337,190 +3340,6 @@ task.spawn(function()
 
 		local function isValidPlayer(player)
 			return HexaSharedTargetFilters:AllowsPlayer(player, true)
-		end
-
-		local function isVisible(part, targetCharacter)
-			if not HexaSharedTargetFilters.WallCheck then return true end
-			local camera = workspace.CurrentCamera
-			if not camera or not part or not part.Parent then return false end
-			local origin = camera.CFrame.Position
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			local excluded = {camera}
-			if LocalPlayer.Character then table.insert(excluded, LocalPlayer.Character) end
-			params.FilterDescendantsInstances = excluded
-			params.IgnoreWater = true
-			local result = workspace:Raycast(origin, part.Position - origin, params)
-			return result == nil
-				or result.Instance == part
-				or (targetCharacter and result.Instance:IsDescendantOf(targetCharacter))
-				or result.Instance:IsDescendantOf(part.Parent)
-		end
-
-		local TriggerMouse = LocalPlayer:GetMouse()
-		local TriggerVirtualInputManager = nil
-		pcall(function() TriggerVirtualInputManager = game:GetService("VirtualInputManager") end)
-
-		local function releaseTriggerInput(point)
-			-- Libera cualquier entrada que haya quedado presionada por una ejecución
-			-- anterior o por un ejecutor que haya fallado a mitad del disparo.
-			local character = LocalPlayer.Character
-			local equippedTool = character and character:FindFirstChildOfClass("Tool")
-			if equippedTool then
-				pcall(function() equippedTool:Deactivate() end)
-			end
-			if type(mouse1release) == "function" then
-				pcall(mouse1release)
-			end
-			if TriggerVirtualInputManager and point then
-				pcall(function()
-					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
-				end)
-			end
-		end
-		releaseTriggerInput(nil)
-
-		local function activateTriggerTool(tool)
-			if not tool or not tool.Enabled then return false end
-			local activated = pcall(function() tool:Activate() end)
-			if activated then task.wait(0.016) end
-			pcall(function() tool:Deactivate() end)
-			return activated
-		end
-
-		local function getPlayerFromTargetPart(targetPart)
-			local current = targetPart
-			while current and current ~= workspace do
-				if current:IsA("Model") then
-					local player = Players:GetPlayerFromCharacter(current)
-					if player then return player, current end
-				end
-				current = current.Parent
-			end
-			return nil, nil
-		end
-
-		local function isTriggerPointOverPanel(point)
-			if not MainFrame.Visible or MainFrame.Size.X.Offset <= 0 or MainFrame.Size.Y.Offset <= 0 then return false end
-			local panelPosition = MainFrame.AbsolutePosition
-			local panelSize = MainFrame.AbsoluteSize
-			return point.X >= panelPosition.X and point.X <= panelPosition.X + panelSize.X
-				and point.Y >= panelPosition.Y and point.Y <= panelPosition.Y + panelSize.Y
-		end
-
-		local function getTriggerTarget()
-			local camera = workspace.CurrentCamera
-			if not camera then return nil, nil end
-
-			local point
-			local ray
-			if MOBILE_DEVICE then
-				point = camera.ViewportSize / 2
-				ray = camera:ViewportPointToRay(point.X, point.Y)
-			else
-				-- GetMouseLocation mantiene la posición correcta incluso cuando el
-				-- juego bloquea el cursor en el centro (primera persona / shift lock).
-				local okPoint, mousePoint = pcall(function()
-					return UserInputService:GetMouseLocation()
-				end)
-				point = okPoint and mousePoint or Vector2.new(TriggerMouse.X, TriggerMouse.Y)
-				local ok, mouseRay = pcall(function() return TriggerMouse.UnitRay end)
-				ray = ok and mouseRay or camera:ScreenPointToRay(point.X, point.Y)
-			end
-
-			-- Con cursor libre, no dispara mientras el usuario está pulsando el panel.
-			-- En móvil o con el cursor bloqueado al centro, el panel suele cubrir la
-			-- mira; bloquear aquí hacía que el Triggerbot nunca detectara objetivos.
-			if isTriggerPointOverPanel(point)
-				and not MOBILE_DEVICE
-				and UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
-				return nil, point
-			end
-
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			local excluded = {camera}
-			if LocalPlayer.Character then table.insert(excluded, LocalPlayer.Character) end
-			params.FilterDescendantsInstances = excluded
-			params.IgnoreWater = true
-
-			local result = workspace:Raycast(ray.Origin, ray.Direction * 5000, params)
-			local rayTarget = result and result.Instance
-			local mouseTarget = not MOBILE_DEVICE and TriggerMouse.Target or nil
-
-			-- Algunos juegos devuelven por el raycast una pieza auxiliar de la mira,
-			-- mientras Mouse.Target sí devuelve la parte real del personaje. Se usa
-			-- primero cualquier candidato que pertenezca a un Player válido.
-			if rayTarget and rayTarget.Parent then
-				local rayPlayer = getPlayerFromTargetPart(rayTarget)
-				if rayPlayer then return rayTarget, point end
-			end
-			if mouseTarget and mouseTarget.Parent then
-				local mousePlayer = getPlayerFromTargetPart(mouseTarget)
-				if mousePlayer then return mouseTarget, point end
-			end
-			return nil, point
-		end
-
-		local function fireTriggerShot(point)
-			local character = LocalPlayer.Character
-			local tool = character and character:FindFirstChildOfClass("Tool")
-			local pointOverPanel = point and isTriggerPointOverPanel(point)
-			State.LastTriggerPoint = point
-
-			-- En móvil nunca se inyectan clics de ratón: pueden capturar el joystick,
-			-- ocultar el TouchGui o dejar la entrada táctil bloqueada en ejecutores.
-			if MOBILE_DEVICE then
-				return activateTriggerTool(tool)
-			end
-
-			-- Si la mira está detrás del panel (común en móvil y primera persona),
-			-- activar la Tool evita que el clic sintético pulse botones de la interfaz.
-			if pointOverPanel then
-				return activateTriggerTool(tool)
-			end
-
-			-- Prioriza eventos de entrada reales: la mayoría de armas escuchan
-			-- InputBegan/InputEnded y no Tool.Activated directamente.
-			if type(mouse1click) == "function" then
-				local ok = pcall(mouse1click)
-				if ok then return true end
-			end
-
-			if TriggerVirtualInputManager and point then
-				local pressed = pcall(function()
-					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, true, game, 0)
-				end)
-				if pressed then task.wait(0.016) end
-				local released = pcall(function()
-					TriggerVirtualInputManager:SendMouseButtonEvent(point.X, point.Y, 0, false, game, 0)
-				end)
-				if pressed and released then return true end
-				releaseTriggerInput(point)
-			end
-
-			-- Respaldo para herramientas estándar y ejecutores sin inyección de ratón.
-			return activateTriggerTool(tool)
-		end
-
-		local function updateTriggerbot(now)
-			if not Settings.Triggerbot or State.TriggerBusy or now - State.LastTriggerClick < 0.10 then return end
-			local targetPart, triggerPoint = getTriggerTarget()
-			if not targetPart or not targetPart.Parent then return end
-			local targetPlayer, targetCharacter = getPlayerFromTargetPart(targetPart)
-			if not targetPlayer or not HexaSharedTargetFilters:AllowsPlayer(targetPlayer, true) then return end
-			if not isVisible(targetPart, targetCharacter) then return end
-
-			State.TriggerBusy = true
-			State.LastTriggerClick = now
-			local generation = State.TriggerGeneration
-			task.spawn(function()
-				if Settings.Triggerbot and generation == State.TriggerGeneration then
-					pcall(fireTriggerShot, triggerPoint)
-				end
-				task.wait(0.08)
-				if generation == State.TriggerGeneration then State.TriggerBusy = false end
-			end)
 		end
 
 		local FullbrightLightingTargets = {
@@ -4131,6 +3950,52 @@ task.spawn(function()
 			pcall(function() humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true) end)
 		end
 
+		local function restoreHitboxes()
+			for part, original in pairs(State.HitboxOriginal) do
+				if part and part.Parent then
+					pcall(function()
+						part.Size = original.Size
+						part.Transparency = original.Transparency
+						part.BrickColor = original.BrickColor
+						part.Material = original.Material
+						part.CanCollide = original.CanCollide
+					end)
+				end
+				State.HitboxOriginal[part] = nil
+			end
+		end
+
+		local function applyHitboxToPart(part)
+			if not part or not part.Parent or not part:IsA("BasePart") then return end
+			if not State.HitboxOriginal[part] then
+				State.HitboxOriginal[part] = {
+					Size = part.Size,
+					Transparency = part.Transparency,
+					BrickColor = part.BrickColor,
+					Material = part.Material,
+					CanCollide = part.CanCollide,
+				}
+			end
+			local size = math.clamp(Settings.HitboxSize, 2, 25)
+			pcall(function()
+				part.Size = Vector3.new(size, size, size)
+				part.Transparency = 0.6
+				part.BrickColor = BrickColor.new("Bright purple")
+				part.Material = Enum.Material.Neon
+				part.CanCollide = false
+			end)
+		end
+
+		local function updateHitboxes()
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer then
+					local character = player.Character
+					local root = character and character:FindFirstChild("HumanoidRootPart")
+					if root then applyHitboxToPart(root) end
+				end
+			end
+		end
+
 		local function updateHumanoid()
 			local _, humanoid = getLocalCharacter()
 			if not humanoid then return end
@@ -4152,11 +4017,8 @@ task.spawn(function()
 
 		local function suspend()
 			stopDrone()
-			State.TriggerBusy = false
-			State.TriggerGeneration += 1
-			releaseTriggerInput(State.LastTriggerPoint)
-			State.LastTriggerPoint = nil
 			restoreWeapons()
+			restoreHitboxes()
 			restoreFullbright()
 			restoreXRay()
 			restoreVehicle()
@@ -4229,16 +4091,6 @@ task.spawn(function()
 			end
 		end)
 		bindToggle(AutoReloadButton, "AutoReload")
-		bindToggle(TriggerButton, "Triggerbot", function(enabled)
-			-- Invalida cualquier disparo pendiente tanto al activar como al apagar.
-			State.TriggerGeneration += 1
-			State.TriggerBusy = false
-			State.LastTriggerClick = 0
-			if not enabled then
-				releaseTriggerInput(State.LastTriggerPoint)
-				State.LastTriggerPoint = nil
-			end
-		end)
 		bindToggle(InfiniteAmmoButton, "InfiniteAmmo", function(enabled)
 			if not enabled then
 				restoreValues(State.InfiniteAmmoValues)
@@ -4247,6 +4099,14 @@ task.spawn(function()
 		end)
 		bindToggle(FullbrightButton, "Fullbright", function(enabled)
 			if enabled then applyFullbright() else restoreFullbright() end
+		end)
+		bindToggle(HitboxButton, "Hitbox", function(enabled)
+			if enabled then
+				State.LastHitboxUpdate = 0
+				updateHitboxes()
+			else
+				restoreHitboxes()
+			end
 		end)
 		bindToggle(XRayButton, "XRay", function(enabled)
 			if enabled then applyXRay() else restoreXRay() end
@@ -4391,10 +4251,13 @@ task.spawn(function()
 			else
 				restoreWeapons()
 			end
-			if Settings.Triggerbot then updateTriggerbot(now) end
 			if Settings.Fullbright and now - State.LastFullbrightUpdate >= 0.25 then
 				State.LastFullbrightUpdate = now
 				applyFullbright()
+			end
+			if Settings.Hitbox and now - State.LastHitboxUpdate >= 0.10 then
+				State.LastHitboxUpdate = now
+				updateHitboxes()
 			end
 			if Settings.VehicleSpeed then updateVehicle() else restoreVehicle() end
 			applyCharacterControl()
