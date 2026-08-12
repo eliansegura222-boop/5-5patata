@@ -62,12 +62,8 @@ local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = __BootstrapPlayer
 
-local OWNER_USERNAME = "fenixfire204"
 local VIP_SECRET = "HEXA-X-NONY-2026-VIP-V1"
 local VIP_FILE_NAME = ("HexaX_VIP_%d.txt"):format(LocalPlayer.UserId)
-local VIP_USERNAMES = {
-	["fenixfire204"] = true,
-}
 
 local function normalizeUsername(username)
 	return string.lower((tostring(username or ""):gsub("%s+", "")))
@@ -178,7 +174,7 @@ local function clearSavedVipCode()
 end
 
 local RemoteVipState = (function()
-	local VIP_RAW_URL = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/Agregarcosas.lua"
+	local VIP_RAW_URL = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/hx4v1p.lua"
 
 	local function parseExpiration(value)
 		if value == nil then return 0 end
@@ -282,9 +278,8 @@ local RemoteVipState = (function()
 	return state
 end)()
 
-local HEXA_IS_OWNER = normalizeUsername(LocalPlayer.Name) == normalizeUsername(OWNER_USERNAME)
-local HEXA_LOCAL_PERMANENT_ACCESS = HEXA_IS_OWNER
-	or VIP_USERNAMES[normalizeUsername(LocalPlayer.Name)] == true
+local HEXA_IS_OWNER = false
+local HEXA_LOCAL_PERMANENT_ACCESS = false
 local HEXA_HAS_PERMANENT_ACCESS = HEXA_LOCAL_PERMANENT_ACCESS
 	or (RemoteVipState:IsActive() and RemoteVipState.info.permanent == true)
 local savedVipCode = readSavedVipCode()
@@ -1246,6 +1241,8 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"Disparos por segundo", "Shots per second"},
 	{"SUAVIZADO DE PUNTERÍA", "AIM SMOOTHING"},
 	{"PREDICCIÓN DEL OBJETIVO", "TARGET PREDICTION"},
+	{"RETARDO AL CAMBIAR OBJETIVO", "TARGET SWITCHING DELAY"},
+	{"Retardo de cambio de objetivo (ms)", "Target switching delay (ms)"},
 	{"SIN DISPERSIÓN", "NO SPREAD"},
 	{"RECARGA AUTOMÁTICA", "AUTO RELOAD"},
 	{"MUNICIÓN INFINITA", "INFINITE AMMO"},
@@ -2002,6 +1999,7 @@ local CategoryUI = {
 		{Key = "HOME", Label = "INICIO"},
 		{Key = "MOVEMENT", Label = "MOVIMIENTO"},
 		{Key = "COMBAT", Label = "COMBATE"},
+		{Key = "VIP", Label = "★ VIP"},
 		{Key = "VISUALS", Label = "VISUALES"},
 		{Key = "TELEPORT", Label = "TELETRANSPORTE"},
 		{Key = "PLAYER", Label = "JUGADOR"},
@@ -2085,6 +2083,12 @@ function CategoryUI:GetCardCategory(card)
 end
 
 function CategoryUI:Matches(card)
+	if self.Active == "VIP" then
+		for _, object in ipairs(card:GetDescendants()) do
+			if object:GetAttribute("HexaVipOnly") == true then return true end
+		end
+		return false
+	end
 	return self.Active == "ALL" or self:GetCardCategory(card) == self.Active
 end
 
@@ -2179,7 +2183,8 @@ local FavoriteStars = {}
 local function normalizeSearchText(value)
 	local text = string.lower(tostring(value or ""))
 	text = text:gsub("á", "a"):gsub("é", "e"):gsub("í", "i"):gsub("ó", "o"):gsub("ú", "u"):gsub("ü", "u"):gsub("ñ", "n")
-	return text:gsub("%s+", " ")
+	text = text:gsub("%s+", " ")
+	return text:gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 local function loadFavorites()
@@ -2362,18 +2367,109 @@ registerAllFunctionButtons = function()
 	refreshFavoritesCard()
 end
 
-local function cardSearchText(card)
+local FilterOriginalPositions = setmetatable({}, {__mode = "k"})
+local FilterOriginalCardSizes = setmetatable({}, {__mode = "k"})
+
+local function isFilterUnit(object)
+	if not object:IsA("GuiObject") then return false end
+	return object:IsA("TextButton")
+		or object:IsA("TextBox")
+		or object:GetAttribute("HexaSearchText") ~= nil
+		or object:GetAttribute("HexaVipOnly") == true
+end
+
+local function getCardFilterUnits(card)
+	local units = {}
+	for _, object in ipairs(card:GetChildren()) do
+		if isFilterUnit(object) and object.Name ~= "HexaFavoriteStar" then
+			if not FilterOriginalPositions[object] then FilterOriginalPositions[object] = object.Position end
+			table.insert(units, object)
+		end
+	end
+	table.sort(units, function(a, b)
+		local aPosition = FilterOriginalPositions[a] or a.Position
+		local bPosition = FilterOriginalPositions[b] or b.Position
+		if aPosition.Y.Offset == bPosition.Y.Offset then return aPosition.X.Offset < bPosition.X.Offset end
+		return aPosition.Y.Offset < bPosition.Y.Offset
+	end)
+	return units
+end
+
+local function filterUnitSearchText(unit)
 	local parts = {}
-	for _, object in ipairs(card:GetDescendants()) do
+	local function appendObject(object)
 		if (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) and object.Name ~= "HexaFavoriteStar" then
 			table.insert(parts, tostring(object.Text or ""))
 			table.insert(parts, tostring(object:GetAttribute("HexaSpanishText") or ""))
 			table.insert(parts, tostring(object:GetAttribute("HexaSpanishBaseText") or ""))
+			table.insert(parts, tostring(object:GetAttribute("BaseText") or ""))
 		end
 		local extra = object:GetAttribute("HexaSearchText")
 		if extra then table.insert(parts, tostring(extra)) end
 	end
+	appendObject(unit)
+	for _, object in ipairs(unit:GetDescendants()) do appendObject(object) end
 	return normalizeSearchText(table.concat(parts, " "))
+end
+
+local function filterUnitIsVip(unit)
+	if unit:GetAttribute("HexaVipOnly") == true then return true end
+	for _, object in ipairs(unit:GetDescendants()) do
+		if object:GetAttribute("HexaVipOnly") == true then return true end
+	end
+	return false
+end
+
+local function restoreFilterLayout(card, units)
+	local originalSize = FilterOriginalCardSizes[card]
+	if originalSize then card.Size = originalSize end
+	for _, unit in ipairs(units) do
+		local originalPosition = FilterOriginalPositions[unit]
+		if originalPosition then unit.Position = originalPosition end
+		unit.Visible = true
+		local oldMatch = unit:FindFirstChild("HexaSearchMatch")
+		if oldMatch then oldMatch:Destroy() end
+	end
+end
+
+local function applyCompactFilter(card, units, query, vipOnly)
+	if not FilterOriginalCardSizes[card] then FilterOriginalCardSizes[card] = card.Size end
+	local rows = {}
+	local rowOrder = {}
+	for _, unit in ipairs(units) do
+		local include = vipOnly and filterUnitIsVip(unit)
+			or (not vipOnly and query ~= "" and string.find(filterUnitSearchText(unit), query, 1, true) ~= nil)
+		unit.Visible = include
+		if include then
+			local originalPosition = FilterOriginalPositions[unit] or unit.Position
+			local rowKey = originalPosition.Y.Offset
+			if not rows[rowKey] then
+				rows[rowKey] = {}
+				table.insert(rowOrder, rowKey)
+			end
+			table.insert(rows[rowKey], unit)
+		end
+	end
+
+	table.sort(rowOrder)
+	local nextY = 44
+	local visibleUnits = 0
+	for _, rowKey in ipairs(rowOrder) do
+		local rowHeight = 0
+		for _, unit in ipairs(rows[rowKey]) do
+			local originalPosition = FilterOriginalPositions[unit] or unit.Position
+			unit.Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, originalPosition.Y.Scale, nextY)
+			rowHeight = math.max(rowHeight, unit.Size.Y.Offset)
+			visibleUnits += 1
+		end
+		nextY += math.max(30, rowHeight) + 8
+	end
+
+	if visibleUnits > 0 then
+		local originalSize = FilterOriginalCardSizes[card] or card.Size
+		card.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, nextY + 2)
+	end
+	return visibleUnits
 end
 
 applySearchFilter = function()
@@ -2381,27 +2477,22 @@ applySearchFilter = function()
 	local matches = 0
 	for _, card in ipairs(Content:GetChildren()) do
 		if card:IsA("Frame") and card:GetAttribute("HexaSearchableCard") == true then
+			local units = getCardFilterUnits(card)
+			restoreFilterLayout(card, units)
 			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
-			local categoryVisible = CategoryUI:Matches(card)
-			-- El buscador revisa todas las categorías para que ninguna función quede oculta.
-			local visible = query == ""
-				and defaultVisible
-				and categoryVisible
-				or (query ~= "" and string.find(cardSearchText(card), query, 1, true) ~= nil)
+			local visible = false
+			if query ~= "" then
+				-- La búsqueda enseña únicamente los controles coincidentes y los compacta.
+				visible = card ~= FavoritesCard and applyCompactFilter(card, units, query, false) > 0
+			elseif CategoryUI.Active == "VIP" then
+				-- La categoría VIP reutiliza los controles originales; siguen presentes
+				-- en sus categorías habituales y aquí se muestran solos y ordenados.
+				visible = applyCompactFilter(card, units, "", true) > 0
+			else
+				visible = defaultVisible and CategoryUI:Matches(card)
+			end
 			card.Visible = visible
 			if visible then matches += 1 end
-			for _, object in ipairs(card:GetDescendants()) do
-				if object:IsA("TextButton") and object.Name ~= "HexaFavoriteStar" then
-					local matchStroke = object:FindFirstChild("HexaSearchMatch")
-					local textMatch = query ~= "" and string.find(normalizeSearchText(object.Text), query, 1, true) ~= nil
-					if textMatch and not matchStroke then
-						matchStroke = mkStroke(object, Theme.VipGold, 0.05, 2)
-						matchStroke.Name = "HexaSearchMatch"
-					elseif matchStroke then
-						matchStroke.Enabled = textMatch
-					end
-				end
-			end
 		end
 	end
 	NoResultsLabel.Visible = matches == 0
@@ -2951,6 +3042,8 @@ local HexaSharedTargetFilters = {
 	WallCheck = false,
 	AimSmoothing = false,
 	TargetPrediction = false,
+	TargetSwitchDelay = false,
+	TargetSwitchDelaySeconds = 0.35,
 	SmoothingFactor = 5,
 	PredictionFactor = 0.12,
 	Listeners = {},
@@ -3082,6 +3175,107 @@ local function getClosestPlayer(aimAtHead: boolean?): Player?
 	end
 
 	return closestPlayer
+end
+
+Runtime.aimSwitchTarget = nil
+Runtime.aimSwitchCandidate = nil
+Runtime.aimSwitchCandidateSince = 0
+
+function Runtime.resetAimbotTargetSwitching()
+	Runtime.aimSwitchTarget = nil
+	Runtime.aimSwitchCandidate = nil
+	Runtime.aimSwitchCandidateSince = 0
+end
+
+function Runtime.isAimbotTargetEligible(player, aimAtHead)
+	if not HexaSharedTargetFilters:AllowsPlayer(player, true) then return false end
+	if ignoreFriendsActive and Runtime.isIgnoredFriend(player) then return false end
+	local character = player.Character
+	local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
+	local targetPart = character and (aimAtHead
+		and (character:FindFirstChild("Head") or targetRoot)
+		or (character:FindFirstChild("UpperTorso")
+			or character:FindFirstChild("Torso")
+			or character:FindFirstChild("LowerTorso")
+			or targetRoot))
+	local _, _, localRoot = getCharacterData()
+	if not localRoot or not targetRoot or not targetPart or not targetPart:IsA("BasePart") then return false end
+	if (localRoot.Position - targetRoot.Position).Magnitude > maxAimDistance then return false end
+	if not passesWallCheck(targetPart) then return false end
+	if fovActive then
+		local camera = workspace.CurrentCamera
+		if not camera then return false end
+		local screenPosition, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+		if not onScreen or screenPosition.Z <= 0 then return false end
+		local distance2D = (Vector2.new(screenPosition.X, screenPosition.Y) - camera.ViewportSize / 2).Magnitude
+		if distance2D > fovRadius then return false end
+	end
+	return true
+end
+
+function Runtime.resolveAimbotTarget(candidate, aimAtHead)
+	if not HexaSharedTargetFilters.TargetSwitchDelay then
+		Runtime.aimSwitchTarget = candidate
+		Runtime.aimSwitchCandidate = nil
+		Runtime.aimSwitchCandidateSince = 0
+		return candidate
+	end
+
+	local current = Runtime.aimSwitchTarget
+	local now = os.clock()
+	if current ~= nil and not Runtime.isAimbotTargetEligible(current, aimAtHead) then
+		Runtime.aimSwitchTarget = nil
+		current = nil
+		if candidate == nil then
+			Runtime.aimSwitchCandidate = nil
+			Runtime.aimSwitchCandidateSince = 0
+			return nil
+		end
+		if Runtime.aimSwitchCandidate ~= candidate then
+			Runtime.aimSwitchCandidate = candidate
+			Runtime.aimSwitchCandidateSince = now
+			return nil
+		end
+	end
+
+	if current == nil then
+		if Runtime.aimSwitchCandidate == nil then
+			-- La primera adquisición es inmediata; el retardo se aplica únicamente
+			-- cuando ya existía un objetivo y se va a cambiar por otro.
+			Runtime.aimSwitchTarget = candidate
+			return candidate
+		end
+		if candidate ~= Runtime.aimSwitchCandidate then
+			Runtime.aimSwitchCandidate = candidate
+			Runtime.aimSwitchCandidateSince = candidate and now or 0
+			return nil
+		end
+		if candidate and now - Runtime.aimSwitchCandidateSince >= math.max(0, HexaSharedTargetFilters.TargetSwitchDelaySeconds) then
+			Runtime.aimSwitchTarget = candidate
+			Runtime.aimSwitchCandidate = nil
+			Runtime.aimSwitchCandidateSince = 0
+			return candidate
+		end
+		return nil
+	end
+	if candidate == nil or candidate == current then
+		Runtime.aimSwitchCandidate = nil
+		Runtime.aimSwitchCandidateSince = 0
+		return current
+	end
+
+	if Runtime.aimSwitchCandidate ~= candidate then
+		Runtime.aimSwitchCandidate = candidate
+		Runtime.aimSwitchCandidateSince = now
+		return current
+	end
+	if now - Runtime.aimSwitchCandidateSince >= math.max(0, HexaSharedTargetFilters.TargetSwitchDelaySeconds) then
+		Runtime.aimSwitchTarget = candidate
+		Runtime.aimSwitchCandidate = nil
+		Runtime.aimSwitchCandidateSince = 0
+		return candidate
+	end
+	return current
 end
 
 local function clearFly()
@@ -3243,6 +3437,8 @@ task.spawn(function()
 			TeamCheck = HexaSharedTargetFilters.TeamCheck,
 			AimSmoothing = false,
 			TargetPrediction = false,
+			TargetSwitchDelay = false,
+			TargetSwitchDelayMs = 350,
 			NoRecoil = false,
 			RapidFire = false,
 			RapidFireRate = 22,
@@ -3368,7 +3564,7 @@ task.spawn(function()
 		}
 		local HitboxColorNames = {"BLANCO", "ROJO", "VERDE", "AZUL", "AMARILLO", "MORADO"}
 
-		local CombatAdvancedCard = sectionCard(526)
+		local CombatAdvancedCard = sectionCard(632)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -3376,19 +3572,24 @@ task.spawn(function()
 		local TeamButton = createToggleButton(CombatAdvancedCard, "COMPROBAR EQUIPOS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 		local PredictionButton = createToggleButton(CombatAdvancedCard, "TARGET PREDICTION", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
 		PredictionButton:SetAttribute("HexaNoTranslate", true)
-		local NoRecoilButton = createToggleButton(CombatAdvancedCard, "SIN RETROCESO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
+		local TargetSwitchDelayButton = createToggleButton(CombatAdvancedCard, "RETARDO AL CAMBIAR OBJETIVO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
+		createSlider(CombatAdvancedCard, "Retardo de cambio de objetivo (ms)", 50, 2000, Settings.TargetSwitchDelayMs, 228, function(value)
+			Settings.TargetSwitchDelayMs = math.clamp(math.floor(value + 0.5), 50, 2000)
+			HexaSharedTargetFilters.TargetSwitchDelaySeconds = Settings.TargetSwitchDelayMs / 1000
+		end)
+		local NoRecoilButton = createToggleButton(CombatAdvancedCard, "SIN RETROCESO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 288))
 		markVipControl(NoRecoilButton)
-		local NoSpreadButton = createToggleButton(CombatAdvancedCard, "SIN DISPERSIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 228))
+		local NoSpreadButton = createToggleButton(CombatAdvancedCard, "SIN DISPERSIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 334))
 		markVipControl(NoSpreadButton)
-		local RapidButton = createToggleButton(CombatAdvancedCard, "DISPARO RÁPIDO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 274))
+		local RapidButton = createToggleButton(CombatAdvancedCard, "DISPARO RÁPIDO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 380))
 		markVipControl(RapidButton)
-		createSlider(CombatAdvancedCard, "Disparos por segundo", 1, 800, Settings.RapidFireRate, 320, function(value)
+		createSlider(CombatAdvancedCard, "Disparos por segundo", 1, 800, Settings.RapidFireRate, 426, function(value)
 			Settings.RapidFireRate = math.clamp(math.floor(value + 0.5), 1, 800)
 		end, true)
-		local AutoReloadButton = createToggleButton(CombatAdvancedCard, "RECARGA AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 380))
-		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 426))
+		local AutoReloadButton = createToggleButton(CombatAdvancedCard, "RECARGA AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 486))
+		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 532))
 		markVipControl(InfiniteAmmoButton)
-		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 472))
+		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
 
 		local HitboxCard = sectionCard(250)
 		HitboxCard.LayoutOrder = 23
@@ -3455,6 +3656,7 @@ task.spawn(function()
 			TeamCheck = TeamButton,
 			AimSmoothing = AimSmoothingButton,
 			TargetPrediction = PredictionButton,
+			TargetSwitchDelay = TargetSwitchDelayButton,
 			NoRecoil = NoRecoilButton,
 			RapidFire = RapidButton,
 			NoSpread = NoSpreadButton,
@@ -4420,6 +4622,8 @@ task.spawn(function()
 			HexaSharedTargetFilters.WallCheck = false
 			HexaSharedTargetFilters.AimSmoothing = false
 			HexaSharedTargetFilters.TargetPrediction = false
+			HexaSharedTargetFilters.TargetSwitchDelay = false
+			Runtime.resetAimbotTargetSwitching()
 			HexaSharedTargetFilters:SetTeamCheck(false)
 			suspend()
 			if updateButtons then
@@ -4481,6 +4685,10 @@ task.spawn(function()
 		end)
 		bindToggle(PredictionButton, "TargetPrediction", function(enabled)
 			HexaSharedTargetFilters.TargetPrediction = enabled
+		end)
+		bindToggle(TargetSwitchDelayButton, "TargetSwitchDelay", function(enabled)
+			HexaSharedTargetFilters.TargetSwitchDelay = enabled
+			Runtime.resetAimbotTargetSwitching()
 		end)
 		bindToggle(NoRecoilButton, "NoRecoil", function(enabled)
 			if not enabled then
@@ -4547,9 +4755,12 @@ task.spawn(function()
 
 		-- Wall Check y Team Check deben iniciar apagados.
 		HexaSharedTargetFilters.WallCheck = false
+		HexaSharedTargetFilters.TargetSwitchDelay = false
+		Runtime.resetAimbotTargetSwitching()
 		HexaSharedTargetFilters:SetTeamCheck(false)
 		setActive(WallButton, false)
 		setActive(TeamButton, false)
+		setActive(TargetSwitchDelayButton, false)
 
 		addVipStateListener(function(isVip)
 			if State.Dead then return end
@@ -5208,7 +5419,7 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 	local isBodyActive = autoAimBodyActive and isKeyActive(AimKeys.Body)
 
 	if isHeadActive or isBodyActive then
-		local targetPlayer = getClosestPlayer(isHeadActive)
+		local targetPlayer = Runtime.resolveAimbotTarget(getClosestPlayer(isHeadActive), isHeadActive)
 		if HexaSharedTargetFilters:AllowsPlayer(targetPlayer, true) and targetPlayer.Character then
 			local targetPart
 			if isHeadActive then
@@ -5243,6 +5454,7 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 			if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
 		end
 	else
+		Runtime.resetAimbotTargetSwitching()
 		if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
 	end
 end)
