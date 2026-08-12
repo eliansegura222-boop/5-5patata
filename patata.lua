@@ -177,14 +177,122 @@ local function clearSavedVipCode()
 	end
 end
 
+local RemoteVipState = (function()
+	local VIP_RAW_URL = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/Agregarcosas.lua"
+
+	local function parseExpiration(value)
+		if value == nil then return 0 end
+		if type(value) == "number" then return math.max(0, math.floor(value)) end
+		local text = string.lower(tostring(value):gsub("%s+", ""))
+		if text == "" or text == "permanent" or text == "permanente" or text == "never" then return 0 end
+		local numeric = tonumber(text)
+		if numeric then return math.max(0, math.floor(numeric)) end
+		local year, month, day = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+		if not year then return nil end
+		local ok, timestamp = pcall(os.time, {
+			year = tonumber(year), month = tonumber(month), day = tonumber(day),
+			hour = 23, min = 59, sec = 59,
+		})
+		return ok and timestamp or nil
+	end
+
+	local function downloadRaw()
+		local url = VIP_RAW_URL .. "?hexax=" .. tostring(os.time())
+		local requester = nil
+		pcall(function()
+			if type(request) == "function" then requester = request
+			elseif type(http_request) == "function" then requester = http_request
+			elseif type(syn) == "table" and type(syn.request) == "function" then requester = syn.request end
+		end)
+		if requester then
+			local ok, response = pcall(requester, {
+				Url = url,
+				Method = "GET",
+				Headers = { ["Cache-Control"] = "no-cache" },
+			})
+			if ok and type(response) == "table" then
+				local statusCode = tonumber(response.StatusCode or response.Status or response.status_code) or 200
+				local body = response.Body or response.body
+				if statusCode >= 200 and statusCode < 300 and type(body) == "string" and body ~= "" then return body end
+			end
+		end
+		local ok, body = pcall(function() return game:HttpGet(url, true) end)
+		return ok and type(body) == "string" and body or nil
+	end
+
+	local function parseEntry(body)
+		local userId = tostring(LocalPlayer.UserId)
+		local jsonOk, decoded = pcall(function() return HttpService:JSONDecode(body) end)
+		if jsonOk and type(decoded) == "table" then
+			local users = type(decoded.users) == "table" and decoded.users or decoded
+			local entry = users[userId]
+			if entry == true then return true, 0 end
+			if type(entry) == "string" or type(entry) == "number" then
+				local expiration = parseExpiration(entry)
+				return expiration ~= nil, expiration
+			end
+			if type(entry) == "table" and entry.vip ~= false and entry.enabled ~= false then
+				local expiration = parseExpiration(entry.expires)
+				return expiration ~= nil, expiration
+			end
+			return false, nil
+		end
+
+		local quotedKey = "%[%s*[\"']" .. userId .. "[\"']%s*%]"
+		local numericKey = "%[%s*" .. userId .. "%s*%]"
+		local block = body:match(quotedKey .. "%s*=%s*%{(.-)%}") or body:match(numericKey .. "%s*=%s*%{(.-)%}")
+		if block then
+			if block:match("vip%s*=%s*false") or block:match("enabled%s*=%s*false") then return false, nil end
+			local expirationText = block:match("expires%s*=%s*[\"']([^\"']+)[\"']") or block:match("expires%s*=%s*(%d+)")
+			local expiration = parseExpiration(expirationText)
+			return expiration ~= nil, expiration
+		end
+		if body:match(quotedKey .. "%s*=%s*true") or body:match(numericKey .. "%s*=%s*true") then return true, 0 end
+		local directExpiration = body:match(quotedKey .. "%s*=%s*[\"']([^\"']+)[\"']")
+			or body:match(numericKey .. "%s*=%s*[\"']([^\"']+)[\"']")
+		if directExpiration then
+			local expiration = parseExpiration(directExpiration)
+			return expiration ~= nil, expiration
+		end
+		return false, nil
+	end
+
+	local state = {
+		valid = false,
+		info = {scope = "REMOTE", targetUserId = LocalPlayer.UserId, expiresAt = 0, permanent = false},
+	}
+	function state:IsActive()
+		return self.valid and (self.info.expiresAt == 0 or os.time() < self.info.expiresAt)
+	end
+	function state:Refresh()
+		local body = downloadRaw()
+		if not body then return false end
+		local valid, expiresAt = parseEntry(body)
+		self.valid = valid == true
+		self.info = {
+			scope = "REMOTE",
+			targetUserId = LocalPlayer.UserId,
+			expiresAt = expiresAt or 0,
+			permanent = valid == true and expiresAt == 0,
+		}
+		return true
+	end
+	pcall(function() __BootstrapText.Text = "Verificando acceso VIP..." end)
+	state:Refresh()
+	return state
+end)()
+
 local HEXA_IS_OWNER = normalizeUsername(LocalPlayer.Name) == normalizeUsername(OWNER_USERNAME)
-local HEXA_HAS_PERMANENT_ACCESS = HEXA_IS_OWNER
+local HEXA_LOCAL_PERMANENT_ACCESS = HEXA_IS_OWNER
 	or VIP_USERNAMES[normalizeUsername(LocalPlayer.Name)] == true
+local HEXA_HAS_PERMANENT_ACCESS = HEXA_LOCAL_PERMANENT_ACCESS
+	or (RemoteVipState:IsActive() and RemoteVipState.info.permanent == true)
 local savedVipCode = readSavedVipCode()
 local savedVipValid, savedVipInfo = validateVipCode(savedVipCode, LocalPlayer.Name, LocalPlayer.UserId)
 if savedVipCode and not savedVipValid then clearSavedVipCode() end
-local HEXA_VIP_EXPIRES_AT = savedVipValid and (savedVipInfo.expiresAt or 0) or 0
-local HEXA_IS_VIP = HEXA_HAS_PERMANENT_ACCESS or savedVipValid
+local HEXA_VIP_EXPIRES_AT = RemoteVipState:IsActive() and (RemoteVipState.info.expiresAt or 0)
+	or (savedVipValid and (savedVipInfo.expiresAt or 0) or 0)
+local HEXA_IS_VIP = HEXA_HAS_PERMANENT_ACCESS or RemoteVipState:IsActive() or savedVipValid
 
 local AllSliders = {}
 local VipControls = {}
@@ -215,10 +323,28 @@ local function refreshVipControls()
 end
 
 local function setVipState(enabled, code, vipInfo)
-	HEXA_IS_VIP = HEXA_HAS_PERMANENT_ACCESS or enabled == true
+	local remoteActive = RemoteVipState:IsActive()
+	HEXA_HAS_PERMANENT_ACCESS = HEXA_LOCAL_PERMANENT_ACCESS
+		or (remoteActive and RemoteVipState.info.permanent == true)
+	if enabled == true and vipInfo then
+		savedVipValid = true
+		savedVipInfo = vipInfo
+		if code then savedVipCode = code end
+	elseif enabled ~= true then
+		savedVipValid = false
+		savedVipInfo = nil
+		savedVipCode = nil
+	end
+	HEXA_IS_VIP = HEXA_HAS_PERMANENT_ACCESS or remoteActive or enabled == true
 	HEXA_VIP_EXPIRES_AT = 0
-	if HEXA_IS_VIP and not HEXA_HAS_PERMANENT_ACCESS and vipInfo then
-		HEXA_VIP_EXPIRES_AT = tonumber(vipInfo.expiresAt) or 0
+	if HEXA_IS_VIP and not HEXA_HAS_PERMANENT_ACCESS then
+		local remoteExpiration = remoteActive and tonumber(RemoteVipState.info.expiresAt) or nil
+		local codeExpiration = enabled and vipInfo and tonumber(vipInfo.expiresAt) or nil
+		if (remoteActive and remoteExpiration == 0) or (enabled and codeExpiration == 0) then
+			HEXA_VIP_EXPIRES_AT = 0
+		else
+			HEXA_VIP_EXPIRES_AT = math.max(remoteExpiration or 0, codeExpiration or 0)
+		end
 	end
 	if HEXA_IS_VIP and code then
 		saveVipCode(code)
@@ -922,10 +1048,23 @@ local function setMobileFlyControlsVisible(visible)
 end
 
 task.spawn(function()
+	local lastRemoteRefresh = os.clock()
 	while ScreenGui and ScreenGui.Parent do
 		task.wait(10)
-		if HEXA_IS_VIP and not HEXA_HAS_PERMANENT_ACCESS and HEXA_VIP_EXPIRES_AT > 0 and os.time() >= HEXA_VIP_EXPIRES_AT then
-			setVipState(false)
+		if os.clock() - lastRemoteRefresh >= 30 then
+			lastRemoteRefresh = os.clock()
+			if RemoteVipState:Refresh() then
+				local codeValid, codeInfo = validateVipCode(savedVipCode, LocalPlayer.Name, LocalPlayer.UserId)
+				if not codeValid and savedVipCode then clearSavedVipCode() end
+				savedVipValid = codeValid == true
+				savedVipInfo = codeValid and codeInfo or nil
+				setVipState(savedVipValid, nil, savedVipInfo)
+			end
+		elseif HEXA_IS_VIP and not HEXA_HAS_PERMANENT_ACCESS and HEXA_VIP_EXPIRES_AT > 0 and os.time() >= HEXA_VIP_EXPIRES_AT then
+			local codeValid, codeInfo = validateVipCode(savedVipCode, LocalPlayer.Name, LocalPlayer.UserId)
+			savedVipValid = codeValid == true
+			savedVipInfo = codeValid and codeInfo or nil
+			setVipState(savedVipValid, nil, savedVipInfo)
 		end
 	end
 end)
@@ -2717,6 +2856,7 @@ local Runtime = {
 	mobileAimTouchActive = false,
 	mobileAimTouchInput = nil,
 	mobileShotUntil = 0,
+	syntheticRapidActivation = false,
 	MobileToolConnections = setmetatable({}, {__mode = "k"}),
 	character = nil,
 	humanoid = nil,
@@ -2756,7 +2896,9 @@ end
 local function bindMobileShotTool(tool)
 	if not MOBILE_DEVICE or not tool:IsA("Tool") or Runtime.MobileToolConnections[tool] then return end
 	Runtime.MobileToolConnections[tool] = AllSliders.TrackConnection(tool.Activated:Connect(function()
-		Runtime.mobileShotUntil = os.clock() + 0.24
+		if not Runtime.syntheticRapidActivation then
+			Runtime.mobileShotUntil = os.clock() + 0.24
+		end
 	end))
 end
 
@@ -3151,6 +3293,7 @@ task.spawn(function()
 			NoSpreadAttributes = setmetatable({}, {__mode = "k"}),
 			RapidValues = setmetatable({}, {__mode = "k"}),
 			RapidAttributes = setmetatable({}, {__mode = "k"}),
+			RapidToolEnabled = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoValues = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
 			HitboxOriginal = setmetatable({}, {__mode = "k"}),
@@ -3663,6 +3806,13 @@ task.spawn(function()
 			table.clear(cache)
 		end
 
+		local function restoreRapidTools()
+			for tool, enabled in pairs(State.RapidToolEnabled) do
+				if tool and tool.Parent then pcall(function() tool.Enabled = enabled end) end
+			end
+			table.clear(State.RapidToolEnabled)
+		end
+
 		local function restoreWeapons()
 			restoreValues(State.NoRecoilValues)
 			restoreAttributes(State.NoRecoilAttributes)
@@ -3670,6 +3820,7 @@ task.spawn(function()
 			restoreAttributes(State.NoSpreadAttributes)
 			restoreValues(State.RapidValues)
 			restoreAttributes(State.RapidAttributes)
+			restoreRapidTools()
 			restoreValues(State.InfiniteAmmoValues)
 			restoreAttributes(State.InfiniteAmmoAttributes)
 		end
@@ -3678,6 +3829,10 @@ task.spawn(function()
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
 			if not tool then return end
+			if Settings.RapidFire then
+				if State.RapidToolEnabled[tool] == nil then State.RapidToolEnabled[tool] = tool.Enabled end
+				pcall(function() tool.Enabled = true end)
+			end
 			if now - State.LastWeaponScan >= 0.12 then
 				State.LastWeaponScan = now
 				local shouldAutoReload = false
@@ -3704,7 +3859,7 @@ task.spawn(function()
 						end
 						if Settings.RapidFire then
 							if containsAny(objectName, {"cooldown", "delay", "interval", "wait", "firetime"}) then
-								cacheValue(State.RapidValues, object, rapidDelay)
+								cacheValue(State.RapidValues, object, 0)
 							elseif containsAny(objectName, {"firerate", "fire_rate", "rateoffire", "rpm"}) then
 								cacheValue(State.RapidValues, object, rapidRpm)
 							end
@@ -3727,7 +3882,7 @@ task.spawn(function()
 							end
 							if Settings.RapidFire then
 								if containsAny(lowered, {"cooldown", "delay", "interval", "wait", "firetime"}) then
-									cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, rapidDelay)
+									cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, 0)
 								elseif containsAny(lowered, {"firerate", "fire_rate", "rateoffire", "rpm"}) then
 									cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, rapidRpm)
 								end
@@ -3746,17 +3901,32 @@ task.spawn(function()
 					end)
 				end
 			end
-			if Settings.RapidFire and not MOBILE_DEVICE and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+			local rapidTriggerActive = Settings.RapidFire and (
+				(not MOBILE_DEVICE and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1))
+				or (MOBILE_DEVICE and now <= Runtime.mobileShotUntil)
+			)
+			if rapidTriggerActive then
 				local rapidDelay = 1 / math.clamp(math.floor(tonumber(Settings.RapidFireRate) or 22), 1, 800)
 				if State.LastRapidShot <= 0 or now - State.LastRapidShot > 0.25 then
 					State.LastRapidShot = now - rapidDelay
 				end
 				local elapsed = now - State.LastRapidShot
 				if elapsed >= rapidDelay then
-					local shotsDue = math.clamp(math.floor(elapsed / rapidDelay), 1, 16)
+					local shotsDue = math.clamp(math.floor(elapsed / rapidDelay), 1, 64)
 					State.LastRapidShot += shotsDue * rapidDelay
 					for _ = 1, shotsDue do
-						pcall(function() tool:Activate() end)
+						Runtime.syntheticRapidActivation = true
+						pcall(function()
+							if type(firesignal) == "function" then
+								firesignal(tool.Activated)
+							end
+						end)
+						pcall(function()
+							tool.Enabled = true
+							tool:Deactivate()
+							tool:Activate()
+						end)
+						Runtime.syntheticRapidActivation = false
 					end
 				end
 			else
@@ -4323,6 +4493,7 @@ task.spawn(function()
 			if not enabled then
 				restoreValues(State.RapidValues)
 				restoreAttributes(State.RapidAttributes)
+				restoreRapidTools()
 			end
 		end)
 		bindToggle(NoSpreadButton, "NoSpread", function(enabled)
