@@ -1,6 +1,6 @@
 return {
     ["3108101113"] = {
-        vip = true,
+        vip = false,
         expires = "2026-08-12"
     }
 }
