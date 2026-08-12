@@ -1104,6 +1104,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"COMPROBAR EQUIPOS", "TEAM CHECK"},
 	{"SIN RETROCESO", "NO RECOIL"},
 	{"DISPARO RÁPIDO", "RAPID FIRE"},
+	{"Disparos por segundo", "Shots per second"},
 	{"SUAVIZADO DE PUNTERÍA", "AIM SMOOTHING"},
 	{"PREDICCIÓN DEL OBJETIVO", "TARGET PREDICTION"},
 	{"SIN DISPERSIÓN", "NO SPREAD"},
@@ -3102,6 +3103,7 @@ task.spawn(function()
 			TargetPrediction = false,
 			NoRecoil = false,
 			RapidFire = false,
+			RapidFireRate = 22,
 			NoSpread = false,
 			AutoReload = false,
 			InfiniteAmmo = false,
@@ -3223,7 +3225,7 @@ task.spawn(function()
 		}
 		local HitboxColorNames = {"BLANCO", "ROJO", "VERDE", "AZUL", "AMARILLO", "MORADO"}
 
-		local CombatAdvancedCard = sectionCard(466)
+		local CombatAdvancedCard = sectionCard(526)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -3237,10 +3239,13 @@ task.spawn(function()
 		markVipControl(NoSpreadButton)
 		local RapidButton = createToggleButton(CombatAdvancedCard, "DISPARO RÁPIDO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 274))
 		markVipControl(RapidButton)
-		local AutoReloadButton = createToggleButton(CombatAdvancedCard, "RECARGA AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 320))
-		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 366))
+		createSlider(CombatAdvancedCard, "Disparos por segundo", 1, 800, Settings.RapidFireRate, 320, function(value)
+			Settings.RapidFireRate = math.clamp(math.floor(value + 0.5), 1, 800)
+		end, true)
+		local AutoReloadButton = createToggleButton(CombatAdvancedCard, "RECARGA AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 380))
+		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 426))
 		markVipControl(InfiniteAmmoButton)
-		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 412))
+		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 472))
 
 		local HitboxCard = sectionCard(250)
 		HitboxCard.LayoutOrder = 23
@@ -3670,76 +3675,92 @@ task.spawn(function()
 		end
 
 		local function updateWeapons(now)
-			if now - State.LastWeaponScan < 0.12 then return end
-			State.LastWeaponScan = now
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
 			if not tool then return end
-			local shouldAutoReload = false
-			local objects = {tool}
-			for _, descendant in ipairs(tool:GetDescendants()) do table.insert(objects, descendant) end
-			for _, object in ipairs(objects) do
-				local objectName = string.lower(object.Name)
-				if object:IsA("NumberValue") or object:IsA("IntValue") then
-					if Settings.NoRecoil and containsAny(objectName, {"recoil", "kick", "shake"}) then
-						cacheValue(State.NoRecoilValues, object, 0)
-					end
-					if Settings.NoSpread and containsAny(objectName, {"spread", "accuracy", "bloom", "dispersion", "deviation", "cone"}) then
-						cacheValue(State.NoSpreadValues, object, 0)
-					end
-					if Settings.AutoReload and containsAny(objectName, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
-						local amount = tonumber(object.Value)
-						if amount and amount <= 1 then shouldAutoReload = true end
-					end
-					if Settings.InfiniteAmmo and containsAny(objectName, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
-						cacheValue(State.InfiniteAmmoValues, object, 999)
-					end
-					if Settings.RapidFire then
-						if containsAny(objectName, {"cooldown", "delay", "interval", "wait", "firetime"}) then
-							cacheValue(State.RapidValues, object, 0)
-						elseif containsAny(objectName, {"firerate", "fire_rate", "rateoffire", "rpm"}) then
-							cacheValue(State.RapidValues, object, math.max(1000, tonumber(object.Value) or 0))
+			if now - State.LastWeaponScan >= 0.12 then
+				State.LastWeaponScan = now
+				local shouldAutoReload = false
+				local rapidRate = math.clamp(math.floor(tonumber(Settings.RapidFireRate) or 22), 1, 800)
+				local rapidDelay = 1 / rapidRate
+				local rapidRpm = rapidRate * 60
+				local objects = {tool}
+				for _, descendant in ipairs(tool:GetDescendants()) do table.insert(objects, descendant) end
+				for _, object in ipairs(objects) do
+					local objectName = string.lower(object.Name)
+					if object:IsA("NumberValue") or object:IsA("IntValue") then
+						if Settings.NoRecoil and containsAny(objectName, {"recoil", "kick", "shake"}) then
+							cacheValue(State.NoRecoilValues, object, 0)
 						end
-					end
-				end
-				for attributeName, attributeValue in pairs(object:GetAttributes()) do
-					if type(attributeValue) == "number" then
-						local lowered = string.lower(attributeName)
-						if Settings.NoRecoil and containsAny(lowered, {"recoil", "kick", "shake"}) then
-							cacheAttribute(State.NoRecoilAttributes, object, attributeName, attributeValue, 0)
+						if Settings.NoSpread and containsAny(objectName, {"spread", "accuracy", "bloom", "dispersion", "deviation", "cone"}) then
+							cacheValue(State.NoSpreadValues, object, 0)
 						end
-						if Settings.NoSpread and containsAny(lowered, {"spread", "accuracy", "bloom", "dispersion", "deviation", "cone"}) then
-							cacheAttribute(State.NoSpreadAttributes, object, attributeName, attributeValue, 0)
+						if Settings.AutoReload and containsAny(objectName, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
+							local amount = tonumber(object.Value)
+							if amount and amount <= 1 then shouldAutoReload = true end
 						end
-						if Settings.AutoReload and containsAny(lowered, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) and attributeValue <= 1 then
-							shouldAutoReload = true
-						end
-						if Settings.InfiniteAmmo and containsAny(lowered, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
-							cacheAttribute(State.InfiniteAmmoAttributes, object, attributeName, attributeValue, 999)
+						if Settings.InfiniteAmmo and containsAny(objectName, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
+							cacheValue(State.InfiniteAmmoValues, object, 999)
 						end
 						if Settings.RapidFire then
-							if containsAny(lowered, {"cooldown", "delay", "interval", "wait", "firetime"}) then
-								cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, 0)
-							elseif containsAny(lowered, {"firerate", "fire_rate", "rateoffire", "rpm"}) then
-								cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, math.max(1000, attributeValue))
+							if containsAny(objectName, {"cooldown", "delay", "interval", "wait", "firetime"}) then
+								cacheValue(State.RapidValues, object, rapidDelay)
+							elseif containsAny(objectName, {"firerate", "fire_rate", "rateoffire", "rpm"}) then
+								cacheValue(State.RapidValues, object, rapidRpm)
+							end
+						end
+					end
+					for attributeName, attributeValue in pairs(object:GetAttributes()) do
+						if type(attributeValue) == "number" then
+							local lowered = string.lower(attributeName)
+							if Settings.NoRecoil and containsAny(lowered, {"recoil", "kick", "shake"}) then
+								cacheAttribute(State.NoRecoilAttributes, object, attributeName, attributeValue, 0)
+							end
+							if Settings.NoSpread and containsAny(lowered, {"spread", "accuracy", "bloom", "dispersion", "deviation", "cone"}) then
+								cacheAttribute(State.NoSpreadAttributes, object, attributeName, attributeValue, 0)
+							end
+							if Settings.AutoReload and containsAny(lowered, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) and attributeValue <= 1 then
+								shouldAutoReload = true
+							end
+							if Settings.InfiniteAmmo and containsAny(lowered, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
+								cacheAttribute(State.InfiniteAmmoAttributes, object, attributeName, attributeValue, 999)
+							end
+							if Settings.RapidFire then
+								if containsAny(lowered, {"cooldown", "delay", "interval", "wait", "firetime"}) then
+									cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, rapidDelay)
+								elseif containsAny(lowered, {"firerate", "fire_rate", "rateoffire", "rpm"}) then
+									cacheAttribute(State.RapidAttributes, object, attributeName, attributeValue, rapidRpm)
+								end
 							end
 						end
 					end
 				end
-			end
-			if Settings.AutoReload and shouldAutoReload and now - State.LastAutoReload >= 0.55 then
-				State.LastAutoReload = now
-				pcall(function()
-					local virtualInputManager = game:GetService("VirtualInputManager")
-					virtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
-					task.delay(0.05, function()
-						pcall(function() virtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game) end)
+				if Settings.AutoReload and shouldAutoReload and now - State.LastAutoReload >= 0.55 then
+					State.LastAutoReload = now
+					pcall(function()
+						local virtualInputManager = game:GetService("VirtualInputManager")
+						virtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+						task.delay(0.05, function()
+							pcall(function() virtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game) end)
+						end)
 					end)
-				end)
+				end
 			end
-			if Settings.RapidFire and not MOBILE_DEVICE and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) and now - State.LastRapidShot >= 0.045 then
+			if Settings.RapidFire and not MOBILE_DEVICE and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+				local rapidDelay = 1 / math.clamp(math.floor(tonumber(Settings.RapidFireRate) or 22), 1, 800)
+				if State.LastRapidShot <= 0 or now - State.LastRapidShot > 0.25 then
+					State.LastRapidShot = now - rapidDelay
+				end
+				local elapsed = now - State.LastRapidShot
+				if elapsed >= rapidDelay then
+					local shotsDue = math.clamp(math.floor(elapsed / rapidDelay), 1, 16)
+					State.LastRapidShot += shotsDue * rapidDelay
+					for _ = 1, shotsDue do
+						pcall(function() tool:Activate() end)
+					end
+				end
+			else
 				State.LastRapidShot = now
-				pcall(function() tool:Activate() end)
 			end
 		end
 
@@ -4298,6 +4319,7 @@ task.spawn(function()
 			end
 		end)
 		bindToggle(RapidButton, "RapidFire", function(enabled)
+			State.LastRapidShot = os.clock()
 			if not enabled then
 				restoreValues(State.RapidValues)
 				restoreAttributes(State.RapidAttributes)
