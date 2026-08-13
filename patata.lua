@@ -3053,15 +3053,36 @@ local Runtime = {
 	humanoid = nil,
 	root = nil,
 	lastNoclipScan = 0,
+	lastNoclipUpdate = 0,
 	lastBaseEspRender = 0,
 	baseEspVisible = false,
+	lastAimScan = 0,
+	cachedAimCandidate = nil,
+	cachedResolvedAimTarget = nil,
+	cachedAimAtHead = nil,
+	lastAimRender = 0,
+	aimWasActive = false,
 	friendCache = setmetatable({}, {__mode = "k"}),
 	wallRaycastParams = RaycastParams.new(),
 	wallFilterCharacter = nil,
 	wallFilterCamera = nil,
+	playerSnapshot = Players:GetPlayers(),
 }
 Runtime.wallRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 Runtime.wallRaycastParams.IgnoreWater = true
+
+AllSliders.TrackConnection(Players.PlayerAdded:Connect(function(player)
+	table.insert(Runtime.playerSnapshot, player)
+end))
+AllSliders.TrackConnection(Players.PlayerRemoving:Connect(function(player)
+	for index = #Runtime.playerSnapshot, 1, -1 do
+		if Runtime.playerSnapshot[index] == player then
+			table.remove(Runtime.playerSnapshot, index)
+			break
+		end
+	end
+	Runtime.friendCache[player] = nil
+end))
 
 local function getCharacterData()
 	local char = LocalPlayer.Character
@@ -3231,16 +3252,16 @@ local function getClosestPlayer(aimAtHead: boolean?): Player?
 	if not cam then return nil end
 	local viewportCenter = cam.ViewportSize / 2
 
-	for _, player in ipairs(Players:GetPlayers()) do
-		if not HexaSharedTargetFilters:AllowsPlayer(player, true) then continue end
+	for _, player in ipairs(Runtime.playerSnapshot) do
+		if not passesTeamCheck(player) then continue end
 
 		if ignoreFriendsActive then
 			if Runtime.isIgnoredFriend(player) then continue end
 		end
 
 		local character = player.Character
-		local hum = character:FindFirstChildOfClass("Humanoid")
-		local targetRoot = character:FindFirstChild("HumanoidRootPart")
+		local hum = character and character:FindFirstChildOfClass("Humanoid")
+		local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
 		if not hum or hum.Health <= 0 or not targetRoot then continue end
 
 		-- Body mode now chooses torso parts explicitly instead of relying on the head toggle.
@@ -3471,7 +3492,7 @@ end
 
 local function rebuildPlayerList()
 	for _, child in ipairs(DropdownList:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
-	for _, player in ipairs(Players:GetPlayers()) do
+	for _, player in ipairs(Runtime.playerSnapshot) do
 		if player ~= LocalPlayer and player.Parent == Players then
 			local item = Instance.new("TextButton")
 			item.Size = UDim2.new(1, 0, 0, 32)
@@ -3584,6 +3605,9 @@ task.spawn(function()
 			LastAutoReload = 0,
 			LastHitboxUpdate = 0,
 			LastFullbrightUpdate = 0,
+			LastVehicleUpdate = 0,
+			LastCharacterControlUpdate = 0,
+			LastHumanoidUpdate = 0,
 			FullbrightOriginal = nil,
 			FullbrightApplying = false,
 			-- Debe ser una tabla fuerte: si las claves son débiles se pierden las
@@ -3616,6 +3640,7 @@ task.spawn(function()
 			ProjectileCollision = setmetatable({}, {__mode = "k"}),
 			ProjectileVelocityApplied = setmetatable({}, {__mode = "k"}),
 			TrackedWeaponTools = setmetatable({}, {__mode = "k"}),
+			WeaponObjectCache = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoValues = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
 			HitboxOriginal = setmetatable({}, {__mode = "k"}),
@@ -3970,7 +3995,7 @@ task.spawn(function()
 		end
 
 		local function isValidPlayer(player)
-			return HexaSharedTargetFilters:AllowsPlayer(player, true)
+			return passesTeamCheck(player)
 		end
 
 		local FullbrightLightingTargets = {
@@ -4099,12 +4124,27 @@ task.spawn(function()
 			State.XRayGeneration += 1
 			local generation = State.XRayGeneration
 			task.spawn(function()
-				local descendants = workspace:GetDescendants()
-				for index, object in ipairs(descendants) do
+				-- Recorrido incremental: evita crear de golpe una lista gigantesca con
+				-- todos los objetos del mapa, que antes congelaba uno o varios frames.
+				local queue = workspace:GetChildren()
+				local index = 1
+				local processed = 0
+				local batchSize = 45
+				while index <= #queue do
 					if not Settings.XRay or generation ~= State.XRayGeneration then return end
+					local object = queue[index]
+					index += 1
+					for _, child in ipairs(object:GetChildren()) do
+						table.insert(queue, child)
+					end
 					applyXRayToPart(object, generation)
-					if index % 250 == 0 then task.wait() end
+					processed += 1
+					if processed >= batchSize then
+						processed = 0
+						task.wait()
+					end
 				end
+				table.clear(queue)
 			end)
 		end
 
@@ -4230,11 +4270,30 @@ task.spawn(function()
 
 		local function trackWeaponTool(tool)
 			if State.TrackedWeaponTools[tool] then return end
-			local connection = tool.Activated:Connect(function()
+			State.TrackedWeaponTools[tool] = true
+			local activatedConnection = tool.Activated:Connect(function()
 				State.LastLocalWeaponActivation = os.clock()
 			end)
-			State.TrackedWeaponTools[tool] = connection
-			table.insert(State.Connections, connection)
+			local addedConnection = tool.DescendantAdded:Connect(function()
+				State.WeaponObjectCache[tool] = nil
+			end)
+			local removingConnection = tool.DescendantRemoving:Connect(function()
+				State.WeaponObjectCache[tool] = nil
+			end)
+			table.insert(State.Connections, activatedConnection)
+			table.insert(State.Connections, addedConnection)
+			table.insert(State.Connections, removingConnection)
+		end
+
+		local function getWeaponObjects(tool)
+			local objects = State.WeaponObjectCache[tool]
+			if objects then return objects end
+			objects = {tool}
+			for _, descendant in ipairs(tool:GetDescendants()) do
+				table.insert(objects, descendant)
+			end
+			State.WeaponObjectCache[tool] = objects
+			return objects
 		end
 
 		connect(workspace.DescendantAdded, function(object)
@@ -4276,20 +4335,23 @@ task.spawn(function()
 		local function updateWeapons(now)
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
-			if not tool then return end
+			if not tool then
+				State.LastWeaponScan = now
+				return
+			end
 			trackWeaponTool(tool)
 			if Settings.RapidFire or Settings.FullAutoConversion then
 				if State.RapidToolEnabled[tool] == nil then State.RapidToolEnabled[tool] = tool.Enabled end
 				pcall(function() tool.Enabled = true end)
 			end
-			if now - State.LastWeaponScan >= 0.12 then
+			local weaponScanInterval = PERFORMANCE_MODE and 0.45 or 0.35
+			if now - State.LastWeaponScan >= weaponScanInterval then
 				State.LastWeaponScan = now
 				local shouldAutoReload = false
 				local rapidRate = math.clamp(math.floor(tonumber(Settings.RapidFireRate) or 22), 1, 800)
 				local rapidDelay = 1 / rapidRate
 				local rapidRpm = rapidRate * 60
-				local objects = {tool}
-				for _, descendant in ipairs(tool:GetDescendants()) do table.insert(objects, descendant) end
+				local objects = getWeaponObjects(tool)
 				for _, object in ipairs(objects) do
 					local objectName = string.lower(object.Name)
 					local isConfigValue = object:IsA("NumberValue") or object:IsA("IntValue") or object:IsA("BoolValue") or object:IsA("StringValue")
@@ -4432,28 +4494,48 @@ task.spawn(function()
 				or (MOBILE_DEVICE and now <= Runtime.mobileShotUntil)
 			)
 			if rapidTriggerActive then
-				local rapidDelay = 1 / math.clamp(math.floor(tonumber(Settings.RapidFireRate) or 22), 1, 800)
+				local requestedRate = math.clamp(math.floor(tonumber(Settings.RapidFireRate) or 22), 1, 800)
+				-- En monitores de 144/240 Hz, limitar las activaciones reales por segundo
+				-- evita que RenderStepped multiplique el trabajo. El RPM interno conserva
+				-- el valor completo elegido en la barra.
+				local activationRateLimit = PERFORMANCE_MODE and (MOBILE_DEVICE and 180 or 120)
+					or (MOBILE_DEVICE and 300 or 240)
+				local rapidDelay = 1 / math.min(requestedRate, activationRateLimit)
 				if State.LastRapidShot <= 0 or now - State.LastRapidShot > 0.25 then
 					State.LastRapidShot = now - rapidDelay
 				end
 				local elapsed = now - State.LastRapidShot
 				if elapsed >= rapidDelay then
-					local shotsDue = math.clamp(math.floor(elapsed / rapidDelay), 1, 64)
-					State.LastRapidShot += shotsDue * rapidDelay
+					-- Evita ráfagas enormes en un solo frame (la causa principal de los tirones
+					-- con valores altos). Los valores internos del arma conservan el RPM pedido.
+					local maximumShotsThisFrame = PERFORMANCE_MODE and (MOBILE_DEVICE and 3 or 2) or (MOBILE_DEVICE and 5 or 4)
+					local requestedShots = math.max(1, math.floor(elapsed / rapidDelay))
+					local shotsDue = math.min(requestedShots, maximumShotsThisFrame)
+					State.LastRapidShot = requestedShots > maximumShotsThisFrame and now
+						or (State.LastRapidShot + shotsDue * rapidDelay)
+					local signalAvailable = type(firesignal) == "function"
+					Runtime.syntheticRapidActivation = true
 					for _ = 1, shotsDue do
-						Runtime.syntheticRapidActivation = true
-						pcall(function()
-							if type(firesignal) == "function" then
-								firesignal(tool.Activated)
-							end
-						end)
+						if signalAvailable then
+							pcall(function() firesignal(tool.Activated) end)
+						else
+							pcall(function()
+								tool.Enabled = true
+								tool:Deactivate()
+								tool:Activate()
+							end)
+						end
+					end
+					-- Un pulso nativo por frame mantiene compatibilidad con armas que no
+					-- escuchan firesignal sin duplicar el trabajo por cada disparo.
+					if signalAvailable then
 						pcall(function()
 							tool.Enabled = true
 							tool:Deactivate()
 							tool:Activate()
 						end)
-						Runtime.syntheticRapidActivation = false
 					end
+					Runtime.syntheticRapidActivation = false
 				end
 			else
 				State.LastRapidShot = now
@@ -4729,21 +4811,27 @@ task.spawn(function()
 			local visiblePoints = 0
 			local ok, boundsCFrame, boundsSize = pcall(character.GetBoundingBox, character)
 			if not ok then return nil end
-			for x = -1, 1, 2 do
-				for y = -1, 1, 2 do
-					for z = -1, 1, 2 do
-						local offset = Vector3.new(boundsSize.X * x * 0.5, boundsSize.Y * y * 0.5, boundsSize.Z * z * 0.5)
-						local point = camera:WorldToViewportPoint(boundsCFrame:PointToWorldSpace(offset))
-						if point.Z > 0 then
-							visiblePoints += 1
-							minX = math.min(minX, point.X)
-							minY = math.min(minY, point.Y)
-							maxX = math.max(maxX, point.X)
-							maxY = math.max(maxY, point.Y)
-						end
-					end
+			-- Cuatro puntos del plano frontal dan una caja estable con la mitad de
+			-- proyecciones que las ocho esquinas tridimensionales anteriores.
+			local halfWidth = math.max(boundsSize.X, boundsSize.Z) * 0.55
+			local halfHeight = boundsSize.Y * 0.5
+			local center = boundsCFrame.Position
+			local right = boundsCFrame.RightVector * halfWidth
+			local up = boundsCFrame.UpVector * halfHeight
+			local function includePoint(worldPoint)
+				local point = camera:WorldToViewportPoint(worldPoint)
+				if point.Z > 0 then
+					visiblePoints += 1
+					minX = math.min(minX, point.X)
+					minY = math.min(minY, point.Y)
+					maxX = math.max(maxX, point.X)
+					maxY = math.max(maxY, point.Y)
 				end
 			end
+			includePoint(center - right - up)
+			includePoint(center + right - up)
+			includePoint(center - right + up)
+			includePoint(center + right + up)
 			if visiblePoints < 2 or minX == math.huge then return nil end
 			return minX, minY, maxX, maxY
 		end
@@ -4756,9 +4844,16 @@ task.spawn(function()
 			local camera = workspace.CurrentCamera
 			local _, _, localRoot = getLocalCharacter()
 			if not camera then hideAllEsp(); return end
-			for _, player in ipairs(Players:GetPlayers()) do
+			local createdCaches = 0
+			local cacheCreationLimit = 1
+			for _, player in ipairs(Runtime.playerSnapshot) do
 				if player ~= LocalPlayer then
-					local cache = State.EspCache[player] or newEspObjects(player)
+					local cache = State.EspCache[player]
+					if not cache then
+						if createdCaches >= cacheCreationLimit then continue end
+						cache = newEspObjects(player)
+						createdCaches += 1
+					end
 					local character = player.Character
 					local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 					local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -4777,7 +4872,7 @@ task.spawn(function()
 							cache.Box.Visible = Settings.BoxESP
 							cache.Name.Position = UDim2.fromOffset(minX - 20, minY - 20)
 							cache.Name.Size = UDim2.fromOffset(width + 40, 18)
-							cache.Name.Text = player.Name
+							if cache.Name.Text ~= player.Name then cache.Name.Text = player.Name end
 							cache.Name.Visible = Settings.NameESP
 							local healthPercent = math.clamp(humanoid.Health / math.max(1, humanoid.MaxHealth), 0, 1)
 							cache.HealthBackground.Position = UDim2.fromOffset(minX - 8, minY)
@@ -4809,13 +4904,16 @@ task.spawn(function()
 				destroyHighlights()
 				return
 			end
-			for _, player in ipairs(Players:GetPlayers()) do
+			local createdHighlights = 0
+			local creationLimit = 2
+			for _, player in ipairs(Runtime.playerSnapshot) do
 				if player ~= LocalPlayer then
 					local character = player.Character
 					local allowed = character and HexaSharedTargetFilters:AllowsPlayer(player, true)
 					local highlight = State.HighlightCache[player]
 					if allowed then
 						if not highlight or not highlight.Parent then
+							if createdHighlights >= creationLimit then continue end
 							highlight = Instance.new("Highlight")
 							highlight.Name = "HexaESPHighlight"
 							highlight.FillColor = Color3.fromRGB(255, 0, 0)
@@ -4825,6 +4923,7 @@ task.spawn(function()
 							highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 							highlight.Parent = ScreenGui
 							State.HighlightCache[player] = highlight
+							createdHighlights += 1
 						end
 						highlight.Adornee = character
 						highlight.Enabled = true
@@ -4863,7 +4962,7 @@ task.spawn(function()
 
 		local function restoreHitboxes()
 			for part in pairs(State.HitboxOriginal) do restoreHitboxPart(part) end
-			for _, player in ipairs(Players:GetPlayers()) do
+			for _, player in ipairs(Runtime.playerSnapshot) do
 				local character = player.Character
 				local stale = character and character:FindFirstChild("HexaBodyHitbox")
 				if stale then pcall(function() stale:Destroy() end) end
@@ -4911,7 +5010,7 @@ task.spawn(function()
 
 		local function updateHitboxes()
 			local desiredParts = {}
-			for _, player in ipairs(Players:GetPlayers()) do
+			for _, player in ipairs(Runtime.playerSnapshot) do
 				if player ~= LocalPlayer and HexaSharedTargetFilters:AllowsPlayer(player, true) then
 					local character = player.Character
 					local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -5234,7 +5333,7 @@ task.spawn(function()
 		end)
 
 		connect(workspace.DescendantAdded, function(object)
-			if Settings.XRay then task.defer(applyXRayToPart, object) end
+			if Settings.XRay then applyXRayToPart(object) end
 		end)
 
 		connect(Players.PlayerRemoving, function(player)
@@ -5271,47 +5370,55 @@ task.spawn(function()
 
 		connect(RunService.RenderStepped, function(dt)
 			if State.Dead then return end
-			local now = os.clock()
 			local weaponFeatureActive = Settings.NoRecoil or Settings.RapidFire or Settings.NoSpread or Settings.AutoReload or Settings.InfiniteAmmo
 				or Settings.FullAutoConversion or Settings.RangeExtender or Settings.DamageFalloffModifier
 				or Settings.BulletVelocityModifier or Settings.ProjectileLifetimeExtender or Settings.SurfacePenetration
-			if weaponFeatureActive then
+			local advancedFeatureActive = weaponFeatureActive or Settings.Fullbright or Settings.Hitbox or Settings.HeadHitbox
+				or Settings.VehicleSpeed or Settings.DroneCamera or Settings.Spin or Settings.AntiStun or Settings.AntiRagdoll
+				or Settings.BoxESP or Settings.NameESP or Settings.HealthESP or Settings.ESPHighlight
+			if not advancedFeatureActive then return end
+
+			local now = os.clock()
+			local weaponScanInterval = PERFORMANCE_MODE and 0.45 or 0.35
+			local continuousWeaponInput = Settings.RapidFire or Settings.FullAutoConversion
+			if weaponFeatureActive and (continuousWeaponInput or now - State.LastWeaponScan >= weaponScanInterval) then
 				updateWeapons(now)
-			elseif next(State.NoRecoilValues) or next(State.NoRecoilAttributes) or next(State.NoSpreadValues)
-				or next(State.NoSpreadAttributes) or next(State.RapidValues) or next(State.RapidAttributes)
-				or next(State.InfiniteAmmoValues) or next(State.InfiniteAmmoAttributes)
-				or next(State.FullAutoValues) or next(State.FullAutoAttributes)
-				or next(State.RangeValues) or next(State.RangeAttributes)
-				or next(State.FalloffValues) or next(State.FalloffAttributes)
-				or next(State.VelocityValues) or next(State.VelocityAttributes)
-				or next(State.LifetimeValues) or next(State.LifetimeAttributes)
-				or next(State.PenetrationValues) or next(State.PenetrationAttributes)
-				or next(State.ProjectileCollision) then
-				restoreWeapons()
 			end
-			if Settings.Fullbright and now - State.LastFullbrightUpdate >= 0.25 then
+			local fullbrightInterval = PERFORMANCE_MODE and 1.5 or (MOBILE_DEVICE and 0.8 or 1.0)
+			if Settings.Fullbright and now - State.LastFullbrightUpdate >= fullbrightInterval then
 				State.LastFullbrightUpdate = now
 				applyFullbright()
 			end
-			if (Settings.Hitbox or Settings.HeadHitbox) and now - State.LastHitboxUpdate >= 0.10 then
+			local hitboxInterval = PERFORMANCE_MODE and 0.4 or 0.3
+			if (Settings.Hitbox or Settings.HeadHitbox) and now - State.LastHitboxUpdate >= hitboxInterval then
 				State.LastHitboxUpdate = now
 				updateHitboxes()
 			end
-			if Settings.VehicleSpeed then
+			local vehicleInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 20) or (1 / 16))
+				or (MOBILE_DEVICE and (1 / 30) or (1 / 20))
+			if Settings.VehicleSpeed and now - State.LastVehicleUpdate >= vehicleInterval then
+				State.LastVehicleUpdate = now
 				updateVehicle()
-			elseif next(State.VehicleCache) then
-				restoreVehicle()
 			end
-			if Settings.DroneCamera or Settings.Spin or State.CharacterControl.Character then applyCharacterControl() end
+			if (Settings.DroneCamera or Settings.Spin) and now - State.LastCharacterControlUpdate >= 0.5 then
+				State.LastCharacterControlUpdate = now
+				applyCharacterControl()
+			end
 			if Settings.DroneCamera or State.Drone.Active then updateDrone(dt) end
 			if Settings.Spin then updateSpin(dt) end
-			if Settings.AntiStun or Settings.AntiRagdoll then updateHumanoid() end
+			local humanoidInterval = MOBILE_DEVICE and 0.1 or 0.14
+			if (Settings.AntiStun or Settings.AntiRagdoll) and now - State.LastHumanoidUpdate >= humanoidInterval then
+				State.LastHumanoidUpdate = now
+				updateHumanoid()
+			end
 			local screenEspActive = Settings.BoxESP or Settings.NameESP or Settings.HealthESP
-			if screenEspActive and now - State.LastEspRender >= 0.033 then
+			local espInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 16) or (1 / 14)) or (1 / 20)
+			if screenEspActive and now - State.LastEspRender >= espInterval then
 				State.LastEspRender = now
 				renderEsp()
 			end
-			if Settings.ESPHighlight and now - State.LastHighlightUpdate >= 0.10 then
+			local highlightInterval = PERFORMANCE_MODE and 0.6 or (MOBILE_DEVICE and 0.35 or 0.45)
+			if Settings.ESPHighlight and now - State.LastHighlightUpdate >= highlightInterval then
 				State.LastHighlightUpdate = now
 				updateHighlights()
 			end
@@ -5342,6 +5449,7 @@ task.spawn(function()
 			Connections = {},
 			Projectiles = setmetatable({}, {__mode = "k"}),
 			LastProjectileUpdate = 0,
+			LastJesusUpdate = 0,
 		}
 
 		local function connect(signal, callback)
@@ -5366,6 +5474,9 @@ task.spawn(function()
 		JesusPart.CanCollide = true
 		JesusPart.CanTouch = false
 		JesusPart.CanQuery = false
+		local JesusRaycastParams = RaycastParams.new()
+		JesusRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+		JesusRaycastParams.IgnoreWater = false
 
 		local function isProjectile(part)
 			if not part:IsA("BasePart") then return false end
@@ -5385,12 +5496,29 @@ task.spawn(function()
 		end
 
 		local function scanProjectiles()
-			for _, object in ipairs(workspace:GetDescendants()) do
-				if isProjectile(object) then
-					State.Projectiles[object] = true
-					accelerateProjectile(object)
+			task.spawn(function()
+				local queue = workspace:GetChildren()
+				local index = 1
+				local processed = 0
+				local batchSize = 70
+				while State.InstantHitActive and index <= #queue do
+					local object = queue[index]
+					index += 1
+					for _, child in ipairs(object:GetChildren()) do
+						table.insert(queue, child)
+					end
+					if isProjectile(object) then
+						State.Projectiles[object] = true
+						accelerateProjectile(object)
+					end
+					processed += 1
+					if processed >= batchSize then
+						processed = 0
+						task.wait()
+					end
 				end
-			end
+				table.clear(queue)
+			end)
 		end
 
 		local function updateJesusPlatform()
@@ -5406,11 +5534,8 @@ task.spawn(function()
 				return
 			end
 
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			params.FilterDescendantsInstances = {character, JesusPart}
-			params.IgnoreWater = false
-			local result = workspace:Raycast(root.Position, Vector3.new(0, -8, 0), params)
+			JesusRaycastParams.FilterDescendantsInstances = {character, JesusPart}
+			local result = workspace:Raycast(root.Position, Vector3.new(0, -8, 0), JesusRaycastParams)
 			if result and result.Material == Enum.Material.Water then
 				JesusPart.Position = Vector3.new(root.Position.X, result.Position.Y - 0.45, root.Position.Z)
 				JesusPart.Parent = workspace
@@ -5499,10 +5624,17 @@ task.spawn(function()
 		connect(RunService.Stepped, function()
 			if State.Dead then return end
 			if not State.JesusActive and not State.InstantHitActive then return end
-			updateJesusPlatform()
+			local now = os.clock()
+			local jesusInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and 0.06 or 0.075)
+				or (MOBILE_DEVICE and 0.033 or 0.05)
+			if State.JesusActive and now - State.LastJesusUpdate >= jesusInterval then
+				State.LastJesusUpdate = now
+				updateJesusPlatform()
+			end
 
-			if State.InstantHitActive and os.clock() - State.LastProjectileUpdate >= 0.05 then
-				State.LastProjectileUpdate = os.clock()
+			local projectileInterval = PERFORMANCE_MODE and 0.1 or (MOBILE_DEVICE and 0.05 or 0.075)
+			if State.InstantHitActive and now - State.LastProjectileUpdate >= projectileInterval then
+				State.LastProjectileUpdate = now
 				for projectile in pairs(State.Projectiles) do
 					if projectile and projectile.Parent then
 						accelerateProjectile(projectile)
@@ -5711,10 +5843,17 @@ Runtime.loopConn = RunService.Stepped:Connect(function()
 	if not speedActive and not jumpActive and not noclipActive and next(Runtime.noclipCache) == nil then return end
 	local char, hum = getCharacterData()
 	if not char or not hum or hum.Health <= 0 then return end
-	if speedActive then pcall(function() hum.WalkSpeed = currentSpeed end) end
-	if jumpActive then pcall(function() hum.UseJumpPower = true; hum.JumpPower = currentJump end) end
+	if speedActive and hum.WalkSpeed ~= currentSpeed then pcall(function() hum.WalkSpeed = currentSpeed end) end
+	if jumpActive and (not hum.UseJumpPower or hum.JumpPower ~= currentJump) then
+		pcall(function() hum.UseJumpPower = true; hum.JumpPower = currentJump end)
+	end
 	if noclipActive then
-		Runtime.updateNoclip(char, os.clock())
+		local now = os.clock()
+		local interval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 30) or (1 / 24)) or (1 / 30)
+		if now - Runtime.lastNoclipUpdate >= interval then
+			Runtime.lastNoclipUpdate = now
+			Runtime.updateNoclip(char, now)
+		end
 	else
 		if next(Runtime.noclipCache) ~= nil then restoreNoclip() end
 	end
@@ -5732,29 +5871,38 @@ Runtime.espConn = RunService.RenderStepped:Connect(function()
 		return
 	end
 	local now = os.clock()
+	local renderInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 18) or (1 / 16))
+		or (MOBILE_DEVICE and (1 / 22) or (1 / 20))
+	if now - Runtime.lastBaseEspRender < renderInterval then return end
 	Runtime.lastBaseEspRender = now
 	Runtime.baseEspVisible = true
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 	local vX, vY = cam.ViewportSize.X, cam.ViewportSize.Y
 	local _, _, localRoot = getCharacterData()
+	local createdCaches = 0
+	local cacheCreationLimit = 1
 
-	for _, player in ipairs(Players:GetPlayers()) do
+	for _, player in ipairs(Runtime.playerSnapshot) do
 		if player == LocalPlayer then continue end
-		if not espCache[player] then espCache[player] = { Tracer = getEspFrame("Tracer"), Skel = {} } end
+		if not espCache[player] then
+			if createdCaches >= cacheCreationLimit then continue end
+			espCache[player] = { Tracer = getEspFrame("Tracer"), Skel = {} }
+			createdCaches += 1
+		end
 		
 		local cache = espCache[player]
-		if not HexaSharedTargetFilters:AllowsPlayer(player, true) then
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local targetRoot = char and char:FindFirstChild("HumanoidRootPart")
+		if not passesTeamCheck(player) or not hum or hum.Health <= 0 or not targetRoot then
 			cache.Tracer.Visible = false
 			for _, bone in ipairs(cache.Skel) do bone.Visible = false end
 			continue
 		end
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		local drawTracers, drawBones, skelIndex = false, false, 1
 
 		if char and hum and hum.Health > 0 then
-			local targetRoot = char:FindFirstChild("HumanoidRootPart")
 			local inRange = true
 			
 			if targetRoot and localRoot then
@@ -5777,16 +5925,25 @@ Runtime.espConn = RunService.RenderStepped:Connect(function()
 				if espSkeletonActive then
 					local isR15 = hum.RigType == Enum.HumanoidRigType.R15
 					local connections = isR15 and r15Bones or r6Bones
+					local projectedParts = {}
+					local function project(part)
+						local cached = projectedParts[part]
+						if cached then return cached.Position, cached.OnScreen end
+						local position, onScreen = cam:WorldToViewportPoint(part.Position)
+						local result = {Position = Vector2.new(position.X, position.Y), OnScreen = onScreen and position.Z > 0}
+						projectedParts[part] = result
+						return result.Position, result.OnScreen
+					end
 					for _, conn in ipairs(connections) do
 						local p1 = char:FindFirstChild(conn[1])
 						local p2 = char:FindFirstChild(conn[2])
 						if p1 and p2 then
-							local pos1, on1 = cam:WorldToViewportPoint(p1.Position)
-							local pos2, on2 = cam:WorldToViewportPoint(p2.Position)
+							local pos1, on1 = project(p1)
+							local pos2, on2 = project(p2)
 							if on1 or on2 then
 								local f = cache.Skel[skelIndex]
 								if not f then f = getEspFrame("Bone"); cache.Skel[skelIndex] = f end
-								drawUILine(f, Vector2.new(pos1.X, pos1.Y), Vector2.new(pos2.X, pos2.Y))
+								drawUILine(f, pos1, pos2)
 								f.Visible = true; skelIndex += 1; drawBones = true
 							end
 						end
@@ -5811,7 +5968,21 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 	local isBodyActive = autoAimBodyActive and isKeyActive(AimKeys.Body)
 
 	if isHeadActive or isBodyActive then
-		local targetPlayer = Runtime.resolveAimbotTarget(getClosestPlayer(isHeadActive), isHeadActive)
+		Runtime.aimWasActive = true
+		local now = os.clock()
+		if not MOBILE_DEVICE then
+			local aimRenderInterval = PERFORMANCE_MODE and (1 / 60) or (1 / 120)
+			if now - Runtime.lastAimRender < aimRenderInterval then return end
+			Runtime.lastAimRender = now
+		end
+		local scanInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 30) or (1 / 24)) or (1 / 30)
+		if now - Runtime.lastAimScan >= scanInterval or Runtime.cachedAimAtHead ~= isHeadActive then
+			Runtime.lastAimScan = now
+			Runtime.cachedAimAtHead = isHeadActive
+			Runtime.cachedAimCandidate = getClosestPlayer(isHeadActive)
+			Runtime.cachedResolvedAimTarget = Runtime.resolveAimbotTarget(Runtime.cachedAimCandidate, isHeadActive)
+		end
+		local targetPlayer = Runtime.cachedResolvedAimTarget
 		if HexaSharedTargetFilters:AllowsPlayer(targetPlayer, true) and targetPlayer.Character then
 			local targetPart
 			if isHeadActive then
@@ -5845,7 +6016,13 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 		else
 			if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
 		end
-	else
+	elseif Runtime.aimWasActive then
+		Runtime.aimWasActive = false
+		Runtime.cachedAimCandidate = nil
+		Runtime.cachedResolvedAimTarget = nil
+		Runtime.cachedAimAtHead = nil
+		Runtime.lastAimScan = 0
+		Runtime.lastAimRender = 0
 		Runtime.resetAimbotTargetSwitching()
 		if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
 	end
@@ -6001,6 +6178,8 @@ task.spawn(function()
 			FontIndex = 1,
 			LastInfoUpdate = 0,
 			LastVisualUpdate = 0,
+			LastMovementUpdate = 0,
+			LastPlayerToolsUpdate = 0,
 			LastAutoEquip = 0,
 			Frames = 0,
 			LastFpsTime = os.clock(),
@@ -7085,16 +7264,31 @@ task.spawn(function()
 		function X:setupGlobalConnections()
 			self:connect(RunService.RenderStepped, function()
 				if self.Dead then return end
+				local rainbowActive = self.CrosshairRainbow and self.CrosshairEnabled
+				local movementActive = self.AirWalk or self.BunnyHop or self.NoFall or self.AirWalkPlatform
+				local playerToolsActive = self.FollowPlayer or self.AntiVoid or self.Spectating or self.InspectorEnabled
+				local infoActive = self.FpsEnabled or self.PingEnabled or self.ClockEnabled or self.CoordsEnabled or self.SpeedEnabled
+				if not rainbowActive and not movementActive and not playerToolsActive and not infoActive and not self.AutoEquip then return end
 				local now = os.clock()
-				if self.CrosshairRainbow and self.CrosshairEnabled then
+				local visualInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 18) or (1 / 16))
+					or (MOBILE_DEVICE and (1 / 24) or (1 / 20))
+				if rainbowActive and now - self.LastVisualUpdate >= visualInterval then
 					self.LastVisualUpdate = now
 					local color = Color3.fromHSV((now * 0.18) % 1, 1, 1)
 					for _, line in ipairs(self.CrosshairLines) do line.BackgroundColor3 = color end
 					if self.CrosshairDot then self.CrosshairDot.BackgroundColor3 = color end
 				end
-				if self.AirWalk or self.BunnyHop or self.NoFall or self.AirWalkPlatform then self:updateMovementExtra() end
-				if self.FollowPlayer or self.AntiVoid or self.Spectating or self.InspectorEnabled then self:updatePlayerTools(now) end
-				if self.FpsEnabled or self.PingEnabled or self.ClockEnabled or self.CoordsEnabled or self.SpeedEnabled then self:updateInfo(now) end
+				local movementInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 20) or (1 / 16))
+					or (MOBILE_DEVICE and (1 / 30) or (1 / 20))
+				if movementActive and now - self.LastMovementUpdate >= movementInterval then
+					self.LastMovementUpdate = now
+					self:updateMovementExtra()
+				end
+				if playerToolsActive and now - self.LastPlayerToolsUpdate >= 0.05 then
+					self.LastPlayerToolsUpdate = now
+					self:updatePlayerTools(now)
+				end
+				if infoActive then self:updateInfo(now) end
 				if self.AutoEquip then self:updateAutoEquip(now) end
 			end)
 			self:connect(UserInputService.InputBegan, function(input, processed)
