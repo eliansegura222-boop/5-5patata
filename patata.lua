@@ -2092,6 +2092,92 @@ CategoryUI.Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(functi
 	task.defer(refreshCategoryCanvas)
 end)
 
+-- Iconos vectoriales nativos: no dependen de fuentes, emojis ni recursos externos.
+local function createCategoryIcon(parent, categoryKey)
+	local icon = Instance.new("Frame")
+	icon.Name = "HexaCategoryIcon"
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 8, 0.5, 0)
+	icon.Size = UDim2.fromOffset(16, 16)
+	icon.BackgroundTransparency = 1
+	icon.BorderSizePixel = 0
+	icon.ZIndex = parent.ZIndex + 1
+	icon.Parent = parent
+
+	local function part(name, x, y, width, height, rotation, radius, outlined)
+		local object = Instance.new("Frame")
+		object.Name = name
+		object.Position = UDim2.fromOffset(x, y)
+		object.Size = UDim2.fromOffset(width, height)
+		object.Rotation = rotation or 0
+		object.BackgroundColor3 = BUTTON_TEXT_COLOR
+		object.BackgroundTransparency = outlined and 1 or 0
+		object.BorderSizePixel = 0
+		object.ZIndex = icon.ZIndex
+		object.Parent = icon
+		if radius then mkCorner(object, radius) end
+		if outlined then mkStroke(object, BUTTON_TEXT_COLOR, 0, 1) end
+		return object
+	end
+
+	local function line(name, x, y, width, height, rotation)
+		return part(name, x, y, width, height, rotation, math.max(1, math.floor(height / 2)), false)
+	end
+
+	if categoryKey == "ALL" then
+		for index, position in ipairs({{1, 1}, {9, 1}, {1, 9}, {9, 9}}) do
+			part("Tile" .. index, position[1], position[2], 6, 6, 0, 2, true)
+		end
+	elseif categoryKey == "HOME" then
+		line("RoofLeft", 1, 4, 9, 2, -35)
+		line("RoofRight", 7, 4, 9, 2, 35)
+		part("House", 3, 7, 10, 8, 0, 1, true)
+		line("Door", 7, 11, 2, 4, 0)
+	elseif categoryKey == "MOVEMENT" then
+		line("ArrowBody", 1, 7, 13, 2, 0)
+		line("ArrowTop", 9, 4, 7, 2, 45)
+		line("ArrowBottom", 9, 10, 7, 2, -45)
+	elseif categoryKey == "COMBAT" then
+		part("SightRing", 3, 3, 10, 10, 0, 5, true)
+		line("SightHorizontal", 0, 7, 16, 2, 0)
+		line("SightVertical", 7, 0, 2, 16, 0)
+	elseif categoryKey == "VIP" then
+		part("OuterGem", 3, 3, 10, 10, 45, 1, true)
+		part("InnerGem", 6, 6, 4, 4, 45, 1, true)
+	elseif categoryKey == "VISUALS" then
+		part("Eye", 0, 3, 16, 10, 0, 5, true)
+		part("Pupil", 5, 5, 6, 6, 0, 3, false)
+	elseif categoryKey == "TELEPORT" then
+		part("Portal", 1, 1, 14, 14, 0, 7, true)
+		line("PortalArrow", 4, 7, 8, 2, 0)
+		line("PortalArrowTop", 9, 5, 5, 2, 45)
+		line("PortalArrowBottom", 9, 9, 5, 2, -45)
+	elseif categoryKey == "PLAYER" then
+		part("Head", 5, 0, 6, 6, 0, 3, false)
+		part("Body", 2, 8, 12, 8, 0, 6, true)
+	elseif categoryKey == "INFO" then
+		part("InfoRing", 1, 1, 14, 14, 0, 7, true)
+		part("InfoDot", 7, 4, 2, 2, 0, 1, false)
+		line("InfoStem", 7, 7, 2, 5, 0)
+	elseif categoryKey == "SYSTEM" then
+		part("GearRing", 3, 3, 10, 10, 0, 5, true)
+		part("GearCenter", 6, 6, 4, 4, 0, 2, false)
+		line("GearTop", 7, 0, 2, 4, 0)
+		line("GearBottom", 7, 12, 2, 4, 0)
+		line("GearLeft", 0, 7, 4, 2, 0)
+		line("GearRight", 12, 7, 4, 2, 0)
+	elseif categoryKey == "CUSTOMIZE" then
+		line("SliderTop", 1, 3, 14, 2, 0)
+		line("SliderMiddle", 1, 7, 14, 2, 0)
+		line("SliderBottom", 1, 11, 14, 2, 0)
+		part("SliderTopKnob", 4, 1, 4, 6, 0, 2, false)
+		part("SliderMiddleKnob", 10, 5, 4, 6, 0, 2, false)
+		part("SliderBottomKnob", 6, 9, 4, 6, 0, 2, false)
+	end
+
+	return icon
+end
+
 function CategoryUI:GetCardCategory(card)
 	if not card or not card:IsA("Frame") then return "ALL" end
 	if card.Name == "HexaFavoritesCard" then return "HOME" end
@@ -2151,22 +2237,24 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	local button = Instance.new("TextButton")
 	button.Name = "HexaCategory_" .. definition.Key
 	button.LayoutOrder = index
-	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(78, #definition.Label * 6 + 22), 32) or UDim2.new(1, -8, 0, 25)
+	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(90, #definition.Label * 6 + 44), 32) or UDim2.new(1, -8, 0, 25)
 	button.BackgroundColor3 = Theme.Panel2
 	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
-	button.Text = definition.Label
+	button.Text = "      " .. definition.Label
 	button.TextColor3 = BUTTON_TEXT_COLOR
 	button.TextSize = 10
 	button.Font = Enum.Font.GothamBold
+	button.TextXAlignment = Enum.TextXAlignment.Left
 	button.AutoButtonColor = false
 	button.ZIndex = 5
 	button.Parent = CategoryUI.Scroll
-	button:SetAttribute("BaseText", definition.Label)
+	button:SetAttribute("BaseText", "      " .. definition.Label)
 	button:SetAttribute("HexaNoFavorite", true)
 	mkCorner(button, MOBILE_DEVICE and 14 or 12)
 	local stroke = mkStroke(button, Theme.Accent, 0.72, 1)
 	stroke.Name = "HexaCategoryStroke"
+	createCategoryIcon(button, definition.Key)
 	addHover(button, Theme.Panel2, Theme.Panel2, Theme.Panel2)
 	button.MouseButton1Click:Connect(function()
 		CategoryUI:Select(definition.Key)
