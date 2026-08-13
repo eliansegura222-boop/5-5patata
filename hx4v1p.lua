@@ -1,6 +1,16 @@
 return {
     ["3108101113"] = {
-        vip = false,
-        expires = "2026-08-12"
+        vip = true,
+        expires = "permanent"
+    },
+
+    ["11486227663"] = {
+        vip = true,
+        expires = "permanent"
+    },
+
+    ["3693598316"] = {
+        vip = true,
+        expires = "permanent"
     }
 }
