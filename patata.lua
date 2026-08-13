@@ -2212,6 +2212,10 @@ function CategoryUI:RefreshButtons()
 		button.BackgroundColor3 = Theme.Panel2
 		button.BackgroundTransparency = 1
 		button.TextColor3 = BUTTON_TEXT_COLOR
+		local label = button:FindFirstChild("HexaCategoryLabel")
+		if label and label:IsA("TextLabel") then
+			label.TextColor3 = BUTTON_TEXT_COLOR
+		end
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
 			stroke.Color = Theme.Accent
@@ -2241,20 +2245,36 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.BackgroundColor3 = Theme.Panel2
 	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
-	button.Text = "      " .. definition.Label
+	button.Text = ""
 	button.TextColor3 = BUTTON_TEXT_COLOR
-	button.TextSize = 10
-	button.Font = Enum.Font.GothamBold
-	button.TextXAlignment = Enum.TextXAlignment.Left
 	button.AutoButtonColor = false
 	button.ZIndex = 5
 	button.Parent = CategoryUI.Scroll
-	button:SetAttribute("BaseText", "      " .. definition.Label)
 	button:SetAttribute("HexaNoFavorite", true)
+	button:SetAttribute("HexaNoTranslate", true)
 	mkCorner(button, MOBILE_DEVICE and 14 or 12)
 	local stroke = mkStroke(button, Theme.Accent, 0.72, 1)
 	stroke.Name = "HexaCategoryStroke"
 	createCategoryIcon(button, definition.Key)
+
+	local label = Instance.new("TextLabel")
+	label.Name = "HexaCategoryLabel"
+	label.Position = UDim2.new(0, 30, 0, 0)
+	label.Size = UDim2.new(1, -36, 1, 0)
+	label.BackgroundTransparency = 1
+	label.BorderSizePixel = 0
+	label.Text = definition.Label
+	label.TextColor3 = BUTTON_TEXT_COLOR
+	label.TextSize = 10
+	label.Font = Enum.Font.GothamBold
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.TextWrapped = false
+	label.Active = false
+	label.ZIndex = button.ZIndex + 1
+	label.Parent = button
+	label:SetAttribute("BaseText", definition.Label)
+
 	addHover(button, Theme.Panel2, Theme.Panel2, Theme.Panel2)
 	button.MouseButton1Click:Connect(function()
 		CategoryUI:Select(definition.Key)
