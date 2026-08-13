@@ -2059,11 +2059,12 @@ CategoryUI.Scroll.BorderSizePixel = 0
 CategoryUI.Scroll.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 6) or UDim2.new(0, 8, 0, 30)
 CategoryUI.Scroll.Size = MOBILE_DEVICE and UDim2.new(1, -16, 1, -12) or UDim2.new(1, -16, 1, -36)
 CategoryUI.Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-CategoryUI.Scroll.AutomaticCanvasSize = MOBILE_DEVICE and Enum.AutomaticSize.X or Enum.AutomaticSize.Y
+CategoryUI.Scroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 CategoryUI.Scroll.ScrollingDirection = MOBILE_DEVICE and Enum.ScrollingDirection.X or Enum.ScrollingDirection.Y
 CategoryUI.Scroll.ScrollBarThickness = MOBILE_DEVICE and 0 or 3
 CategoryUI.Scroll.ScrollBarImageColor3 = Theme.Accent
 CategoryUI.Scroll.ScrollBarImageTransparency = 0.38
+CategoryUI.Scroll.Active = true
 CategoryUI.Scroll.ZIndex = 4
 CategoryUI.Scroll.Parent = CategoryUI.Frame
 
@@ -2074,6 +2075,22 @@ CategoryUI.Layout.HorizontalAlignment = MOBILE_DEVICE and Enum.HorizontalAlignme
 CategoryUI.Layout.VerticalAlignment = MOBILE_DEVICE and Enum.VerticalAlignment.Center or Enum.VerticalAlignment.Top
 CategoryUI.Layout.Padding = UDim.new(0, MOBILE_DEVICE and 6 or 2)
 CategoryUI.Layout.Parent = CategoryUI.Scroll
+
+local function refreshCategoryCanvas()
+	local contentSize = CategoryUI.Layout.AbsoluteContentSize
+	if MOBILE_DEVICE then
+		CategoryUI.Scroll.CanvasSize = UDim2.new(0, contentSize.X + 16, 0, 0)
+		local maximumX = math.max(0, contentSize.X + 16 - CategoryUI.Scroll.AbsoluteSize.X)
+		if CategoryUI.Scroll.CanvasPosition.X > maximumX then
+			CategoryUI.Scroll.CanvasPosition = Vector2.new(maximumX, 0)
+		end
+	else
+		CategoryUI.Scroll.CanvasSize = UDim2.new(0, 0, 0, contentSize.Y + 12)
+	end
+end
+CategoryUI.Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	task.defer(refreshCategoryCanvas)
+end)
 
 function CategoryUI:GetCardCategory(card)
 	if not card or not card:IsA("Frame") then return "ALL" end
@@ -2157,6 +2174,7 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	CategoryUI.Buttons[definition.Key] = button
 end
 CategoryUI:RefreshButtons()
+task.defer(refreshCategoryCanvas)
 
 Content = Instance.new("ScrollingFrame")
 Content.Name = "HexaFunctionPanel"
@@ -2167,7 +2185,11 @@ Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -184) or UDim2.new(1, -170,
 Content.ScrollBarThickness = MOBILE_DEVICE and 6 or 4
 Content.ScrollBarImageColor3 = Theme.Accent
 Content.CanvasSize = UDim2.new(0, 0, 0, 0)
-Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+Content.AutomaticCanvasSize = MOBILE_DEVICE and Enum.AutomaticSize.None or Enum.AutomaticSize.Y
+Content.ScrollingDirection = Enum.ScrollingDirection.Y
+Content.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+Content.ScrollingEnabled = true
+Content.Active = true
 Content.ScrollBarImageTransparency = 0.24
 Content.ZIndex = 3
 Content.Parent = MainFrame
@@ -2380,6 +2402,36 @@ end
 local FilterOriginalPositions = setmetatable({}, {__mode = "k"})
 local FilterOriginalCardSizes = setmetatable({}, {__mode = "k"})
 
+local function refreshMobileCanvas()
+	if not MOBILE_DEVICE or not Content or not Content.Parent then return end
+	local contentHeight = math.max(0, Layout.AbsoluteContentSize.Y + 34)
+	Content.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
+	local maximumY = math.max(0, contentHeight - Content.AbsoluteSize.Y)
+	if Content.CanvasPosition.Y > maximumY then
+		Content.CanvasPosition = Vector2.new(0, maximumY)
+	end
+end
+
+local function fitMobileCard(card, units)
+	if not MOBILE_DEVICE or not card or not card.Parent then return end
+	local baseHeight = tonumber(card:GetAttribute("HexaMobileBaseHeight")) or card.Size.Y.Offset
+	local requiredHeight = baseHeight
+	for _, object in ipairs(card:GetChildren()) do
+		if object:IsA("GuiObject") then
+			local originalPosition = FilterOriginalPositions[object] or object.Position
+			local bottom = originalPosition.Y.Offset + object.Size.Y.Offset + 24
+			requiredHeight = math.max(requiredHeight, bottom)
+		end
+	end
+	card.Size = UDim2.new(card.Size.X.Scale, card.Size.X.Offset, 0, requiredHeight)
+	FilterOriginalCardSizes[card] = card.Size
+	if units then
+		for _, unit in ipairs(units) do
+			if not FilterOriginalPositions[unit] then FilterOriginalPositions[unit] = unit.Position end
+		end
+	end
+end
+
 local function isFilterUnit(object)
 	if not object:IsA("GuiObject") then return false end
 	return object:IsA("TextButton")
@@ -2489,6 +2541,7 @@ applySearchFilter = function()
 		if card:IsA("Frame") and card:GetAttribute("HexaSearchableCard") == true then
 			local units = getCardFilterUnits(card)
 			restoreFilterLayout(card, units)
+			if query == "" and CategoryUI.Active ~= "VIP" then fitMobileCard(card, units) end
 			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
 			local visible = false
 			if query ~= "" then
@@ -2506,6 +2559,7 @@ applySearchFilter = function()
 		end
 	end
 	NoResultsLabel.Visible = matches == 0
+	task.defer(refreshMobileCanvas)
 end
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(applySearchFilter)
@@ -2524,6 +2578,11 @@ Content.DescendantAdded:Connect(function(object)
 		if Content and Content.Parent then applySearchFilter() end
 	end)
 end)
+if MOBILE_DEVICE then
+	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		task.defer(refreshMobileCanvas)
+	end)
+end
 addVipStateListener(function()
 	refreshFavoritesCard()
 	applySearchFilter()
@@ -2540,6 +2599,7 @@ local function sectionCard(height: number)
 	card.ClipsDescendants = true
 	card.Parent = Content
 	card:SetAttribute("HexaSearchableCard", true)
+	card:SetAttribute("HexaMobileBaseHeight", height)
 	mkCorner(card, 16)
 	mkStroke(card, Theme.Accent, 0.78, 1)
 	return card
