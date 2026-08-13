@@ -1239,6 +1239,16 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"SIN RETROCESO", "NO RECOIL"},
 	{"DISPARO RÁPIDO", "RAPID FIRE"},
 	{"Disparos por segundo", "Shots per second"},
+	{"CONVERSIÓN DE ARMA A AUTOMÁTICA", "FULL-AUTO WEAPON CONVERSION"},
+	{"EXTENSOR DE ALCANCE DE BALA", "BULLET RANGE EXTENDER"},
+	{"Multiplicador de alcance", "Range multiplier"},
+	{"MODIFICADOR DE CAÍDA DE DAÑO", "DAMAGE FALLOFF MODIFIER"},
+	{"MODIFICADOR DE VELOCIDAD DE BALA", "BULLET VELOCITY MODIFIER"},
+	{"Multiplicador de velocidad de bala", "Bullet velocity multiplier"},
+	{"EXTENSOR DE DURACIÓN DEL PROYECTIL", "PROJECTILE LIFETIME EXTENDER"},
+	{"Duración del proyectil (s)", "Projectile lifetime (s)"},
+	{"BALA PENETRANTE DE SUPERFICIES", "SURFACE-PENETRATING BULLET"},
+	{"MODIFICADORES DE ARMAS Y PROYECTILES", "WEAPON AND PROJECTILE MODIFIERS"},
 	{"SUAVIZADO DE PUNTERÍA", "AIM SMOOTHING"},
 	{"PREDICCIÓN DEL OBJETIVO", "TARGET PREDICTION"},
 	{"RETARDO AL CAMBIAR OBJETIVO", "TARGET SWITCHING DELAY"},
@@ -1995,17 +2005,17 @@ local CategoryUI = {
 	Active = "ALL",
 	Buttons = {},
 	Definitions = {
-		{Key = "ALL", Label = "TODAS"},
-		{Key = "HOME", Label = "INICIO"},
-		{Key = "MOVEMENT", Label = "MOVIMIENTO"},
-		{Key = "COMBAT", Label = "COMBATE"},
+		{Key = "ALL", Label = "▦ TODAS"},
+		{Key = "HOME", Label = "⌂ INICIO"},
+		{Key = "MOVEMENT", Label = "➜ MOVIMIENTO"},
+		{Key = "COMBAT", Label = "✛ COMBATE"},
 		{Key = "VIP", Label = "★ VIP"},
-		{Key = "VISUALS", Label = "VISUALES"},
-		{Key = "TELEPORT", Label = "TELETRANSPORTE"},
-		{Key = "PLAYER", Label = "JUGADOR"},
-		{Key = "INFO", Label = "INFORMACIÓN"},
-		{Key = "SYSTEM", Label = "SISTEMA"},
-		{Key = "CUSTOMIZE", Label = "PERSONALIZAR"},
+		{Key = "VISUALS", Label = "◉ VISUALES"},
+		{Key = "TELEPORT", Label = "⌖ TELETRANSPORTE"},
+		{Key = "PLAYER", Label = "♙ JUGADOR"},
+		{Key = "INFO", Label = "ⓘ INFORMACIÓN"},
+		{Key = "SYSTEM", Label = "⚙ SISTEMA"},
+		{Key = "CUSTOMIZE", Label = "✎ PERSONALIZAR"},
 	},
 }
 
@@ -3442,6 +3452,15 @@ task.spawn(function()
 			NoRecoil = false,
 			RapidFire = false,
 			RapidFireRate = 22,
+			FullAutoConversion = false,
+			RangeExtender = false,
+			RangeMultiplier = 10,
+			DamageFalloffModifier = false,
+			BulletVelocityModifier = false,
+			BulletVelocityMultiplier = 5,
+			ProjectileLifetimeExtender = false,
+			ProjectileLifetimeSeconds = 30,
+			SurfacePenetration = false,
 			NoSpread = false,
 			AutoReload = false,
 			InfiniteAmmo = false,
@@ -3470,6 +3489,8 @@ task.spawn(function()
 			Dead = false,
 			LastWeaponScan = 0,
 			LastRapidShot = 0,
+			LastFullAutoShot = 0,
+			LastLocalWeaponActivation = 0,
 			LastAutoReload = 0,
 			LastHitboxUpdate = 0,
 			LastFullbrightUpdate = 0,
@@ -3490,6 +3511,21 @@ task.spawn(function()
 			RapidValues = setmetatable({}, {__mode = "k"}),
 			RapidAttributes = setmetatable({}, {__mode = "k"}),
 			RapidToolEnabled = setmetatable({}, {__mode = "k"}),
+			FullAutoValues = setmetatable({}, {__mode = "k"}),
+			FullAutoAttributes = setmetatable({}, {__mode = "k"}),
+			RangeValues = setmetatable({}, {__mode = "k"}),
+			RangeAttributes = setmetatable({}, {__mode = "k"}),
+			FalloffValues = setmetatable({}, {__mode = "k"}),
+			FalloffAttributes = setmetatable({}, {__mode = "k"}),
+			VelocityValues = setmetatable({}, {__mode = "k"}),
+			VelocityAttributes = setmetatable({}, {__mode = "k"}),
+			LifetimeValues = setmetatable({}, {__mode = "k"}),
+			LifetimeAttributes = setmetatable({}, {__mode = "k"}),
+			PenetrationValues = setmetatable({}, {__mode = "k"}),
+			PenetrationAttributes = setmetatable({}, {__mode = "k"}),
+			ProjectileCollision = setmetatable({}, {__mode = "k"}),
+			ProjectileVelocityApplied = setmetatable({}, {__mode = "k"}),
+			TrackedWeaponTools = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoValues = setmetatable({}, {__mode = "k"}),
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
 			HitboxOriginal = setmetatable({}, {__mode = "k"}),
@@ -3540,6 +3576,16 @@ task.spawn(function()
 			return false
 		end
 
+		local WeaponModifierPatterns = {
+			FullAuto = {"automatic", "fullauto", "full_auto", "firemode", "fire_mode", "firingmode", "shootmode", "semiauto", "semi_auto"},
+			Range = {"bulletrange", "bullet_range", "projectilerange", "projectile_range", "weaponrange", "weapon_range", "maxrange", "max_range", "maxdistance", "max_distance", "traveldistance", "travel_distance", "raylength", "ray_length"},
+			Falloff = {"damagefalloff", "damage_falloff", "falloff", "dropoff", "damageattenuation", "damage_attenuation", "damagereduction", "damage_reduction"},
+			FalloffDistance = {"falloffstart", "falloff_start", "falloffend", "falloff_end", "dropoffstart", "dropoff_start", "dropoffend", "dropoff_end"},
+			Velocity = {"bulletvelocity", "bullet_velocity", "projectilevelocity", "projectile_velocity", "muzzlevelocity", "muzzle_velocity", "bulletspeed", "bullet_speed", "projectilespeed", "projectile_speed"},
+			Lifetime = {"projectilelifetime", "projectile_lifetime", "bulletlifetime", "bullet_lifetime", "maxlifetime", "max_lifetime", "lifetime", "despawntime", "despawn_time", "destroytime", "destroy_time", "projectileduration", "projectile_duration"},
+			Penetration = {"penetration", "penetrate", "wallbang", "wall_bang", "pierce", "piercing", "surfacepenetration", "surface_penetration", "penetrationdepth", "penetration_depth", "penetrationpower", "penetration_power", "maxpenetrations", "max_penetrations"},
+		}
+
 		-- Aim Smoothing puede funcionar como modo independiente y usa su propia tecla.
 		local AimSmoothingButton = createToggleButton(
 			CombatCard,
@@ -3576,7 +3622,7 @@ task.spawn(function()
 		createSlider(CombatAdvancedCard, "Retardo de cambio de objetivo (ms)", 50, 2000, Settings.TargetSwitchDelayMs, 228, function(value)
 			Settings.TargetSwitchDelayMs = math.clamp(math.floor(value + 0.5), 50, 2000)
 			HexaSharedTargetFilters.TargetSwitchDelaySeconds = Settings.TargetSwitchDelayMs / 1000
-		end)
+		end, false, 2000)
 		local NoRecoilButton = createToggleButton(CombatAdvancedCard, "SIN RETROCESO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 288))
 		markVipControl(NoRecoilButton)
 		local NoSpreadButton = createToggleButton(CombatAdvancedCard, "SIN DISPERSIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 334))
@@ -3590,6 +3636,25 @@ task.spawn(function()
 		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 532))
 		markVipControl(InfiniteAmmoButton)
 		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
+
+		local ProjectileModifiersCard = sectionCard(510)
+		ProjectileModifiersCard.LayoutOrder = 24
+		sectionTitle(ProjectileModifiersCard, "MODIFICADORES DE ARMAS Y PROYECTILES", UDim2.new(0, 16, 0, 14))
+		local FullAutoConversionButton = createToggleButton(ProjectileModifiersCard, "CONVERSIÓN DE ARMA A AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
+		local RangeExtenderButton = createToggleButton(ProjectileModifiersCard, "EXTENSOR DE ALCANCE DE BALA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
+		createSlider(ProjectileModifiersCard, "Multiplicador de alcance", 1, 20, Settings.RangeMultiplier, 136, function(value)
+			Settings.RangeMultiplier = math.clamp(math.floor(value + 0.5), 1, 20)
+		end)
+		local DamageFalloffButton = createToggleButton(ProjectileModifiersCard, "MODIFICADOR DE CAÍDA DE DAÑO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 196))
+		local BulletVelocityButton = createToggleButton(ProjectileModifiersCard, "MODIFICADOR DE VELOCIDAD DE BALA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 242))
+		createSlider(ProjectileModifiersCard, "Multiplicador de velocidad de bala", 1, 20, Settings.BulletVelocityMultiplier, 288, function(value)
+			Settings.BulletVelocityMultiplier = math.clamp(math.floor(value + 0.5), 1, 20)
+		end)
+		local ProjectileLifetimeButton = createToggleButton(ProjectileModifiersCard, "EXTENSOR DE DURACIÓN DEL PROYECTIL", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 348))
+		createSlider(ProjectileModifiersCard, "Duración del proyectil (s)", 1, 60, Settings.ProjectileLifetimeSeconds, 394, function(value)
+			Settings.ProjectileLifetimeSeconds = math.clamp(math.floor(value + 0.5), 1, 60)
+		end)
+		local SurfacePenetrationButton = createToggleButton(ProjectileModifiersCard, "BALA PENETRANTE DE SUPERFICIES", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 454))
 
 		local HitboxCard = sectionCard(250)
 		HitboxCard.LayoutOrder = 23
@@ -3659,6 +3724,12 @@ task.spawn(function()
 			TargetSwitchDelay = TargetSwitchDelayButton,
 			NoRecoil = NoRecoilButton,
 			RapidFire = RapidButton,
+			FullAutoConversion = FullAutoConversionButton,
+			RangeExtender = RangeExtenderButton,
+			DamageFalloffModifier = DamageFalloffButton,
+			BulletVelocityModifier = BulletVelocityButton,
+			ProjectileLifetimeExtender = ProjectileLifetimeButton,
+			SurfacePenetration = SurfacePenetrationButton,
 			NoSpread = NoSpreadButton,
 			AutoReload = AutoReloadButton,
 			InfiniteAmmo = InfiniteAmmoButton,
@@ -3990,6 +4061,24 @@ task.spawn(function()
 			pcall(function() object:SetAttribute(attributeName, newValue) end)
 		end
 
+		local function cacheTransformedValue(cache, object, transform)
+			if cache[object] == nil then cache[object] = object.Value end
+			local originalValue = cache[object]
+			local ok, newValue = pcall(transform, originalValue)
+			if ok then pcall(function() object.Value = newValue end) end
+		end
+
+		local function cacheTransformedAttribute(cache, object, attributeName, originalValue, transform)
+			local attributes = cache[object]
+			if not attributes then
+				attributes = {}
+				cache[object] = attributes
+			end
+			if attributes[attributeName] == nil then attributes[attributeName] = originalValue end
+			local ok, newValue = pcall(transform, attributes[attributeName])
+			if ok then pcall(function() object:SetAttribute(attributeName, newValue) end) end
+		end
+
 		local function restoreValues(cache)
 			for object, value in pairs(cache) do
 				if object and object.Parent then pcall(function() object.Value = value end) end
@@ -4015,6 +4104,59 @@ task.spawn(function()
 			table.clear(State.RapidToolEnabled)
 		end
 
+		local function restoreProjectileCollision()
+			for projectile, canCollide in pairs(State.ProjectileCollision) do
+				if projectile and projectile.Parent then
+					pcall(function() projectile.CanCollide = canCollide end)
+				end
+			end
+			table.clear(State.ProjectileCollision)
+		end
+
+		local function isProjectilePart(object)
+			if not object:IsA("BasePart") then return false end
+			local lowered = string.lower(object.Name)
+			return containsAny(lowered, {"bullet", "projectile", "pellet", "rocket", "missile", "slug", "tracer"})
+		end
+
+		local function applyPhysicalProjectileModifiers(object)
+			if not isProjectilePart(object) or os.clock() - State.LastLocalWeaponActivation > 0.35 then return end
+			if Settings.SurfacePenetration then
+				if State.ProjectileCollision[object] == nil then State.ProjectileCollision[object] = object.CanCollide end
+				pcall(function() object.CanCollide = false end)
+			end
+			if Settings.BulletVelocityModifier and not State.ProjectileVelocityApplied[object] then
+				State.ProjectileVelocityApplied[object] = true
+				task.defer(function()
+					if not object or not object.Parent then return end
+					local multiplier = math.max(1, tonumber(Settings.BulletVelocityMultiplier) or 5)
+					pcall(function()
+						local velocity = object.AssemblyLinearVelocity
+						if velocity.Magnitude > 0 then object.AssemblyLinearVelocity = velocity * multiplier end
+					end)
+				end)
+			end
+		end
+
+		local function trackWeaponTool(tool)
+			if State.TrackedWeaponTools[tool] then return end
+			local connection = tool.Activated:Connect(function()
+				State.LastLocalWeaponActivation = os.clock()
+			end)
+			State.TrackedWeaponTools[tool] = connection
+			table.insert(State.Connections, connection)
+		end
+
+		connect(workspace.DescendantAdded, function(object)
+			if Settings.SurfacePenetration or Settings.BulletVelocityModifier then
+				applyPhysicalProjectileModifiers(object)
+			end
+		end)
+		connect(workspace.DescendantRemoving, function(object)
+			State.ProjectileCollision[object] = nil
+			State.ProjectileVelocityApplied[object] = nil
+		end)
+
 		local function restoreWeapons()
 			restoreValues(State.NoRecoilValues)
 			restoreAttributes(State.NoRecoilAttributes)
@@ -4025,13 +4167,28 @@ task.spawn(function()
 			restoreRapidTools()
 			restoreValues(State.InfiniteAmmoValues)
 			restoreAttributes(State.InfiniteAmmoAttributes)
+			restoreValues(State.FullAutoValues)
+			restoreAttributes(State.FullAutoAttributes)
+			restoreValues(State.RangeValues)
+			restoreAttributes(State.RangeAttributes)
+			restoreValues(State.FalloffValues)
+			restoreAttributes(State.FalloffAttributes)
+			restoreValues(State.VelocityValues)
+			restoreAttributes(State.VelocityAttributes)
+			restoreValues(State.LifetimeValues)
+			restoreAttributes(State.LifetimeAttributes)
+			restoreValues(State.PenetrationValues)
+			restoreAttributes(State.PenetrationAttributes)
+			restoreProjectileCollision()
+			table.clear(State.ProjectileVelocityApplied)
 		end
 
 		local function updateWeapons(now)
 			local character = LocalPlayer.Character
 			local tool = character and character:FindFirstChildOfClass("Tool")
 			if not tool then return end
-			if Settings.RapidFire then
+			trackWeaponTool(tool)
+			if Settings.RapidFire or Settings.FullAutoConversion then
 				if State.RapidToolEnabled[tool] == nil then State.RapidToolEnabled[tool] = tool.Enabled end
 				pcall(function() tool.Enabled = true end)
 			end
@@ -4045,6 +4202,23 @@ task.spawn(function()
 				for _, descendant in ipairs(tool:GetDescendants()) do table.insert(objects, descendant) end
 				for _, object in ipairs(objects) do
 					local objectName = string.lower(object.Name)
+					local isConfigValue = object:IsA("NumberValue") or object:IsA("IntValue") or object:IsA("BoolValue") or object:IsA("StringValue")
+					if Settings.FullAutoConversion and isConfigValue and containsAny(objectName, WeaponModifierPatterns.FullAuto) then
+						cacheTransformedValue(State.FullAutoValues, object, function(originalValue)
+							if type(originalValue) == "boolean" then return not containsAny(objectName, {"semi"}) end
+							if type(originalValue) == "number" then return containsAny(objectName, {"semi"}) and 0 or (containsAny(objectName, {"firemode", "fire_mode"}) and 2 or 1) end
+							if type(originalValue) == "string" then return "Auto" end
+							return originalValue
+						end)
+					end
+					if Settings.SurfacePenetration and isConfigValue and containsAny(objectName, WeaponModifierPatterns.Penetration) then
+						cacheTransformedValue(State.PenetrationValues, object, function(originalValue)
+							if type(originalValue) == "boolean" then return true end
+							if type(originalValue) == "number" then return math.max(originalValue, 1000) end
+							if type(originalValue) == "string" then return "Enabled" end
+							return originalValue
+						end)
+					end
 					if object:IsA("NumberValue") or object:IsA("IntValue") then
 						if Settings.NoRecoil and containsAny(objectName, {"recoil", "kick", "shake"}) then
 							cacheValue(State.NoRecoilValues, object, 0)
@@ -4059,6 +4233,28 @@ task.spawn(function()
 						if Settings.InfiniteAmmo and containsAny(objectName, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
 							cacheValue(State.InfiniteAmmoValues, object, 999)
 						end
+						local falloffName = containsAny(objectName, WeaponModifierPatterns.Falloff)
+						if Settings.RangeExtender and (objectName == "range" or containsAny(objectName, WeaponModifierPatterns.Range)) and not falloffName then
+							cacheTransformedValue(State.RangeValues, object, function(originalValue)
+								return math.max(0, tonumber(originalValue) or 0) * math.max(1, tonumber(Settings.RangeMultiplier) or 10)
+							end)
+						end
+						if Settings.DamageFalloffModifier and falloffName then
+							local isDistanceSetting = containsAny(objectName, WeaponModifierPatterns.FalloffDistance)
+							cacheTransformedValue(State.FalloffValues, object, function(originalValue)
+								return isDistanceSetting and math.max(tonumber(originalValue) or 0, 1000000) or 0
+							end)
+						end
+						if Settings.BulletVelocityModifier and containsAny(objectName, WeaponModifierPatterns.Velocity) then
+							cacheTransformedValue(State.VelocityValues, object, function(originalValue)
+								return math.max(0, tonumber(originalValue) or 0) * math.max(1, tonumber(Settings.BulletVelocityMultiplier) or 5)
+							end)
+						end
+						if Settings.ProjectileLifetimeExtender and containsAny(objectName, WeaponModifierPatterns.Lifetime) then
+							cacheTransformedValue(State.LifetimeValues, object, function(originalValue)
+								return math.max(tonumber(originalValue) or 0, tonumber(Settings.ProjectileLifetimeSeconds) or 30)
+							end)
+						end
 						if Settings.RapidFire then
 							if containsAny(objectName, {"cooldown", "delay", "interval", "wait", "firetime"}) then
 								cacheValue(State.RapidValues, object, 0)
@@ -4068,8 +4264,24 @@ task.spawn(function()
 						end
 					end
 					for attributeName, attributeValue in pairs(object:GetAttributes()) do
+						local lowered = string.lower(attributeName)
+						if Settings.FullAutoConversion and containsAny(lowered, WeaponModifierPatterns.FullAuto) then
+							cacheTransformedAttribute(State.FullAutoAttributes, object, attributeName, attributeValue, function(originalValue)
+								if type(originalValue) == "boolean" then return not containsAny(lowered, {"semi"}) end
+								if type(originalValue) == "number" then return containsAny(lowered, {"semi"}) and 0 or (containsAny(lowered, {"firemode", "fire_mode"}) and 2 or 1) end
+								if type(originalValue) == "string" then return "Auto" end
+								return originalValue
+							end)
+						end
+						if Settings.SurfacePenetration and containsAny(lowered, WeaponModifierPatterns.Penetration) then
+							cacheTransformedAttribute(State.PenetrationAttributes, object, attributeName, attributeValue, function(originalValue)
+								if type(originalValue) == "boolean" then return true end
+								if type(originalValue) == "number" then return math.max(originalValue, 1000) end
+								if type(originalValue) == "string" then return "Enabled" end
+								return originalValue
+							end)
+						end
 						if type(attributeValue) == "number" then
-							local lowered = string.lower(attributeName)
 							if Settings.NoRecoil and containsAny(lowered, {"recoil", "kick", "shake"}) then
 								cacheAttribute(State.NoRecoilAttributes, object, attributeName, attributeValue, 0)
 							end
@@ -4081,6 +4293,28 @@ task.spawn(function()
 							end
 							if Settings.InfiniteAmmo and containsAny(lowered, {"ammo", "clip", "bullets", "magazine", "mag", "municion", "munición"}) then
 								cacheAttribute(State.InfiniteAmmoAttributes, object, attributeName, attributeValue, 999)
+							end
+							local falloffName = containsAny(lowered, WeaponModifierPatterns.Falloff)
+							if Settings.RangeExtender and (lowered == "range" or containsAny(lowered, WeaponModifierPatterns.Range)) and not falloffName then
+								cacheTransformedAttribute(State.RangeAttributes, object, attributeName, attributeValue, function(originalValue)
+									return math.max(0, tonumber(originalValue) or 0) * math.max(1, tonumber(Settings.RangeMultiplier) or 10)
+								end)
+							end
+							if Settings.DamageFalloffModifier and falloffName then
+								local isDistanceSetting = containsAny(lowered, WeaponModifierPatterns.FalloffDistance)
+								cacheTransformedAttribute(State.FalloffAttributes, object, attributeName, attributeValue, function(originalValue)
+									return isDistanceSetting and math.max(tonumber(originalValue) or 0, 1000000) or 0
+								end)
+							end
+							if Settings.BulletVelocityModifier and containsAny(lowered, WeaponModifierPatterns.Velocity) then
+								cacheTransformedAttribute(State.VelocityAttributes, object, attributeName, attributeValue, function(originalValue)
+									return math.max(0, tonumber(originalValue) or 0) * math.max(1, tonumber(Settings.BulletVelocityMultiplier) or 5)
+								end)
+							end
+							if Settings.ProjectileLifetimeExtender and containsAny(lowered, WeaponModifierPatterns.Lifetime) then
+								cacheTransformedAttribute(State.LifetimeAttributes, object, attributeName, attributeValue, function(originalValue)
+									return math.max(tonumber(originalValue) or 0, tonumber(Settings.ProjectileLifetimeSeconds) or 30)
+								end)
 							end
 							if Settings.RapidFire then
 								if containsAny(lowered, {"cooldown", "delay", "interval", "wait", "firetime"}) then
@@ -4133,6 +4367,25 @@ task.spawn(function()
 				end
 			else
 				State.LastRapidShot = now
+			end
+			local fullAutoTriggerActive = Settings.FullAutoConversion and not Settings.RapidFire and (
+				(not MOBILE_DEVICE and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1))
+				or (MOBILE_DEVICE and now <= Runtime.mobileShotUntil)
+			)
+			if fullAutoTriggerActive then
+				local fullAutoDelay = 1 / 12
+				if now - State.LastFullAutoShot >= fullAutoDelay then
+					State.LastFullAutoShot = now
+					Runtime.syntheticRapidActivation = true
+					pcall(function()
+						tool.Enabled = true
+						tool:Deactivate()
+						tool:Activate()
+					end)
+					Runtime.syntheticRapidActivation = false
+				end
+			else
+				State.LastFullAutoShot = now
 			end
 		end
 
@@ -4701,7 +4954,47 @@ task.spawn(function()
 			if not enabled then
 				restoreValues(State.RapidValues)
 				restoreAttributes(State.RapidAttributes)
-				restoreRapidTools()
+				if not Settings.FullAutoConversion then restoreRapidTools() end
+			end
+		end)
+		bindToggle(FullAutoConversionButton, "FullAutoConversion", function(enabled)
+			State.LastFullAutoShot = os.clock()
+			if not enabled then
+				restoreValues(State.FullAutoValues)
+				restoreAttributes(State.FullAutoAttributes)
+				if not Settings.RapidFire then restoreRapidTools() end
+			end
+		end)
+		bindToggle(RangeExtenderButton, "RangeExtender", function(enabled)
+			if not enabled then
+				restoreValues(State.RangeValues)
+				restoreAttributes(State.RangeAttributes)
+			end
+		end)
+		bindToggle(DamageFalloffButton, "DamageFalloffModifier", function(enabled)
+			if not enabled then
+				restoreValues(State.FalloffValues)
+				restoreAttributes(State.FalloffAttributes)
+			end
+		end)
+		bindToggle(BulletVelocityButton, "BulletVelocityModifier", function(enabled)
+			if not enabled then
+				restoreValues(State.VelocityValues)
+				restoreAttributes(State.VelocityAttributes)
+				table.clear(State.ProjectileVelocityApplied)
+			end
+		end)
+		bindToggle(ProjectileLifetimeButton, "ProjectileLifetimeExtender", function(enabled)
+			if not enabled then
+				restoreValues(State.LifetimeValues)
+				restoreAttributes(State.LifetimeAttributes)
+			end
+		end)
+		bindToggle(SurfacePenetrationButton, "SurfacePenetration", function(enabled)
+			if not enabled then
+				restoreValues(State.PenetrationValues)
+				restoreAttributes(State.PenetrationAttributes)
+				restoreProjectileCollision()
 			end
 		end)
 		bindToggle(NoSpreadButton, "NoSpread", function(enabled)
@@ -4890,11 +5183,20 @@ task.spawn(function()
 			if State.Dead then return end
 			local now = os.clock()
 			local weaponFeatureActive = Settings.NoRecoil or Settings.RapidFire or Settings.NoSpread or Settings.AutoReload or Settings.InfiniteAmmo
+				or Settings.FullAutoConversion or Settings.RangeExtender or Settings.DamageFalloffModifier
+				or Settings.BulletVelocityModifier or Settings.ProjectileLifetimeExtender or Settings.SurfacePenetration
 			if weaponFeatureActive then
 				updateWeapons(now)
 			elseif next(State.NoRecoilValues) or next(State.NoRecoilAttributes) or next(State.NoSpreadValues)
 				or next(State.NoSpreadAttributes) or next(State.RapidValues) or next(State.RapidAttributes)
-				or next(State.InfiniteAmmoValues) or next(State.InfiniteAmmoAttributes) then
+				or next(State.InfiniteAmmoValues) or next(State.InfiniteAmmoAttributes)
+				or next(State.FullAutoValues) or next(State.FullAutoAttributes)
+				or next(State.RangeValues) or next(State.RangeAttributes)
+				or next(State.FalloffValues) or next(State.FalloffAttributes)
+				or next(State.VelocityValues) or next(State.VelocityAttributes)
+				or next(State.LifetimeValues) or next(State.LifetimeAttributes)
+				or next(State.PenetrationValues) or next(State.PenetrationAttributes)
+				or next(State.ProjectileCollision) then
 				restoreWeapons()
 			end
 			if Settings.Fullbright and now - State.LastFullbrightUpdate >= 0.25 then
