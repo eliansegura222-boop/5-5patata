@@ -2005,17 +2005,17 @@ local CategoryUI = {
 	Active = "ALL",
 	Buttons = {},
 	Definitions = {
-		{Key = "ALL", Label = "▦ TODAS"},
-		{Key = "HOME", Label = "⌂ INICIO"},
-		{Key = "MOVEMENT", Label = "➜ MOVIMIENTO"},
-		{Key = "COMBAT", Label = "✛ COMBATE"},
-		{Key = "VIP", Label = "★ VIP"},
-		{Key = "VISUALS", Label = "◉ VISUALES"},
-		{Key = "TELEPORT", Label = "⌖ TELETRANSPORTE"},
-		{Key = "PLAYER", Label = "♙ JUGADOR"},
-		{Key = "INFO", Label = "ⓘ INFORMACIÓN"},
-		{Key = "SYSTEM", Label = "⚙ SISTEMA"},
-		{Key = "CUSTOMIZE", Label = "✎ PERSONALIZAR"},
+		{Key = "ALL", Icon = "=", Label = "TODAS"},
+		{Key = "HOME", Icon = "H", Label = "INICIO"},
+		{Key = "MOVEMENT", Icon = ">", Label = "MOVIMIENTO"},
+		{Key = "COMBAT", Icon = "+", Label = "COMBATE"},
+		{Key = "VIP", Icon = "*", Label = "VIP"},
+		{Key = "VISUALS", Icon = "O", Label = "VISUALES"},
+		{Key = "TELEPORT", Icon = "TP", Label = "TELETRANSPORTE"},
+		{Key = "PLAYER", Icon = "@", Label = "JUGADOR"},
+		{Key = "INFO", Icon = "i", Label = "INFORMACIÓN"},
+		{Key = "SYSTEM", Icon = "#", Label = "SISTEMA"},
+		{Key = "CUSTOMIZE", Icon = "~", Label = "PERSONALIZAR"},
 	},
 }
 
@@ -2126,6 +2126,12 @@ function CategoryUI:RefreshButtons()
 		button.BackgroundColor3 = Theme.Panel2
 		button.BackgroundTransparency = 1
 		button.TextColor3 = BUTTON_TEXT_COLOR
+		local iconBadge = button:FindFirstChild("HexaCategoryIcon")
+		if iconBadge and iconBadge:IsA("TextLabel") then
+			iconBadge.BackgroundColor3 = key == "VIP" and Color3.fromRGB(65, 52, 10) or Theme.Panel
+			iconBadge.TextColor3 = key == "VIP" and Theme.VipGold or Theme.TextMain
+			iconBadge.BackgroundTransparency = selected and 0.08 or 0.28
+		end
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
 			stroke.Color = Theme.Accent
@@ -2151,7 +2157,7 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	local button = Instance.new("TextButton")
 	button.Name = "HexaCategory_" .. definition.Key
 	button.LayoutOrder = index
-	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(78, #definition.Label * 6 + 22), 32) or UDim2.new(1, -8, 0, 25)
+	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 50), 32) or UDim2.new(1, -8, 0, 25)
 	button.BackgroundColor3 = Theme.Panel2
 	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
@@ -2159,14 +2165,37 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.TextColor3 = BUTTON_TEXT_COLOR
 	button.TextSize = 10
 	button.Font = Enum.Font.GothamBold
+	button.TextXAlignment = Enum.TextXAlignment.Left
 	button.AutoButtonColor = false
 	button.ZIndex = 5
 	button.Parent = CategoryUI.Scroll
 	button:SetAttribute("BaseText", definition.Label)
 	button:SetAttribute("HexaNoFavorite", true)
+	local categoryPadding = Instance.new("UIPadding")
+	categoryPadding.PaddingLeft = UDim.new(0, 34)
+	categoryPadding.PaddingRight = UDim.new(0, 8)
+	categoryPadding.Parent = button
 	mkCorner(button, MOBILE_DEVICE and 14 or 12)
 	local stroke = mkStroke(button, Theme.Accent, 0.72, 1)
 	stroke.Name = "HexaCategoryStroke"
+	local iconBadge = Instance.new("TextLabel")
+	iconBadge.Name = "HexaCategoryIcon"
+	iconBadge.AnchorPoint = Vector2.new(0, 0.5)
+	iconBadge.Position = UDim2.new(0, 7, 0.5, 0)
+	iconBadge.Size = UDim2.fromOffset(20, MOBILE_DEVICE and 20 or 17)
+	iconBadge.BackgroundColor3 = definition.Key == "VIP" and Color3.fromRGB(65, 52, 10) or Theme.Panel
+	iconBadge.BackgroundTransparency = 0.28
+	iconBadge.BorderSizePixel = 0
+	iconBadge.Text = definition.Icon
+	iconBadge.TextColor3 = definition.Key == "VIP" and Theme.VipGold or Theme.TextMain
+	iconBadge.TextSize = definition.Icon == "TP" and 8 or 11
+	iconBadge.Font = Enum.Font.GothamBold
+	iconBadge.ZIndex = 6
+	iconBadge.Active = false
+	iconBadge.Parent = button
+	iconBadge:SetAttribute("HexaNoTranslate", true)
+	mkCorner(iconBadge, 6)
+	mkStroke(iconBadge, definition.Key == "VIP" and Theme.VipGold or Theme.Accent, 0.58, 1)
 	addHover(button, Theme.Panel2, Theme.Panel2, Theme.Panel2)
 	button.MouseButton1Click:Connect(function()
 		CategoryUI:Select(definition.Key)
