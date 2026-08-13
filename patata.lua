@@ -413,7 +413,7 @@ local isInteractingWithSlider = false
 local Lang = {Current = "ES"}
 local UI_READY = false
 local PERFORMANCE_MODE = false
-local applySearchFilter = function() end
+local refreshCategoryVisibility = function() end
 local refreshFavoritesCard = function() end
 local registerFunctionButton = function() end
 local registerAllFunctionButtons = function() end
@@ -700,7 +700,7 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 	container.Position = UDim2.new(0, 12, 0, posY)
 	container.ZIndex = 3
 	container.Parent = parent
-	container:SetAttribute("HexaSearchText", title)
+	container:SetAttribute("HexaFunctionText", title)
 
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
@@ -1140,9 +1140,6 @@ Muestra esqueletos o líneas hacia otros jugadores y permite limitar la distanci
 TELETRANSPORTE
 Selecciona un jugador y pulsa IR AL JUGADOR. En computadora puedes usar TP AL RATÓN; en celular se adapta como TP AL TOQUE.
 
-BUSCADOR
-Escribe el nombre de una función para encontrarla rápidamente.
-
 FUNCIONES VIP
 Las opciones que muestran la etiqueta VIP requieren una clave VIP activa.]], [[AUTO AIM
 Enable aiming at the head or body. On computer you can assign a keyboard key or mouse button. On mobile you can choose automatic activation, while aiming, or while firing.
@@ -1159,12 +1156,8 @@ Displays skeletons or lines toward other players and lets you limit the distance
 TELEPORT
 Select a player and press GO TO PLAYER. On computer you can use TELEPORT TO MOUSE; on mobile it adapts to TELEPORT TO TOUCH.
 
-SEARCH
-Type a feature name to find it quickly.
-
 VIP FEATURES
 Options displaying the VIP label require an active VIP key.]]},
-	{"BUSCAR FUNCIONES...", "SEARCH FUNCTIONS..."},
 	{"CATEGORÍAS", "CATEGORIES"},
 	{"TODAS", "ALL"},
 	{"INICIO", "HOME"},
@@ -1177,7 +1170,6 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"PERSONALIZAR", "CUSTOMIZE"},
 	{"FAVORITOS", "FAVORITES"},
 	{"NO TIENES FUNCIONES FAVORITAS", "YOU HAVE NO FAVORITE FEATURES"},
-	{"SIN RESULTADOS", "NO RESULTS"},
 	{"ACTIVACIÓN: AUTOMÁTICA", "ACTIVATION: AUTOMATIC"},
 	{"ACTIVACIÓN: AL APUNTAR", "ACTIVATION: WHILE AIMING"},
 	{"ACTIVACIÓN: AL DISPARAR", "ACTIVATION: WHILE FIRING"},
@@ -1589,7 +1581,7 @@ function Lang.Set(language)
 	end
 	task.defer(function()
 		refreshFavoritesCard()
-		applySearchFilter()
+		refreshCategoryVisibility()
 	end)
 end
 
@@ -1774,31 +1766,6 @@ Lang.MainButton.MouseButton1Click:Connect(function()
 	Lang.Set(Lang.Current == "ES" and "EN" or "ES")
 end)
 
-local SearchContainer = Instance.new("Frame")
-SearchContainer.Name = "HexaSearchContainer"
-SearchContainer.Position = UDim2.new(0, 20, 0, 61)
-SearchContainer.Size = UDim2.new(1, -40, 0, 34)
-SearchContainer.BackgroundColor3 = Theme.Panel2
-SearchContainer.BackgroundTransparency = 0.06
-SearchContainer.BorderSizePixel = 0
-SearchContainer.Parent = Header
-mkCorner(SearchContainer, 10)
-mkStroke(SearchContainer, Theme.Accent, 0.72, 1)
-
-local SearchBox = Instance.new("TextBox")
-SearchBox.Name = "HexaFunctionSearch"
-SearchBox.BackgroundTransparency = 1
-SearchBox.Position = UDim2.new(0, 12, 0, 0)
-SearchBox.Size = UDim2.new(1, -24, 1, 0)
-SearchBox.Text = ""
-SearchBox.PlaceholderText = "BUSCAR FUNCIONES..."
-SearchBox.TextColor3 = Theme.TextOff
-SearchBox.PlaceholderColor3 = Color3.fromRGB(90, 90, 90)
-SearchBox.TextSize = MOBILE_DEVICE and 13 or 14
-SearchBox.Font = Enum.Font.GothamMedium
-SearchBox.ClearTextOnFocus = false
-SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-SearchBox.Parent = SearchContainer
 Lang.Set(Lang.Current)
 
 local OwnerVipButton = nil
@@ -2228,11 +2195,10 @@ end
 function CategoryUI:Select(key)
 	self.Active = key or "ALL"
 	self:RefreshButtons()
-	if SearchBox then SearchBox.Text = "" end
 	task.defer(function()
 		if Content and Content.Parent then
 			Content.CanvasPosition = Vector2.new(0, 0)
-			applySearchFilter()
+			refreshCategoryVisibility()
 		end
 	end)
 end
@@ -2320,16 +2286,10 @@ local FavoriteIds = {}
 local FavoriteRegistry = {}
 local FavoriteStars = {}
 
-local function normalizeSearchText(value)
-	local text = tostring(value or "")
-	-- string.lower no siempre convierte las vocales acentuadas en los
-	-- entornos Lua de los executors, así que se normalizan ambos casos.
-	text = text:gsub("Á", "a"):gsub("É", "e"):gsub("Í", "i"):gsub("Ó", "o"):gsub("Ú", "u"):gsub("Ü", "u"):gsub("Ñ", "n")
+local function normalizeIdentifierText(value)
+	local text = string.lower(tostring(value or ""))
 	text = text:gsub("á", "a"):gsub("é", "e"):gsub("í", "i"):gsub("ó", "o"):gsub("ú", "u"):gsub("ü", "u"):gsub("ñ", "n")
-	text = string.lower(text)
-	-- Los paréntesis, guiones y otros separadores no deben impedir una
-	-- coincidencia como "aimbot cabeza" con "AIMBOT (CABEZA)".
-	text = text:gsub("[^%w%s]", " "):gsub("_", " "):gsub("%s+", " ")
+	text = text:gsub("%s+", " ")
 	return text:gsub("^%s+", ""):gsub("%s+$", "")
 end
 
@@ -2367,7 +2327,7 @@ FavoritesCard.BorderSizePixel = 0
 FavoritesCard.ClipsDescendants = true
 FavoritesCard.Visible = false
 FavoritesCard.Parent = Content
-FavoritesCard:SetAttribute("HexaSearchableCard", true)
+FavoritesCard:SetAttribute("HexaContentCard", true)
 mkCorner(FavoritesCard, 16)
 mkStroke(FavoritesCard, Theme.VipGold, 0.18, 1)
 
@@ -2383,17 +2343,6 @@ FavoritesEmpty.TextSize = 11
 FavoritesEmpty.Font = Enum.Font.GothamMedium
 FavoritesEmpty.TextXAlignment = Enum.TextXAlignment.Left
 FavoritesEmpty.Parent = FavoritesCard
-
-local NoResultsLabel = Instance.new("TextLabel")
-NoResultsLabel.LayoutOrder = -2
-NoResultsLabel.Size = UDim2.new(1, 0, 0, 44)
-NoResultsLabel.BackgroundTransparency = 1
-NoResultsLabel.Text = "SIN RESULTADOS"
-NoResultsLabel.TextColor3 = Theme.TextMain
-NoResultsLabel.TextSize = 13
-NoResultsLabel.Font = Enum.Font.GothamBold
-NoResultsLabel.Visible = false
-NoResultsLabel.Parent = Content
 
 local function getCardForButton(button)
 	local current = button.Parent
@@ -2422,7 +2371,7 @@ local function getFavoriteId(button)
 			end
 		end
 	end
-	return normalizeSearchText(cardTitle .. "|" .. getFavoriteSourceText(button))
+	return normalizeIdentifierText(cardTitle .. "|" .. getFavoriteSourceText(button))
 end
 
 local function updateFavoriteStars()
@@ -2472,7 +2421,6 @@ refreshFavoritesCard = function()
 			local target = item.entry.Button
 			local targetCard = item.entry.Card
 			if target and target.Parent and targetCard and targetCard.Parent then
-				SearchBox.Text = ""
 				task.defer(function()
 					local relativeY = targetCard.AbsolutePosition.Y - Content.AbsolutePosition.Y + Content.CanvasPosition.Y
 					Content.CanvasPosition = Vector2.new(0, math.max(0, relativeY - 10))
@@ -2513,10 +2461,8 @@ registerAllFunctionButtons = function()
 	refreshFavoritesCard()
 end
 
-local FilterOriginalPositions = setmetatable({}, {__mode = "k"})
-local FilterOriginalCardSizes = setmetatable({}, {__mode = "k"})
-local FilterOriginalVisibility = setmetatable({}, {__mode = "k"})
-local LastSearchQuery = ""
+local ContentOriginalPositions = setmetatable({}, {__mode = "k"})
+local ContentOriginalCardSizes = setmetatable({}, {__mode = "k"})
 
 local function refreshMobileCanvas()
 	if not MOBILE_DEVICE or not Content or not Content.Parent then return end
@@ -2534,94 +2480,46 @@ local function fitMobileCard(card, units)
 	local requiredHeight = baseHeight
 	for _, object in ipairs(card:GetChildren()) do
 		if object:IsA("GuiObject") then
-			local originalPosition = FilterOriginalPositions[object] or object.Position
+			local originalPosition = ContentOriginalPositions[object] or object.Position
 			local bottom = originalPosition.Y.Offset + object.Size.Y.Offset + 24
 			requiredHeight = math.max(requiredHeight, bottom)
 		end
 	end
 	card.Size = UDim2.new(card.Size.X.Scale, card.Size.X.Offset, 0, requiredHeight)
-	FilterOriginalCardSizes[card] = card.Size
+	ContentOriginalCardSizes[card] = card.Size
 	if units then
 		for _, unit in ipairs(units) do
-			if not FilterOriginalPositions[unit] then FilterOriginalPositions[unit] = unit.Position end
+			if not ContentOriginalPositions[unit] then ContentOriginalPositions[unit] = unit.Position end
 		end
 	end
 end
 
-local function isFilterUnit(object)
+local function isContentLayoutUnit(object)
 	if not object:IsA("GuiObject") then return false end
 	return object:IsA("TextButton")
 		or object:IsA("TextBox")
-		or object:GetAttribute("HexaSearchText") ~= nil
+		or object:GetAttribute("HexaFunctionText") ~= nil
 		or object:GetAttribute("HexaVipOnly") == true
 end
 
-local function getCardFilterUnits(card)
+local function getCardLayoutUnits(card)
 	local units = {}
 	for _, object in ipairs(card:GetChildren()) do
-		if isFilterUnit(object) and object.Name ~= "HexaFavoriteStar" then
-			if not FilterOriginalPositions[object] then FilterOriginalPositions[object] = object.Position end
-			if FilterOriginalVisibility[object] == nil then FilterOriginalVisibility[object] = object.Visible end
+		if isContentLayoutUnit(object) and object.Name ~= "HexaFavoriteStar" then
+			if not ContentOriginalPositions[object] then ContentOriginalPositions[object] = object.Position end
 			table.insert(units, object)
 		end
 	end
 	table.sort(units, function(a, b)
-		local aPosition = FilterOriginalPositions[a] or a.Position
-		local bPosition = FilterOriginalPositions[b] or b.Position
+		local aPosition = ContentOriginalPositions[a] or a.Position
+		local bPosition = ContentOriginalPositions[b] or b.Position
 		if aPosition.Y.Offset == bPosition.Y.Offset then return aPosition.X.Offset < bPosition.X.Offset end
 		return aPosition.Y.Offset < bPosition.Y.Offset
 	end)
 	return units
 end
 
-local function filterUnitSearchText(unit)
-	local parts = {}
-	local seen = {}
-	local function appendText(value)
-		if value == nil then return end
-		local text = tostring(value)
-		if text == "" or seen[text] then return end
-		seen[text] = true
-		table.insert(parts, text)
-		-- Permite buscar con el idioma actual o con la traducción disponible.
-		local spanish = Lang.ToSpanish(text)
-		local english = Lang.ToEnglish(spanish)
-		if spanish ~= text and not seen[spanish] then
-			seen[spanish] = true
-			table.insert(parts, spanish)
-		end
-		if english ~= text and not seen[english] then
-			seen[english] = true
-			table.insert(parts, english)
-		end
-	end
-	local function appendObject(object)
-		if (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) and object.Name ~= "HexaFavoriteStar" then
-			appendText(object.Text)
-			appendText(object:GetAttribute("HexaSpanishText"))
-			appendText(object:GetAttribute("HexaSpanishBaseText"))
-			appendText(object:GetAttribute("BaseText"))
-		end
-		local extra = object:GetAttribute("HexaSearchText")
-		if extra then appendText(extra) end
-	end
-	appendObject(unit)
-	for _, object in ipairs(unit:GetDescendants()) do appendObject(object) end
-	return normalizeSearchText(table.concat(parts, " "))
-end
-
-local function searchTextMatches(searchText, query)
-	if query == "" then return false end
-	if string.find(searchText, query, 1, true) then return true end
-	-- Si la consulta contiene varias palabras, todas deben pertenecer a la
-	-- misma función, aunque su nombre incluya signos o palabras intermedias.
-	for word in string.gmatch(query, "%S+") do
-		if not string.find(searchText, word, 1, true) then return false end
-	end
-	return true
-end
-
-local function filterUnitIsVip(unit)
+local function contentUnitIsVip(unit)
 	if unit:GetAttribute("HexaVipOnly") == true then return true end
 	for _, object in ipairs(unit:GetDescendants()) do
 		if object:GetAttribute("HexaVipOnly") == true then return true end
@@ -2629,29 +2527,25 @@ local function filterUnitIsVip(unit)
 	return false
 end
 
-local function restoreFilterLayout(card, units)
-	local originalSize = FilterOriginalCardSizes[card]
+local function restoreContentLayout(card, units)
+	local originalSize = ContentOriginalCardSizes[card]
 	if originalSize then card.Size = originalSize end
 	for _, unit in ipairs(units) do
-		local originalPosition = FilterOriginalPositions[unit]
+		local originalPosition = ContentOriginalPositions[unit]
 		if originalPosition then unit.Position = originalPosition end
-		local originalVisible = FilterOriginalVisibility[unit]
-		unit.Visible = originalVisible == nil and true or originalVisible
-		local oldMatch = unit:FindFirstChild("HexaSearchMatch")
-		if oldMatch then oldMatch:Destroy() end
+		unit.Visible = true
 	end
 end
 
-local function applyCompactFilter(card, units, query, vipOnly)
-	if not FilterOriginalCardSizes[card] then FilterOriginalCardSizes[card] = card.Size end
+local function applyVipLayout(card, units)
+	if not ContentOriginalCardSizes[card] then ContentOriginalCardSizes[card] = card.Size end
 	local rows = {}
 	local rowOrder = {}
 	for _, unit in ipairs(units) do
-		local include = vipOnly and filterUnitIsVip(unit)
-			or (not vipOnly and searchTextMatches(filterUnitSearchText(unit), query))
+		local include = contentUnitIsVip(unit)
 		unit.Visible = include
 		if include then
-			local originalPosition = FilterOriginalPositions[unit] or unit.Position
+			local originalPosition = ContentOriginalPositions[unit] or unit.Position
 			local rowKey = originalPosition.Y.Offset
 			if not rows[rowKey] then
 				rows[rowKey] = {}
@@ -2667,7 +2561,7 @@ local function applyCompactFilter(card, units, query, vipOnly)
 	for _, rowKey in ipairs(rowOrder) do
 		local rowHeight = 0
 		for _, unit in ipairs(rows[rowKey]) do
-			local originalPosition = FilterOriginalPositions[unit] or unit.Position
+			local originalPosition = ContentOriginalPositions[unit] or unit.Position
 			unit.Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, originalPosition.Y.Scale, nextY)
 			rowHeight = math.max(rowHeight, unit.Size.Y.Offset)
 			visibleUnits += 1
@@ -2676,47 +2570,34 @@ local function applyCompactFilter(card, units, query, vipOnly)
 	end
 
 	if visibleUnits > 0 then
-		local originalSize = FilterOriginalCardSizes[card] or card.Size
+		local originalSize = ContentOriginalCardSizes[card] or card.Size
 		card.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, nextY + 2)
 	end
 	return visibleUnits
 end
 
-applySearchFilter = function()
-	local query = normalizeSearchText(SearchBox.Text)
-	local matches = 0
-	if query ~= LastSearchQuery then
-		-- Al reducir el contenido, una posición de scroll anterior puede dejar
-		-- los resultados fuera de pantalla y hacer parecer que no apareció nada.
-		Content.CanvasPosition = Vector2.new(0, 0)
-		LastSearchQuery = query
-	end
+refreshCategoryVisibility = function()
 	for _, card in ipairs(Content:GetChildren()) do
-		if card:IsA("Frame") and card:GetAttribute("HexaSearchableCard") == true then
-			local ok, visible = pcall(function()
-				local units = getCardFilterUnits(card)
-				restoreFilterLayout(card, units)
-				if query == "" and CategoryUI.Active ~= "VIP" then fitMobileCard(card, units) end
-				local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
-				if query ~= "" then
-					-- Busca en todas las categorías y deja visibles solamente las
-					-- funciones que coinciden dentro de cada tarjeta.
-					return card ~= FavoritesCard and applyCompactFilter(card, units, query, false) > 0
-				elseif CategoryUI.Active == "VIP" then
-					return applyCompactFilter(card, units, "", true) > 0
-				end
-				return defaultVisible and CategoryUI:Matches(card)
-			end)
-			card.Visible = ok and visible == true
-			if card.Visible then matches += 1 end
+		if card:IsA("Frame") and card:GetAttribute("HexaContentCard") == true then
+			local units = getCardLayoutUnits(card)
+			restoreContentLayout(card, units)
+			if CategoryUI.Active ~= "VIP" then fitMobileCard(card, units) end
+			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
+			local visible = false
+			if CategoryUI.Active == "VIP" then
+				-- La categoría VIP reutiliza los controles originales; siguen presentes
+				-- en sus categorías habituales y aquí se muestran solos y ordenados.
+				visible = applyVipLayout(card, units) > 0
+			else
+				visible = defaultVisible and CategoryUI:Matches(card)
+			end
+			card.Visible = visible
 		end
 	end
-	NoResultsLabel.Visible = matches == 0
 	task.defer(refreshMobileCanvas)
 end
 
-SearchBox:GetPropertyChangedSignal("Text"):Connect(applySearchFilter)
-local searchRefreshPending = false
+local visibilityRefreshPending = false
 Content.DescendantAdded:Connect(function(object)
 	if not UI_READY then return end
 	if object:IsA("TextButton") then
@@ -2724,11 +2605,11 @@ Content.DescendantAdded:Connect(function(object)
 			if object and object.Parent then pcall(registerFunctionButton, object) end
 		end)
 	end
-	if searchRefreshPending then return end
-	searchRefreshPending = true
+	if visibilityRefreshPending then return end
+	visibilityRefreshPending = true
 	task.delay(0.20, function()
-		searchRefreshPending = false
-		if Content and Content.Parent then applySearchFilter() end
+		visibilityRefreshPending = false
+		if Content and Content.Parent then refreshCategoryVisibility() end
 	end)
 end)
 if MOBILE_DEVICE then
@@ -2738,7 +2619,7 @@ if MOBILE_DEVICE then
 end
 addVipStateListener(function()
 	refreshFavoritesCard()
-	applySearchFilter()
+	refreshCategoryVisibility()
 end)
 
 end
@@ -2751,7 +2632,7 @@ local function sectionCard(height: number)
 	card.BorderSizePixel = 0
 	card.ClipsDescendants = true
 	card.Parent = Content
-	card:SetAttribute("HexaSearchableCard", true)
+	card:SetAttribute("HexaContentCard", true)
 	card:SetAttribute("HexaMobileBaseHeight", height)
 	mkCorner(card, 16)
 	mkStroke(card, Theme.Accent, 0.78, 1)
@@ -3099,9 +2980,6 @@ Muestra esqueletos o líneas hacia otros jugadores y permite limitar la distanci
 
 TELETRANSPORTE
 Selecciona un jugador y pulsa IR AL JUGADOR. En computadora puedes usar TP AL RATÓN; en celular se adapta como TP AL TOQUE.
-
-BUSCADOR
-Escribe el nombre de una función para encontrarla rápidamente.
 
 FUNCIONES VIP
 Las opciones que muestran la etiqueta VIP requieren una clave VIP activa.]]
@@ -5989,7 +5867,7 @@ end)
 UI_READY = true
 task.defer(function()
 	registerAllFunctionButtons()
-	applySearchFilter()
+	refreshCategoryVisibility()
 end)
 
 if HEXA_IS_VIP then
@@ -6989,7 +6867,7 @@ task.spawn(function()
 			self:setPanelPerformanceTransparency(Header, enabled)
 			self:setPanelPerformanceTransparency(CategoryUI.Frame, enabled)
 			for _, object in ipairs(Content:GetChildren()) do
-				if object:IsA("Frame") and object:GetAttribute("HexaSearchableCard") == true then
+				if object:IsA("Frame") and object:GetAttribute("HexaContentCard") == true then
 					self:setPanelPerformanceTransparency(object, enabled)
 				end
 			end
@@ -7306,7 +7184,7 @@ task.spawn(function()
 		Lang.Set(Lang.Current)
 		task.defer(function()
 			registerAllFunctionButtons()
-			applySearchFilter()
+			refreshCategoryVisibility()
 		end)
 	end)
 
