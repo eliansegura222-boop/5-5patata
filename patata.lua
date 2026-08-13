@@ -1698,7 +1698,7 @@ Header.BackgroundColor3 = Theme.Panel
 Header.BackgroundTransparency = 0.30
 Header.BorderSizePixel = 0
 Header.Position = UDim2.new(0, 2, 0, 2)
-Header.Size = UDim2.new(1, -4, 0, 104)
+Header.Size = UDim2.new(1, -4, 0, 58)
 Header.ZIndex = 4
 Header.Parent = MainFrame
 mkCorner(Header, 16)
@@ -1998,11 +1998,11 @@ mkCorner(CategoryUI.Frame, 14)
 mkStroke(CategoryUI.Frame, Theme.Accent, 0.78, 1)
 
 if MOBILE_DEVICE then
-	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 110)
+	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
 	CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 68)
 else
-	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 110)
-	CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -116)
+	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
+	CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -70)
 end
 
 CategoryUI.Title = Instance.new("TextLabel")
@@ -2254,8 +2254,8 @@ Content = Instance.new("ScrollingFrame")
 Content.Name = "HexaFunctionPanel"
 Content.BackgroundTransparency = 1
 Content.BorderSizePixel = 0
-Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 182) or UDim2.new(0, 168, 0, 108)
-Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -184) or UDim2.new(1, -170, 1, -110)
+Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 136) or UDim2.new(0, 168, 0, 62)
+Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -138) or UDim2.new(1, -170, 1, -64)
 Content.ScrollBarThickness = MOBILE_DEVICE and 6 or 4
 Content.ScrollBarImageColor3 = Theme.Accent
 Content.CanvasSize = UDim2.new(0, 0, 0, 0)
