@@ -2005,17 +2005,17 @@ local CategoryUI = {
 	Active = "ALL",
 	Buttons = {},
 	Definitions = {
-		{Key = "ALL", Icon = "=", Label = "TODAS"},
-		{Key = "HOME", Icon = "H", Label = "INICIO"},
-		{Key = "MOVEMENT", Icon = ">", Label = "MOVIMIENTO"},
-		{Key = "COMBAT", Icon = "+", Label = "COMBATE"},
-		{Key = "VIP", Icon = "*", Label = "VIP"},
-		{Key = "VISUALS", Icon = "O", Label = "VISUALES"},
-		{Key = "TELEPORT", Icon = "TP", Label = "TELETRANSPORTE"},
-		{Key = "PLAYER", Icon = "@", Label = "JUGADOR"},
-		{Key = "INFO", Icon = "i", Label = "INFORMACIÓN"},
-		{Key = "SYSTEM", Icon = "#", Label = "SISTEMA"},
-		{Key = "CUSTOMIZE", Icon = "~", Label = "PERSONALIZAR"},
+		{Key = "ALL", Label = "TODAS"},
+		{Key = "HOME", Label = "INICIO"},
+		{Key = "MOVEMENT", Label = "MOVIMIENTO"},
+		{Key = "COMBAT", Label = "COMBATE"},
+		{Key = "VIP", Label = "VIP"},
+		{Key = "VISUALS", Label = "VISUALES"},
+		{Key = "TELEPORT", Label = "TELETRANSPORTE"},
+		{Key = "PLAYER", Label = "JUGADOR"},
+		{Key = "INFO", Label = "INFORMACIÓN"},
+		{Key = "SYSTEM", Label = "SISTEMA"},
+		{Key = "CUSTOMIZE", Label = "PERSONALIZAR"},
 	},
 }
 
@@ -2126,11 +2126,17 @@ function CategoryUI:RefreshButtons()
 		button.BackgroundColor3 = Theme.Panel2
 		button.BackgroundTransparency = 1
 		button.TextColor3 = BUTTON_TEXT_COLOR
-		local iconBadge = button:FindFirstChild("HexaCategoryIcon")
-		if iconBadge and iconBadge:IsA("TextLabel") then
-			iconBadge.BackgroundColor3 = key == "VIP" and Color3.fromRGB(65, 52, 10) or Theme.Panel
-			iconBadge.TextColor3 = key == "VIP" and Theme.VipGold or Theme.TextMain
-			iconBadge.BackgroundTransparency = selected and 0.08 or 0.28
+		local titleLabel = button:FindFirstChild("HexaCategoryLabel")
+		if titleLabel and titleLabel:IsA("TextLabel") then
+			titleLabel.TextColor3 = BUTTON_TEXT_COLOR
+		end
+		local vectorIcon = button:FindFirstChild("HexaCategoryVectorIcon")
+		if vectorIcon then
+			local iconColor = key == "VIP" and Theme.VipGold or Theme.TextMain
+			for _, item in ipairs(vectorIcon:GetDescendants()) do
+				if item:GetAttribute("HexaVectorFill") == true and item:IsA("Frame") then item.BackgroundColor3 = iconColor end
+				if item:GetAttribute("HexaVectorStroke") == true and item:IsA("UIStroke") then item.Color = iconColor end
+			end
 		end
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
@@ -2153,6 +2159,120 @@ function CategoryUI:Select(key)
 	end)
 end
 
+local function createCategoryVectorIcon(parent, key)
+	local color = key == "VIP" and Theme.VipGold or Theme.TextMain
+	local canvas = Instance.new("Frame")
+	canvas.Name = "HexaCategoryVectorIcon"
+	canvas.AnchorPoint = Vector2.new(0, 0.5)
+	canvas.Position = UDim2.new(0, 7, 0.5, 0)
+	canvas.Size = UDim2.fromOffset(20, 20)
+	canvas.BackgroundTransparency = 1
+	canvas.BorderSizePixel = 0
+	canvas.ZIndex = 6
+	canvas.Active = false
+	canvas.Parent = parent
+	canvas:SetAttribute("HexaNoTranslate", true)
+
+	local function line(name, width, height, x, y, rotation, radius)
+		local object = Instance.new("Frame")
+		object.Name = name
+		object.AnchorPoint = Vector2.new(0.5, 0.5)
+		object.Position = UDim2.fromOffset(x, y)
+		object.Size = UDim2.fromOffset(width, height)
+		object.Rotation = rotation or 0
+		object.BackgroundColor3 = color
+		object.BorderSizePixel = 0
+		object.ZIndex = 7
+		object.Parent = canvas
+		object:SetAttribute("HexaVectorFill", true)
+		mkCorner(object, radius or math.min(width, height) / 2)
+		return object
+	end
+
+	local function ring(name, width, height, x, y, thickness)
+		local object = Instance.new("Frame")
+		object.Name = name
+		object.AnchorPoint = Vector2.new(0.5, 0.5)
+		object.Position = UDim2.fromOffset(x, y)
+		object.Size = UDim2.fromOffset(width, height)
+		object.BackgroundTransparency = 1
+		object.BorderSizePixel = 0
+		object.ZIndex = 7
+		object.Parent = canvas
+		mkCorner(object, 999)
+		local stroke = mkStroke(object, color, 0, thickness or 1.5)
+		stroke:SetAttribute("HexaVectorStroke", true)
+		return object
+	end
+
+	if key == "ALL" then
+		for _, point in ipairs({{6, 6}, {14, 6}, {6, 14}, {14, 14}}) do line("Tile", 5, 5, point[1], point[2], 0, 1.5) end
+	elseif key == "HOME" then
+		line("RoofLeft", 10, 2, 6.5, 7, -42)
+		line("RoofRight", 10, 2, 13.5, 7, 42)
+		line("HouseLeft", 2, 8, 5, 13)
+		line("HouseRight", 2, 8, 15, 13)
+		line("HouseBase", 12, 2, 10, 17)
+		line("Door", 3, 6, 10, 15, 0, 1)
+	elseif key == "MOVEMENT" then
+		line("ArrowBody", 14, 2, 9, 10)
+		line("ArrowTop", 8, 2, 15, 7, 42)
+		line("ArrowBottom", 8, 2, 15, 13, -42)
+	elseif key == "COMBAT" then
+		ring("CrosshairRing", 12, 12, 10, 10, 1.5)
+		line("CrosshairH", 18, 2, 10, 10)
+		line("CrosshairV", 2, 18, 10, 10)
+		line("CrosshairDot", 4, 4, 10, 10, 0, 999)
+	elseif key == "VIP" then
+		line("CrownBase", 15, 3, 10, 15, 0, 1)
+		line("CrownLeft", 3, 9, 4, 10, -16, 1)
+		line("CrownMiddle", 3, 11, 10, 8.5, 0, 1)
+		line("CrownRight", 3, 9, 16, 10, 16, 1)
+		line("CrownBand", 14, 3, 10, 13, 0, 1)
+	elseif key == "VISUALS" then
+		line("EyeTopLeft", 9, 2, 6.5, 7.5, -25)
+		line("EyeTopRight", 9, 2, 13.5, 7.5, 25)
+		line("EyeBottomLeft", 9, 2, 6.5, 12.5, 25)
+		line("EyeBottomRight", 9, 2, 13.5, 12.5, -25)
+		ring("EyePupil", 6, 6, 10, 10, 2)
+	elseif key == "TELEPORT" then
+		ring("TeleportRing", 13, 13, 9, 9, 1.7)
+		line("TeleportDot", 4, 4, 9, 9, 0, 999)
+		line("TeleportTail", 8, 2, 15, 15, 45)
+	elseif key == "PLAYER" then
+		ring("PlayerHead", 7, 7, 10, 6, 1.7)
+		local shoulders = Instance.new("Frame")
+		shoulders.Name = "PlayerShoulders"
+		shoulders.AnchorPoint = Vector2.new(0.5, 0.5)
+		shoulders.Position = UDim2.fromOffset(10, 15)
+		shoulders.Size = UDim2.fromOffset(15, 9)
+		shoulders.BackgroundTransparency = 1
+		shoulders.BorderSizePixel = 0
+		shoulders.ZIndex = 7
+		shoulders.Parent = canvas
+		mkCorner(shoulders, 999)
+		local stroke = mkStroke(shoulders, color, 0, 1.7)
+		stroke:SetAttribute("HexaVectorStroke", true)
+	elseif key == "INFO" then
+		ring("InfoRing", 16, 16, 10, 10, 1.7)
+		line("InfoDot", 3, 3, 10, 6, 0, 999)
+		line("InfoStem", 3, 7, 10, 12.5, 0, 1)
+	elseif key == "SYSTEM" then
+		line("SliderOne", 16, 2, 10, 5)
+		line("SliderTwo", 16, 2, 10, 10)
+		line("SliderThree", 16, 2, 10, 15)
+		line("KnobOne", 4, 4, 6, 5, 0, 999)
+		line("KnobTwo", 4, 4, 14, 10, 0, 999)
+		line("KnobThree", 4, 4, 9, 15, 0, 999)
+	else
+		line("PencilBody", 15, 4, 10, 10, -45, 1)
+		line("PencilTip", 5, 3, 15.5, 4.5, -45, 1)
+		line("PencilEnd", 5, 4, 4.5, 15.5, -45, 1)
+	end
+
+	return canvas
+end
+
 for index, definition in ipairs(CategoryUI.Definitions) do
 	local button = Instance.new("TextButton")
 	button.Name = "HexaCategory_" .. definition.Key
@@ -2161,41 +2281,34 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.BackgroundColor3 = Theme.Panel2
 	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
-	button.Text = definition.Label
+	button.Text = ""
 	button.TextColor3 = BUTTON_TEXT_COLOR
 	button.TextSize = 10
 	button.Font = Enum.Font.GothamBold
-	button.TextXAlignment = Enum.TextXAlignment.Left
 	button.AutoButtonColor = false
 	button.ZIndex = 5
 	button.Parent = CategoryUI.Scroll
-	button:SetAttribute("BaseText", definition.Label)
+	button:SetAttribute("BaseText", "")
 	button:SetAttribute("HexaNoFavorite", true)
-	local categoryPadding = Instance.new("UIPadding")
-	categoryPadding.PaddingLeft = UDim.new(0, 34)
-	categoryPadding.PaddingRight = UDim.new(0, 8)
-	categoryPadding.Parent = button
 	mkCorner(button, MOBILE_DEVICE and 14 or 12)
 	local stroke = mkStroke(button, Theme.Accent, 0.72, 1)
 	stroke.Name = "HexaCategoryStroke"
-	local iconBadge = Instance.new("TextLabel")
-	iconBadge.Name = "HexaCategoryIcon"
-	iconBadge.AnchorPoint = Vector2.new(0, 0.5)
-	iconBadge.Position = UDim2.new(0, 7, 0.5, 0)
-	iconBadge.Size = UDim2.fromOffset(20, MOBILE_DEVICE and 20 or 17)
-	iconBadge.BackgroundColor3 = definition.Key == "VIP" and Color3.fromRGB(65, 52, 10) or Theme.Panel
-	iconBadge.BackgroundTransparency = 0.28
-	iconBadge.BorderSizePixel = 0
-	iconBadge.Text = definition.Icon
-	iconBadge.TextColor3 = definition.Key == "VIP" and Theme.VipGold or Theme.TextMain
-	iconBadge.TextSize = definition.Icon == "TP" and 8 or 11
-	iconBadge.Font = Enum.Font.GothamBold
-	iconBadge.ZIndex = 6
-	iconBadge.Active = false
-	iconBadge.Parent = button
-	iconBadge:SetAttribute("HexaNoTranslate", true)
-	mkCorner(iconBadge, 6)
-	mkStroke(iconBadge, definition.Key == "VIP" and Theme.VipGold or Theme.Accent, 0.58, 1)
+	createCategoryVectorIcon(button, definition.Key)
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "HexaCategoryLabel"
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Position = UDim2.new(0, 34, 0, 0)
+	titleLabel.Size = UDim2.new(1, -40, 1, 0)
+	titleLabel.Text = definition.Label
+	titleLabel.TextColor3 = BUTTON_TEXT_COLOR
+	titleLabel.TextSize = 10
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	titleLabel.ZIndex = 6
+	titleLabel.Active = false
+	titleLabel.Parent = button
+	titleLabel:SetAttribute("BaseText", definition.Label)
 	addHover(button, Theme.Panel2, Theme.Panel2, Theme.Panel2)
 	button.MouseButton1Click:Connect(function()
 		CategoryUI:Select(definition.Key)
