@@ -396,7 +396,7 @@ local function calculateMainSize()
 	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or GUI_VIEWPORT_SIZE
 	return UDim2.fromOffset(
 		math.min(600, math.max(270, viewport.X - 12)),
-		math.min(430, math.max(270, viewport.Y - 12))
+		math.min(384, math.max(224, viewport.Y - 58))
 	)
 end
 local function calculateKeySize()
@@ -413,7 +413,7 @@ local isInteractingWithSlider = false
 local Lang = {Current = "ES"}
 local UI_READY = false
 local PERFORMANCE_MODE = false
-local refreshCategoryVisibility = function() end
+local refreshCategoryView = function() end
 local refreshFavoritesCard = function() end
 local registerFunctionButton = function() end
 local registerAllFunctionButtons = function() end
@@ -700,7 +700,6 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 	container.Position = UDim2.new(0, 12, 0, posY)
 	container.ZIndex = 3
 	container.Parent = parent
-	container:SetAttribute("HexaFunctionText", title)
 
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
@@ -1581,7 +1580,7 @@ function Lang.Set(language)
 	end
 	task.defer(function()
 		refreshFavoritesCard()
-		refreshCategoryVisibility()
+		refreshCategoryView()
 	end)
 end
 
@@ -1698,7 +1697,7 @@ Header.BackgroundColor3 = Theme.Panel
 Header.BackgroundTransparency = 0.30
 Header.BorderSizePixel = 0
 Header.Position = UDim2.new(0, 2, 0, 2)
-Header.Size = UDim2.new(1, -4, 0, 52)
+Header.Size = UDim2.new(1, -4, 0, 58)
 Header.ZIndex = 4
 Header.Parent = MainFrame
 mkCorner(Header, 16)
@@ -1998,11 +1997,11 @@ mkCorner(CategoryUI.Frame, 14)
 mkStroke(CategoryUI.Frame, Theme.Accent, 0.78, 1)
 
 if MOBILE_DEVICE then
-	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 56)
+	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
 	CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 68)
 else
-	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 56)
-	CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -62)
+	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
+	CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -70)
 end
 
 CategoryUI.Title = Instance.new("TextLabel")
@@ -2198,7 +2197,7 @@ function CategoryUI:Select(key)
 	task.defer(function()
 		if Content and Content.Parent then
 			Content.CanvasPosition = Vector2.new(0, 0)
-			refreshCategoryVisibility()
+			refreshCategoryView()
 		end
 	end)
 end
@@ -2254,8 +2253,8 @@ Content = Instance.new("ScrollingFrame")
 Content.Name = "HexaFunctionPanel"
 Content.BackgroundTransparency = 1
 Content.BorderSizePixel = 0
-Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 128) or UDim2.new(0, 168, 0, 54)
-Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -130) or UDim2.new(1, -170, 1, -56)
+Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 136) or UDim2.new(0, 168, 0, 62)
+Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -138) or UDim2.new(1, -170, 1, -64)
 Content.ScrollBarThickness = MOBILE_DEVICE and 6 or 4
 Content.ScrollBarImageColor3 = Theme.Accent
 Content.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -2286,7 +2285,7 @@ local FavoriteIds = {}
 local FavoriteRegistry = {}
 local FavoriteStars = {}
 
-local function normalizeIdentifierText(value)
+local function normalizeFavoriteId(value)
 	local text = string.lower(tostring(value or ""))
 	text = text:gsub("á", "a"):gsub("é", "e"):gsub("í", "i"):gsub("ó", "o"):gsub("ú", "u"):gsub("ü", "u"):gsub("ñ", "n")
 	text = text:gsub("%s+", " ")
@@ -2371,7 +2370,7 @@ local function getFavoriteId(button)
 			end
 		end
 	end
-	return normalizeIdentifierText(cardTitle .. "|" .. getFavoriteSourceText(button))
+	return normalizeFavoriteId(cardTitle .. "|" .. getFavoriteSourceText(button))
 end
 
 local function updateFavoriteStars()
@@ -2461,8 +2460,8 @@ registerAllFunctionButtons = function()
 	refreshFavoritesCard()
 end
 
-local ContentOriginalPositions = setmetatable({}, {__mode = "k"})
-local ContentOriginalCardSizes = setmetatable({}, {__mode = "k"})
+local CardOriginalPositions = setmetatable({}, {__mode = "k"})
+local CardOriginalSizes = setmetatable({}, {__mode = "k"})
 
 local function refreshMobileCanvas()
 	if not MOBILE_DEVICE or not Content or not Content.Parent then return end
@@ -2480,46 +2479,46 @@ local function fitMobileCard(card, units)
 	local requiredHeight = baseHeight
 	for _, object in ipairs(card:GetChildren()) do
 		if object:IsA("GuiObject") then
-			local originalPosition = ContentOriginalPositions[object] or object.Position
+			local originalPosition = CardOriginalPositions[object] or object.Position
 			local bottom = originalPosition.Y.Offset + object.Size.Y.Offset + 24
 			requiredHeight = math.max(requiredHeight, bottom)
 		end
 	end
 	card.Size = UDim2.new(card.Size.X.Scale, card.Size.X.Offset, 0, requiredHeight)
-	ContentOriginalCardSizes[card] = card.Size
+	CardOriginalSizes[card] = card.Size
 	if units then
 		for _, unit in ipairs(units) do
-			if not ContentOriginalPositions[unit] then ContentOriginalPositions[unit] = unit.Position end
+			if not CardOriginalPositions[unit] then CardOriginalPositions[unit] = unit.Position end
 		end
 	end
 end
 
-local function isContentLayoutUnit(object)
+local function isCardUnit(object)
 	if not object:IsA("GuiObject") then return false end
 	return object:IsA("TextButton")
 		or object:IsA("TextBox")
-		or object:GetAttribute("HexaFunctionText") ~= nil
+		or object.Name == "HexaSegmentedSlider"
 		or object:GetAttribute("HexaVipOnly") == true
 end
 
-local function getCardLayoutUnits(card)
+local function getCardUnits(card)
 	local units = {}
 	for _, object in ipairs(card:GetChildren()) do
-		if isContentLayoutUnit(object) and object.Name ~= "HexaFavoriteStar" then
-			if not ContentOriginalPositions[object] then ContentOriginalPositions[object] = object.Position end
+		if isCardUnit(object) and object.Name ~= "HexaFavoriteStar" then
+			if not CardOriginalPositions[object] then CardOriginalPositions[object] = object.Position end
 			table.insert(units, object)
 		end
 	end
 	table.sort(units, function(a, b)
-		local aPosition = ContentOriginalPositions[a] or a.Position
-		local bPosition = ContentOriginalPositions[b] or b.Position
+		local aPosition = CardOriginalPositions[a] or a.Position
+		local bPosition = CardOriginalPositions[b] or b.Position
 		if aPosition.Y.Offset == bPosition.Y.Offset then return aPosition.X.Offset < bPosition.X.Offset end
 		return aPosition.Y.Offset < bPosition.Y.Offset
 	end)
 	return units
 end
 
-local function contentUnitIsVip(unit)
+local function unitIsVip(unit)
 	if unit:GetAttribute("HexaVipOnly") == true then return true end
 	for _, object in ipairs(unit:GetDescendants()) do
 		if object:GetAttribute("HexaVipOnly") == true then return true end
@@ -2527,25 +2526,25 @@ local function contentUnitIsVip(unit)
 	return false
 end
 
-local function restoreContentLayout(card, units)
-	local originalSize = ContentOriginalCardSizes[card]
+local function restoreCardLayout(card, units)
+	local originalSize = CardOriginalSizes[card]
 	if originalSize then card.Size = originalSize end
 	for _, unit in ipairs(units) do
-		local originalPosition = ContentOriginalPositions[unit]
+		local originalPosition = CardOriginalPositions[unit]
 		if originalPosition then unit.Position = originalPosition end
 		unit.Visible = true
 	end
 end
 
-local function applyVipLayout(card, units)
-	if not ContentOriginalCardSizes[card] then ContentOriginalCardSizes[card] = card.Size end
+local function showVipUnits(card, units)
+	if not CardOriginalSizes[card] then CardOriginalSizes[card] = card.Size end
 	local rows = {}
 	local rowOrder = {}
 	for _, unit in ipairs(units) do
-		local include = contentUnitIsVip(unit)
+		local include = unitIsVip(unit)
 		unit.Visible = include
 		if include then
-			local originalPosition = ContentOriginalPositions[unit] or unit.Position
+			local originalPosition = CardOriginalPositions[unit] or unit.Position
 			local rowKey = originalPosition.Y.Offset
 			if not rows[rowKey] then
 				rows[rowKey] = {}
@@ -2561,7 +2560,7 @@ local function applyVipLayout(card, units)
 	for _, rowKey in ipairs(rowOrder) do
 		local rowHeight = 0
 		for _, unit in ipairs(rows[rowKey]) do
-			local originalPosition = ContentOriginalPositions[unit] or unit.Position
+			local originalPosition = CardOriginalPositions[unit] or unit.Position
 			unit.Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, originalPosition.Y.Scale, nextY)
 			rowHeight = math.max(rowHeight, unit.Size.Y.Offset)
 			visibleUnits += 1
@@ -2570,24 +2569,24 @@ local function applyVipLayout(card, units)
 	end
 
 	if visibleUnits > 0 then
-		local originalSize = ContentOriginalCardSizes[card] or card.Size
+		local originalSize = CardOriginalSizes[card] or card.Size
 		card.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, nextY + 2)
 	end
 	return visibleUnits
 end
 
-refreshCategoryVisibility = function()
+refreshCategoryView = function()
 	for _, card in ipairs(Content:GetChildren()) do
 		if card:IsA("Frame") and card:GetAttribute("HexaContentCard") == true then
-			local units = getCardLayoutUnits(card)
-			restoreContentLayout(card, units)
+			local units = getCardUnits(card)
+			restoreCardLayout(card, units)
 			if CategoryUI.Active ~= "VIP" then fitMobileCard(card, units) end
 			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
-			local visible = false
+			local visible
 			if CategoryUI.Active == "VIP" then
 				-- La categoría VIP reutiliza los controles originales; siguen presentes
 				-- en sus categorías habituales y aquí se muestran solos y ordenados.
-				visible = applyVipLayout(card, units) > 0
+				visible = showVipUnits(card, units) > 0
 			else
 				visible = defaultVisible and CategoryUI:Matches(card)
 			end
@@ -2597,7 +2596,7 @@ refreshCategoryVisibility = function()
 	task.defer(refreshMobileCanvas)
 end
 
-local visibilityRefreshPending = false
+local categoryRefreshPending = false
 Content.DescendantAdded:Connect(function(object)
 	if not UI_READY then return end
 	if object:IsA("TextButton") then
@@ -2605,11 +2604,11 @@ Content.DescendantAdded:Connect(function(object)
 			if object and object.Parent then pcall(registerFunctionButton, object) end
 		end)
 	end
-	if visibilityRefreshPending then return end
-	visibilityRefreshPending = true
+	if categoryRefreshPending then return end
+	categoryRefreshPending = true
 	task.delay(0.20, function()
-		visibilityRefreshPending = false
-		if Content and Content.Parent then refreshCategoryVisibility() end
+		categoryRefreshPending = false
+		if Content and Content.Parent then refreshCategoryView() end
 	end)
 end)
 if MOBILE_DEVICE then
@@ -2619,7 +2618,7 @@ if MOBILE_DEVICE then
 end
 addVipStateListener(function()
 	refreshFavoritesCard()
-	refreshCategoryVisibility()
+	refreshCategoryView()
 end)
 
 end
@@ -5867,7 +5866,7 @@ end)
 UI_READY = true
 task.defer(function()
 	registerAllFunctionButtons()
-	refreshCategoryVisibility()
+	refreshCategoryView()
 end)
 
 if HEXA_IS_VIP then
@@ -7184,7 +7183,7 @@ task.spawn(function()
 		Lang.Set(Lang.Current)
 		task.defer(function()
 			registerAllFunctionButtons()
-			refreshCategoryVisibility()
+			refreshCategoryView()
 		end)
 	end)
 
