@@ -4,7 +4,7 @@ return {
         expires = "permanent"
     },
 
-    ["11486227663"] = { --bober2
+    ["9262387558"] = { --bober2
         vip = true,
         expires = "permanent"
     },
