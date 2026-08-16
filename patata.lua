@@ -25,7 +25,7 @@ local __BootstrapCorner = Instance.new("UICorner")
 __BootstrapCorner.CornerRadius = UDim.new(0, 14)
 __BootstrapCorner.Parent = __BootstrapFrame
 local __BootstrapStroke = Instance.new("UIStroke")
-__BootstrapStroke.Color = Color3.fromRGB(154, 72, 255)
+__BootstrapStroke.Color = Color3.fromRGB(55, 215, 255)
 __BootstrapStroke.Transparency = 0.20
 __BootstrapStroke.Thickness = 2
 __BootstrapStroke.Parent = __BootstrapFrame
@@ -335,7 +335,7 @@ local function refreshVipControls()
 						object.Size = UDim2.new(0, 38, 0, 20)
 						object.Visible = true
 						object.BackgroundTransparency = locked and 0.02 or 0
-						object.BackgroundColor3 = locked and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(24, 18, 32)
+						object.BackgroundColor3 = locked and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(8, 42, 56)
 					elseif isToggleKnob then
 						object.Visible = true
 						object.BackgroundTransparency = 0
@@ -344,7 +344,7 @@ local function refreshVipControls()
 						else
 							local ownerButton = object.Parent and object.Parent.Parent
 							local isActive = ownerButton and ownerButton:GetAttribute("IsActive") == true
-							object.BackgroundColor3 = isActive and Color3.fromRGB(154, 72, 255) or Color3.fromRGB(95, 95, 95)
+							object.BackgroundColor3 = isActive and Color3.fromRGB(55, 215, 255) or Color3.fromRGB(95, 95, 95)
 							object.Position = isActive and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
 						end
 					elseif object:IsA("GuiObject") then
@@ -464,19 +464,19 @@ end
 
 local Theme = {
 	BG = Color3.fromRGB(8, 8, 8),
-	Panel = Color3.fromRGB(17, 14, 22),
+	Panel = Color3.fromRGB(12, 18, 22),
 	Panel2 = Color3.fromRGB(245, 245, 245),
 	Accent = Color3.fromRGB(255, 255, 255),
 	Accent2 = Color3.fromRGB(218, 218, 218),
-	Purple = Color3.fromRGB(154, 72, 255),
-	PurpleDark = Color3.fromRGB(92, 43, 145),
-	PurpleDeep = Color3.fromRGB(38, 20, 57),
-	PurpleText = Color3.fromRGB(213, 177, 255),
+	Purple = Color3.fromRGB(55, 215, 255),
+	PurpleDark = Color3.fromRGB(20, 125, 165),
+	PurpleDeep = Color3.fromRGB(8, 42, 56),
+	PurpleText = Color3.fromRGB(175, 240, 255),
 	TextMain = Color3.fromRGB(245, 245, 245),
 	TextOff = Color3.fromRGB(12, 12, 12),
-	Active = Color3.fromRGB(96, 46, 150),
+	Active = Color3.fromRGB(20, 155, 200),
 	ActiveText = Color3.fromRGB(255, 255, 255),
-	ToggleOn = Color3.fromRGB(154, 72, 255),
+	ToggleOn = Color3.fromRGB(55, 215, 255),
 	ToggleOff = Color3.fromRGB(95, 95, 95),
 	VipGold = Color3.fromRGB(255, 211, 46),
 	Danger = Color3.fromRGB(220, 50, 50),
@@ -672,7 +672,7 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	toggleBg.Name = "ToggleBg"
 	toggleBg.Size = UDim2.new(0, 38, 0, 20)
 	toggleBg.Position = UDim2.new(1, -48, 0.5, -10)
-	toggleBg.BackgroundColor3 = Color3.fromRGB(24, 18, 32)
+	toggleBg.BackgroundColor3 = Color3.fromRGB(8, 42, 56)
 	toggleBg.BorderSizePixel = 0
 	toggleBg.ZIndex = 3
 	toggleBg.Parent = btn
@@ -1898,8 +1898,8 @@ local bgGradient = Instance.new("UIGradient")
 bgGradient.Rotation = 32
 bgGradient.Color = ColorSequence.new({
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 8, 10)),
-	ColorSequenceKeypoint.new(0.52, Color3.fromRGB(18, 14, 24)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(55, 24, 84)),
+	ColorSequenceKeypoint.new(0.52, Color3.fromRGB(10, 25, 31)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 68, 90)),
 })
 bgGradient.Transparency = NumberSequence.new({
 	NumberSequenceKeypoint.new(0, 0.06),
@@ -2247,14 +2247,14 @@ CategoryUI.Title.Parent = CategoryUI.Frame
 
 FunctionSearchBox = Instance.new("TextBox")
 FunctionSearchBox.Name = "HexaFunctionSearch"
-FunctionSearchBox.BackgroundColor3 = Color3.fromRGB(24, 20, 32)
+FunctionSearchBox.BackgroundColor3 = Color3.fromRGB(9, 37, 48)
 FunctionSearchBox.BackgroundTransparency = 0.06
 FunctionSearchBox.BorderSizePixel = 0
 FunctionSearchBox.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 7) or UDim2.new(0, 8, 0, 29)
 FunctionSearchBox.Size = UDim2.new(1, -16, 0, 30)
 FunctionSearchBox.Text = ""
 FunctionSearchBox.PlaceholderText = Lang.Current == "EN" and "SEARCH FUNCTIONS..." or "BUSCAR FUNCIONES..."
-FunctionSearchBox.PlaceholderColor3 = Color3.fromRGB(162, 145, 182)
+FunctionSearchBox.PlaceholderColor3 = Color3.fromRGB(145, 205, 220)
 FunctionSearchBox.TextColor3 = Theme.TextMain
 FunctionSearchBox.TextSize = 10
 FunctionSearchBox.Font = Enum.Font.GothamMedium
@@ -2271,7 +2271,7 @@ FunctionSearchPadding.PaddingLeft = UDim.new(0, 10)
 FunctionSearchPadding.PaddingRight = UDim.new(0, 8)
 FunctionSearchPadding.Parent = FunctionSearchBox
 FunctionSearchBox.Focused:Connect(function()
-	FunctionSearchStroke.Color = Color3.fromRGB(203, 151, 255)
+	FunctionSearchStroke.Color = Color3.fromRGB(120, 235, 255)
 	FunctionSearchStroke.Transparency = 0.04
 	FunctionSearchStroke.Thickness = 2
 end)
@@ -4999,7 +4999,14 @@ task.spawn(function()
 
 		local function setDesktopDroneLook(enabled)
 			if MOBILE_DEVICE then return end
+
+			-- IMPORTANTE: esta función solo puede modificar MouseBehavior cuando
+			-- la cámara libre de H3X4 X realmente posee el control del mouse.
+			-- Antes, soltar RMB podía ejecutar la rama de apagado aun con Drone
+			-- desactivado y forzar MouseBehavior.Default, rompiendo el bloqueo
+			-- de cursor nativo de shooters que usan clic derecho para apuntar.
 			if enabled then
+				if not State.Drone.Active then return end
 				if not State.Drone.MouseLook then
 					State.Drone.SavedMouseBehavior = UserInputService.MouseBehavior
 					State.Drone.SavedMouseIconEnabled = UserInputService.MouseIconEnabled
@@ -5008,19 +5015,20 @@ task.spawn(function()
 				pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition end)
 				pcall(function() UserInputService.MouseIconEnabled = false end)
 			else
+				-- Si H3X4 X no había capturado el mouse, no tocar el estado que
+				-- pertenece al juego. Esto mantiene Shift Lock / RMB camera lock.
+				if not State.Drone.MouseLook then return end
 				State.Drone.MouseLook = false
 				State.Drone.LookDelta = Vector2.zero
 				local savedBehavior = State.Drone.SavedMouseBehavior
 				local savedIcon = State.Drone.SavedMouseIconEnabled
 				State.Drone.SavedMouseBehavior = nil
 				State.Drone.SavedMouseIconEnabled = nil
-				pcall(function()
-					UserInputService.MouseBehavior = savedBehavior or Enum.MouseBehavior.Default
-				end)
+				if savedBehavior ~= nil then
+					pcall(function() UserInputService.MouseBehavior = savedBehavior end)
+				end
 				if savedIcon ~= nil then
 					pcall(function() UserInputService.MouseIconEnabled = savedIcon end)
-				else
-					pcall(function() UserInputService.MouseIconEnabled = true end)
 				end
 			end
 		end
@@ -5713,7 +5721,8 @@ task.spawn(function()
 		end)
 
 		connect(UserInputService.InputEnded, function(input)
-			if not MOBILE_DEVICE and input.UserInputType == Enum.UserInputType.MouseButton2 then
+			if not MOBILE_DEVICE and input.UserInputType == Enum.UserInputType.MouseButton2
+				and State.Drone.Active and State.Drone.MouseLook then
 				setDesktopDroneLook(false)
 			end
 			if input == State.Drone.LookTouch then
