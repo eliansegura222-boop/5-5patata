@@ -33,7 +33,7 @@ local __BootstrapTitle = Instance.new("TextLabel")
 __BootstrapTitle.BackgroundTransparency = 1
 __BootstrapTitle.Position = UDim2.new(0, 14, 0, 12)
 __BootstrapTitle.Size = UDim2.new(1, -28, 0, 24)
-__BootstrapTitle.Text = "H4SK"
+__BootstrapTitle.Text = "H3X4 X"
 __BootstrapTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 __BootstrapTitle.TextSize = 16
 __BootstrapTitle.Font = Enum.Font.GothamBold
@@ -303,6 +303,19 @@ local function refreshVipControls()
 	local locked = not HEXA_IS_VIP
 	for _, control in ipairs(VipControls) do
 		if control and control.Parent then
+			-- Los botones VIP de tipo toggle deben conservar EXACTAMENTE la misma geometría
+			-- que los toggles normales, incluso después de refrescar el estado VIP.
+			if control:IsA("TextButton") and control:GetAttribute("IsToggle") == true then
+				local padding = control:FindFirstChildOfClass("UIPadding")
+				if padding then padding.PaddingRight = UDim.new(0, 0) end
+				local toggleBg = control:FindFirstChild("ToggleBg")
+				if toggleBg then
+					toggleBg.Position = UDim2.new(1, -48, 0.5, -10)
+					toggleBg.Size = UDim2.new(0, 38, 0, 20)
+					toggleBg.Visible = true
+				end
+			end
+
 			local objects = {control}
 			for _, child in ipairs(control:GetDescendants()) do
 				table.insert(objects, child)
@@ -720,15 +733,26 @@ local function markVipControl(control: GuiObject)
 		local badgeStroke = mkStroke(badge, Color3.fromRGB(70, 70, 70), 0.35, 1)
 		badgeStroke.Name = "HexaVipBadgeStroke"
 
-		-- Reservar espacio para que el texto nunca quede debajo de la insignia VIP.
+		-- IMPORTANTE: en los toggles VIP NO usamos PaddingRight.
+		-- UIPadding modifica el área interna del botón y desplazaba ToggleBg hacia la izquierda,
+		-- haciendo que el interruptor VIP no coincidiera con el de una función normal.
 		local padding = control:FindFirstChildOfClass("UIPadding")
 		if not padding then
 			padding = Instance.new("UIPadding")
 			padding.Parent = control
 		end
-		local requiredRightPadding = isToggle and 108 or 54
-		if padding.PaddingRight.Offset < requiredRightPadding then
-			padding.PaddingRight = UDim.new(0, requiredRightPadding)
+		if isToggle then
+			padding.PaddingRight = UDim.new(0, 0)
+			local toggleBg = control:FindFirstChild("ToggleBg")
+			if toggleBg then
+				toggleBg.Position = UDim2.new(1, -48, 0.5, -10)
+				toggleBg.Size = UDim2.new(0, 38, 0, 20)
+				toggleBg.Visible = true
+			end
+		else
+			if padding.PaddingRight.Offset < 54 then
+				padding.PaddingRight = UDim.new(0, 54)
+			end
 		end
 		control.TextTruncate = Enum.TextTruncate.AtEnd
 	end
@@ -1463,7 +1487,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"GLITCH", "GLITCH"},
 	{"CAÍDA", "DROP"},
 	{"EXPLOSIÓN", "BURST"},
-	{"H4SK - SISTEMA DE CLAVE", "H4SK - KEY SYSTEM"},
+	{"H3X4 X - SISTEMA DE CLAVE", "H3X4 X - KEY SYSTEM"},
 	{"Escribe la clave aquí...", "Enter the key here..."},
 	{"Escribe la clave o código VIP...", "Enter the key or VIP code..."},
 	{"Escribe la key", "Enter the key"},
@@ -1473,10 +1497,10 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"¡Clave incorrecta!", "Incorrect key!"},
 	{"¡COPIADO!", "COPIED!"},
 	{"Por Nony", "By Nony"},
-	{"H4SK  •  POR NONY", "H4SK  •  BY NONY"},
-	{"H4SK - TUTORIAL", "H4SK - TUTORIAL"},
+	{"H3X4 X  •  POR NONY", "H3X4 X  •  BY NONY"},
+	{"H3X4 X - TUTORIAL", "H3X4 X - TUTORIAL"},
 	{"ENTENDIDO", "GOT IT"},
-	{"¿CERRAR H4SK?", "CLOSE H4SK?"},
+	{"¿CERRAR H3X4 X?", "CLOSE H3X4 X?"},
 	{"CANCELAR", "CANCEL"},
 	{"SÍ", "YES"},
 	{"PRESIONA UNA TECLA...", "PRESS A KEY..."},
@@ -1736,7 +1760,7 @@ local KeyTitle = Instance.new("TextLabel")
 KeyTitle.BackgroundTransparency = 1
 KeyTitle.Size = UDim2.new(1, -58, 0, 40)
 KeyTitle.Position = UDim2.new(0, 56, 0, 10)
-KeyTitle.Text = "H4SK - SISTEMA DE CLAVE"
+KeyTitle.Text = "H3X4 X - SISTEMA DE CLAVE"
 KeyTitle.TextColor3 = Theme.TextMain
 KeyTitle.TextSize = 16
 KeyTitle.Font = Enum.Font.GothamBold
@@ -1853,7 +1877,7 @@ local Title = Instance.new("TextLabel")
 Title.BackgroundTransparency = 1
 Title.Position = UDim2.new(0, 59, 0, 5)
 Title.Size = UDim2.new(1, -244, 0, 30)
-Title.Text = "H4SK"
+Title.Text = "H3X4 X"
 Title.TextColor3 = Theme.TextMain
 Title.TextSize = 18
 Title.Font = Enum.Font.GothamBold
@@ -3195,7 +3219,7 @@ local ConfirmTitle = Instance.new("TextLabel")
 ConfirmTitle.BackgroundTransparency = 1
 ConfirmTitle.Size = UDim2.new(1, -24, 0, 42)
 ConfirmTitle.Position = UDim2.new(0, 12, 0, 18)
-ConfirmTitle.Text = "¿CERRAR H4SK?"
+ConfirmTitle.Text = "¿CERRAR H3X4 X?"
 ConfirmTitle.TextColor3 = Theme.TextMain
 ConfirmTitle.TextSize = 15
 ConfirmTitle.Font = Enum.Font.GothamBold
@@ -3203,11 +3227,11 @@ ConfirmTitle.ZIndex = 51
 ConfirmTitle.Parent = ConfirmFrame
 
 local YesBtn = neonButton(ConfirmFrame, "SÍ", UDim2.new(0, 110, 0, 38), UDim2.new(0.5, -116, 1, -56), 51)
-YesBtn.BackgroundColor3 = Theme.Danger
+YesBtn.BackgroundColor3 = Theme.PurpleDeep
 YesBtn.TextColor3 = BUTTON_TEXT_COLOR
 
 local NoBtn = neonButton(ConfirmFrame, "CANCELAR", UDim2.new(0, 110, 0, 38), UDim2.new(0.5, 6, 1, -56), 51)
-NoBtn.BackgroundColor3 = Theme.Panel2
+NoBtn.BackgroundColor3 = Theme.PurpleDeep
 NoBtn.TextColor3 = BUTTON_TEXT_COLOR
 
 local Tutorial = {}
@@ -3246,7 +3270,7 @@ Tutorial.Title = Instance.new("TextLabel")
 Tutorial.Title.BackgroundTransparency = 1
 Tutorial.Title.Size = UDim2.new(1, -24, 1, 0)
 Tutorial.Title.Position = UDim2.new(0, 12, 0, 0)
-Tutorial.Title.Text = "H4SK - TUTORIAL"
+Tutorial.Title.Text = "H3X4 X - TUTORIAL"
 Tutorial.Title.TextColor3 = Theme.TextMain
 Tutorial.Title.TextSize = 16
 Tutorial.Title.Font = Enum.Font.GothamBold
@@ -6150,7 +6174,7 @@ GetKeyBtn.MouseButton1Click:Connect(function()
 
 	vipNotificationGeneration += 1
 	local generation = vipNotificationGeneration
-	VipNotificationTitle.Text = "H4SK"
+	VipNotificationTitle.Text = "H3X4 X"
 	VipNotificationTitle.TextColor3 = Theme.PurpleText
 	VipNotificationText.Text = Lang.Current == "EN" and "Copied successfully, go to the #🔑・key channel" or "Copiado correctamente, ve Al canal #🔑・key"
 	tween(VipNotification, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -7394,7 +7418,7 @@ task.spawn(function()
 			VipProfileBadge.Visible = not self.Streamer
 			if OwnerVipButton then OwnerVipButton.Visible = not self.Streamer end
 			if OwnerFrame and self.Streamer then OwnerFrame.Visible = false end
-			if self.Watermark then self.Watermark.Text = self.Streamer and "H4SK" or "H4SK  •  POR NONY" end
+			if self.Watermark then self.Watermark.Text = self.Streamer and "H3X4 X" or "H3X4 X  •  POR NONY" end
 		end
 
 		function X:setupPersonalization()
@@ -7436,7 +7460,7 @@ task.spawn(function()
 			self.Watermark.BackgroundColor3 = Theme.Panel2
 			self.Watermark.BackgroundTransparency = 0.2
 			self.Watermark.BorderSizePixel = 0
-			self.Watermark.Text = "H4SK  •  POR NONY"
+			self.Watermark.Text = "H3X4 X  •  POR NONY"
 			self.Watermark.TextColor3 = Theme.TextOff
 			self.Watermark.TextSize = 11
 			self.Watermark.Font = Enum.Font.GothamBold
@@ -7753,7 +7777,7 @@ else
 			__BootstrapFrame.Parent = __BootstrapGui
 		end
 		__BootstrapFrame.Size = UDim2.new(0, 320, 0, 180)
-		__BootstrapTitle.Text = "ERROR AL ABRIR H4SK"
+		__BootstrapTitle.Text = "ERROR AL ABRIR H3X4 X"
 		__BootstrapTitle.TextColor3 = Color3.fromRGB(255, 90, 90)
 		__BootstrapText.Position = UDim2.new(0, 14, 0, 42)
 		__BootstrapText.Size = UDim2.new(1, -28, 1, -54)
