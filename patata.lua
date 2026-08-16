@@ -1612,28 +1612,19 @@ mkCorner(KeyFrame, 16)
 mkStroke(KeyFrame, Theme.Purple, 0.10, 2)
 makeDraggable(KeyFrame, KeyFrame)
 
-local KeyHeaderLeftImage = Instance.new("ImageLabel")
-KeyHeaderLeftImage.Name = "KeyHeaderLeftImage"
-KeyHeaderLeftImage.BackgroundTransparency = 1
-KeyHeaderLeftImage.Size = UDim2.fromOffset(22, 22)
-KeyHeaderLeftImage.Position = UDim2.new(0, 18, 0, 18)
-KeyHeaderLeftImage.Image = "rbxassetid://116156526141133"
-KeyHeaderLeftImage.ScaleType = Enum.ScaleType.Fit
-KeyHeaderLeftImage.Parent = KeyFrame
-
 local KeyHeaderLogo = Instance.new("ImageLabel")
 KeyHeaderLogo.Name = "KeyHeaderLogo"
 KeyHeaderLogo.BackgroundTransparency = 1
 KeyHeaderLogo.Size = UDim2.fromOffset(28, 28)
-KeyHeaderLogo.Position = UDim2.new(0, 44, 0, 15)
+KeyHeaderLogo.Position = UDim2.new(0, 18, 0, 15)
 KeyHeaderLogo.Image = "rbxassetid://89867346084011"
 KeyHeaderLogo.ScaleType = Enum.ScaleType.Fit
 KeyHeaderLogo.Parent = KeyFrame
 
 local KeyTitle = Instance.new("TextLabel")
 KeyTitle.BackgroundTransparency = 1
-KeyTitle.Size = UDim2.new(1, -84, 0, 40)
-KeyTitle.Position = UDim2.new(0, 84, 0, 10)
+KeyTitle.Size = UDim2.new(1, -58, 0, 40)
+KeyTitle.Position = UDim2.new(0, 56, 0, 10)
 KeyTitle.Text = "H4SK - SISTEMA DE CLAVE"
 KeyTitle.TextColor3 = Theme.TextMain
 KeyTitle.TextSize = 16
@@ -1737,21 +1728,11 @@ HeaderGlow.Size = UDim2.new(1, 0, 0, 2)
 HeaderGlow.Position = UDim2.new(0, 0, 1, -2)
 HeaderGlow.Parent = Header
 
-local HeaderLeftImage = Instance.new("ImageLabel")
-HeaderLeftImage.Name = "HeaderLeftImage"
-HeaderLeftImage.BackgroundTransparency = 1
-HeaderLeftImage.Size = UDim2.fromOffset(22, 22)
-HeaderLeftImage.Position = UDim2.new(0, 16, 0, 9)
-HeaderLeftImage.Image = "rbxassetid://116156526141133"
-HeaderLeftImage.ScaleType = Enum.ScaleType.Fit
-HeaderLeftImage.ZIndex = 5
-HeaderLeftImage.Parent = Header
-
 local HeaderLogo = Instance.new("ImageLabel")
 HeaderLogo.Name = "HeaderLogo"
 HeaderLogo.BackgroundTransparency = 1
 HeaderLogo.Size = UDim2.fromOffset(28, 28)
-HeaderLogo.Position = UDim2.new(0, 42, 0, 5)
+HeaderLogo.Position = UDim2.new(0, 16, 0, 5)
 HeaderLogo.Image = "rbxassetid://89867346084011"
 HeaderLogo.ScaleType = Enum.ScaleType.Fit
 HeaderLogo.ZIndex = 5
@@ -1759,8 +1740,8 @@ HeaderLogo.Parent = Header
 
 local Title = Instance.new("TextLabel")
 Title.BackgroundTransparency = 1
-Title.Position = UDim2.new(0, 86, 0, 5)
-Title.Size = UDim2.new(1, -278, 0, 30)
+Title.Position = UDim2.new(0, 52, 0, 5)
+Title.Size = UDim2.new(1, -244, 0, 30)
 Title.Text = "H4SK"
 Title.TextColor3 = Theme.TextMain
 Title.TextSize = 18
@@ -1774,8 +1755,8 @@ do
 	local subtitle = Instance.new("TextLabel")
 	subtitle.Name = "HexaUniversalSubtitle"
 	subtitle.BackgroundTransparency = 1
-	subtitle.Position = UDim2.new(0, 86, 0, 32)
-	subtitle.Size = UDim2.new(1, -278, 0, 18)
+	subtitle.Position = UDim2.new(0, 52, 0, 32)
+	subtitle.Size = UDim2.new(1, -244, 0, 18)
 	subtitle.Text = "UNIVERSAL"
 	subtitle.TextColor3 = Theme.TextMain
 	subtitle.TextTransparency = 0.48
@@ -1817,9 +1798,9 @@ Lang.Set(Lang.Current)
 local OwnerVipButton = nil
 local OwnerFrame = nil
 if HEXA_IS_OWNER then
-	Title.Size = UDim2.new(1, -342, 0, 30)
+	Title.Size = UDim2.new(1, -308, 0, 30)
 	if Header:FindFirstChild("HexaUniversalSubtitle") then
-		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -342, 0, 18)
+		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -308, 0, 18)
 	end
 	OwnerVipButton = neonButton(Header, "★ VIP", UDim2.new(0, 58, 0, 34), UDim2.new(1, -246, 0, 12), 4)
 	OwnerVipButton.TextColor3 = BUTTON_TEXT_COLOR
@@ -2005,7 +1986,7 @@ RestoreOrb.Position = UDim2.new(0, 18, 0.2, 0)
 RestoreOrb.BackgroundColor3 = Theme.Panel2
 RestoreOrb.BackgroundTransparency = 1 
 RestoreOrb.BorderSizePixel = 0
-RestoreOrb.Image = "rbxassetid://123138803129747" 
+RestoreOrb.Image = "rbxassetid://89867346084011" 
 RestoreOrb.ScaleType = Enum.ScaleType.Fit
 RestoreOrb.AutoButtonColor = false
 RestoreOrb.Parent = ScreenGui
