@@ -5239,8 +5239,10 @@ task.spawn(function()
 				destroyHighlights()
 				return
 			end
-			local createdHighlights = 0
-			local creationLimit = 2
+
+			-- Crear/actualizar TODOS los highlights en esta misma actualización.
+			-- No limitar la cantidad por ciclo: al activar ESP HIGHLIGHT debe
+			-- aparecer instantáneamente en todos los jugadores válidos.
 			for _, player in ipairs(Runtime.playerSnapshot) do
 				if player ~= LocalPlayer then
 					local character = player.Character
@@ -5248,7 +5250,6 @@ task.spawn(function()
 					local highlight = State.HighlightCache[player]
 					if allowed then
 						if not highlight or not highlight.Parent then
-							if createdHighlights >= creationLimit then continue end
 							highlight = Instance.new("Highlight")
 							highlight.Name = "HexaESPHighlight"
 							highlight.FillColor = Color3.fromRGB(255, 0, 0)
@@ -5258,7 +5259,6 @@ task.spawn(function()
 							highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 							highlight.Parent = ScreenGui
 							State.HighlightCache[player] = highlight
-							createdHighlights += 1
 						end
 						highlight.Adornee = character
 						highlight.Enabled = true
