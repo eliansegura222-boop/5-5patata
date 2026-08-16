@@ -1074,20 +1074,20 @@ VipNotification.Name = "HexaVipNotification"
 VipNotification.AnchorPoint = Vector2.new(0.5, 0)
 VipNotification.Position = UDim2.new(0.5, 0, 0, -100)
 VipNotification.Size = UDim2.fromOffset(math.min(390, GUI_VIEWPORT_SIZE.X - 16), 82)
-VipNotification.BackgroundColor3 = Color3.fromRGB(20, 20, 18)
+VipNotification.BackgroundColor3 = Theme.PurpleDeep
 VipNotification.BackgroundTransparency = 0.04
 VipNotification.BorderSizePixel = 0
 VipNotification.ZIndex = 200
 VipNotification.Parent = ScreenGui
 mkCorner(VipNotification, 13)
-mkStroke(VipNotification, Color3.fromRGB(255, 211, 46), 0.08, 2)
+mkStroke(VipNotification, Theme.Purple, 0.03, 2)
 
 local VipNotificationTitle = Instance.new("TextLabel")
 VipNotificationTitle.BackgroundTransparency = 1
 VipNotificationTitle.Position = UDim2.new(0, 14, 0, 10)
 VipNotificationTitle.Size = UDim2.new(1, -28, 0, 20)
 VipNotificationTitle.Text = "★ FUNCIÓN VIP"
-VipNotificationTitle.TextColor3 = Color3.fromRGB(255, 211, 46)
+VipNotificationTitle.TextColor3 = Theme.PurpleText
 VipNotificationTitle.TextSize = 13
 VipNotificationTitle.Font = Enum.Font.GothamBold
 VipNotificationTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -1115,7 +1115,7 @@ notifyVipLocked = function(customTextEs, customTextEn)
 	vipNotificationGeneration += 1
 	local generation = vipNotificationGeneration
 	VipNotificationTitle.Text = Lang.Current == "EN" and "★ VIP FEATURE" or "★ FUNCIÓN VIP"
-	VipNotificationTitle.TextColor3 = Color3.fromRGB(255, 211, 46)
+	VipNotificationTitle.TextColor3 = Theme.PurpleText
 	VipNotificationText.Text = Lang.Current == "EN"
 		and (customTextEn or "Join the Discord to learn how to obtain VIP.")
 		or (customTextEs or "Únete al Discord para saber cómo obtener VIP.")
@@ -2182,6 +2182,7 @@ function CategoryUI:RefreshButtons()
 	for key, button in pairs(self.Buttons) do
 		local selected = key == self.Active
 		button:SetAttribute("IsActive", selected)
+		button:SetAttribute("HexaCategorySelected", selected)
 		button.BackgroundColor3 = selected and Theme.PurpleDark or Theme.Panel2
 		button.BackgroundTransparency = selected and 0.04 or 1
 		button.TextColor3 = selected and Theme.PurpleText or BUTTON_TEXT_COLOR
@@ -2257,7 +2258,12 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	label.Parent = button
 	label:SetAttribute("BaseText", definition.Label)
 
-	addHover(button, Theme.Panel2, Theme.Panel2, Theme.Panel2)
+	addHover(button, Theme.Panel2, Theme.PurpleDeep, Theme.PurpleDark)
+	button:GetPropertyChangedSignal("BackgroundColor3"):Connect(function()
+		if button:GetAttribute("HexaCategorySelected") == true and button.BackgroundColor3 ~= Theme.PurpleDark then
+			button.BackgroundColor3 = Theme.PurpleDark
+		end
+	end)
 	button.MouseButton1Click:Connect(function()
 		CategoryUI:Select(definition.Key)
 	end)
@@ -2895,7 +2901,7 @@ ConfirmFrame.ClipsDescendants = true
 ConfirmFrame.ZIndex = 50
 ConfirmFrame.Parent = ScreenGui
 mkCorner(ConfirmFrame, 16)
-mkStroke(ConfirmFrame, Theme.Danger, 0.35, 2)
+mkStroke(ConfirmFrame, Theme.Purple, 0.05, 2)
 
 local ConfirmTitle = Instance.new("TextLabel")
 ConfirmTitle.BackgroundTransparency = 1
