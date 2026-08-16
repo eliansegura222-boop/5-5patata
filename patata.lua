@@ -300,19 +300,94 @@ local function addVipStateListener(callback)
 end
 
 local function refreshVipControls()
+	local locked = not HEXA_IS_VIP
 	for _, control in ipairs(VipControls) do
 		if control and control.Parent then
-			local locked = not HEXA_IS_VIP
-			if control:IsA("TextButton") then
-				control.BackgroundColor3 = locked and Color3.fromRGB(70, 65, 45) or Color3.fromRGB(245, 245, 245)
-				control.TextColor3 = BUTTON_TEXT_COLOR
-			else
-				for _, child in ipairs(control:GetDescendants()) do
-					if child:IsA("TextLabel") and child.Name ~= "HexaVipBadge" and child.Name ~= "HexaSliderValue" then
-						child.TextColor3 = locked and Color3.fromRGB(145, 145, 140) or Color3.fromRGB(245, 245, 245)
+			local objects = {control}
+			for _, child in ipairs(control:GetDescendants()) do
+				table.insert(objects, child)
+			end
+
+			for _, object in ipairs(objects) do
+				local isVipBadge = string.find(object.Name, "HexaVipBadge", 1, true) == 1
+				local isVipGlow = object.Name == "HexaVipGlowOuter" or object.Name == "HexaVipGlowInner"
+				if not isVipBadge then
+					-- Mantener siempre visibles los interruptores de ACTIVADO/DESACTIVADO.
+					local isToggleBg = object.Name == "ToggleBg" and object:IsA("GuiObject")
+					local isToggleKnob = object.Name == "ToggleKnob" and object:IsA("GuiObject")
+
+					if isToggleBg then
+						-- El toggle siempre permanece exactamente en su posición original.
+						object.Position = UDim2.new(1, -48, 0.5, -10)
+						object.Size = UDim2.new(0, 38, 0, 20)
+						object.Visible = true
+						object.BackgroundTransparency = locked and 0.02 or 0
+						object.BackgroundColor3 = locked and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(24, 18, 32)
+					elseif isToggleKnob then
+						object.Visible = true
+						object.BackgroundTransparency = 0
+						if locked then
+							object.BackgroundColor3 = Color3.fromRGB(112, 112, 112)
+						else
+							local ownerButton = object.Parent and object.Parent.Parent
+							local isActive = ownerButton and ownerButton:GetAttribute("IsActive") == true
+							object.BackgroundColor3 = isActive and Color3.fromRGB(154, 72, 255) or Color3.fromRGB(95, 95, 95)
+							object.Position = isActive and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+						end
+					elseif object:IsA("GuiObject") then
+						if object:GetAttribute("HexaVipOrigBg") == nil then
+							object:SetAttribute("HexaVipOrigBg", object.BackgroundColor3)
+							object:SetAttribute("HexaVipOrigBgTransparency", object.BackgroundTransparency)
+						end
+						if locked then
+							if object.BackgroundTransparency < 0.98 then
+								object.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+							end
+						else
+							local originalBg = object:GetAttribute("HexaVipOrigBg")
+							local originalTransparency = object:GetAttribute("HexaVipOrigBgTransparency")
+							if typeof(originalBg) == "Color3" then object.BackgroundColor3 = originalBg end
+							if typeof(originalTransparency) == "number" then object.BackgroundTransparency = originalTransparency end
+						end
+					end
+
+					if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+						if object:GetAttribute("HexaVipOrigTextColor") == nil then
+							object:SetAttribute("HexaVipOrigTextColor", object.TextColor3)
+						end
+						if locked then
+							object.TextColor3 = Color3.fromRGB(150, 150, 150)
+						else
+							local originalTextColor = object:GetAttribute("HexaVipOrigTextColor")
+							if typeof(originalTextColor) == "Color3" then object.TextColor3 = originalTextColor end
+						end
+					end
+
+					if object:IsA("UIStroke") then
+						if isVipGlow then
+							-- El neón identifica la función bloqueada; al tener VIP desaparece.
+							if object:GetAttribute("HexaVipOrigStrokeTransparency") == nil then
+								object:SetAttribute("HexaVipOrigStrokeTransparency", object.Transparency)
+							end
+							local originalGlowTransparency = object:GetAttribute("HexaVipOrigStrokeTransparency")
+							object.Transparency = locked and (typeof(originalGlowTransparency) == "number" and originalGlowTransparency or 0.1) or 1
+						else
+							if object:GetAttribute("HexaVipOrigStrokeColor") == nil then
+								object:SetAttribute("HexaVipOrigStrokeColor", object.Color)
+							end
+							if locked then
+								object.Color = Color3.fromRGB(45, 45, 45)
+							else
+								local originalStrokeColor = object:GetAttribute("HexaVipOrigStrokeColor")
+								if typeof(originalStrokeColor) == "Color3" then object.Color = originalStrokeColor end
+							end
+						end
 					end
 				end
 			end
+
+			local badge = control:FindFirstChild("HexaVipBadge")
+			if badge and badge:IsA("GuiObject") then badge.Visible = locked end
 		end
 	end
 end
@@ -376,17 +451,17 @@ end
 
 local Theme = {
 	BG = Color3.fromRGB(8, 8, 8),
-	Panel = Color3.fromRGB(16, 16, 16),
+	Panel = Color3.fromRGB(17, 14, 22),
 	Panel2 = Color3.fromRGB(245, 245, 245),
 	Accent = Color3.fromRGB(255, 255, 255),
 	Accent2 = Color3.fromRGB(218, 218, 218),
 	Purple = Color3.fromRGB(154, 72, 255),
-	PurpleDark = Color3.fromRGB(82, 34, 128),
-	PurpleDeep = Color3.fromRGB(45, 18, 70),
+	PurpleDark = Color3.fromRGB(92, 43, 145),
+	PurpleDeep = Color3.fromRGB(38, 20, 57),
 	PurpleText = Color3.fromRGB(213, 177, 255),
 	TextMain = Color3.fromRGB(245, 245, 245),
 	TextOff = Color3.fromRGB(12, 12, 12),
-	Active = Color3.fromRGB(82, 34, 128),
+	Active = Color3.fromRGB(96, 46, 150),
 	ActiveText = Color3.fromRGB(255, 255, 255),
 	ToggleOn = Color3.fromRGB(154, 72, 255),
 	ToggleOff = Color3.fromRGB(95, 95, 95),
@@ -423,6 +498,7 @@ local refreshCategoryView = function() end
 local refreshFavoritesCard = function() end
 local registerFunctionButton = function() end
 local registerAllFunctionButtons = function() end
+local FunctionSearchBox = nil
 
 local function mkCorner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -495,8 +571,8 @@ local function addHover(button: TextButton, idleBg: Color3, hoverBg: Color3, act
 	local ti = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 	button.MouseEnter:Connect(function()
 		if button:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
-			if PERFORMANCE_MODE then button.BackgroundColor3 = Color3.fromRGB(52, 47, 24)
-			else tween(button, ti, {BackgroundColor3 = Color3.fromRGB(52, 47, 24)}) end
+			if PERFORMANCE_MODE then button.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+			else tween(button, ti, {BackgroundColor3 = Color3.fromRGB(18, 18, 18)}) end
 			return
 		end
 		local isToggle = button:GetAttribute("IsToggle")
@@ -513,8 +589,8 @@ local function addHover(button: TextButton, idleBg: Color3, hoverBg: Color3, act
 	end)
 	button.MouseLeave:Connect(function()
 		if button:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
-			if PERFORMANCE_MODE then button.BackgroundColor3 = Color3.fromRGB(70, 65, 45)
-			else tween(button, ti, {BackgroundColor3 = Color3.fromRGB(70, 65, 45)}) end
+			if PERFORMANCE_MODE then button.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+			else tween(button, ti, {BackgroundColor3 = Color3.fromRGB(12, 12, 12)}) end
 			return
 		end
 		local isToggle = button:GetAttribute("IsToggle")
@@ -534,8 +610,8 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	local btn = Instance.new("TextButton")
 	btn.Size = size
 	btn.Position = pos
-	btn.BackgroundColor3 = Theme.Panel2
-	btn.BackgroundTransparency = 1
+	btn.BackgroundColor3 = Theme.PurpleDeep
+	btn.BackgroundTransparency = 0.14
 	btn.Text = text
 	btn.TextColor3 = BUTTON_TEXT_COLOR
 	btn.TextSize = 12
@@ -544,11 +620,11 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	btn.BorderSizePixel = 0
 	btn.ZIndex = z or 2
 	btn.Parent = parent
-	mkCorner(btn, 10)
-	local stroke = mkStroke(btn, Theme.Accent, 0.4, 1)
+	mkCorner(btn, 12)
+	local stroke = mkStroke(btn, Theme.Purple, 0.36, 1)
 	btn:SetAttribute("BaseText", text)
 	btn:SetAttribute("IsActive", false)
-	addHover(btn, Theme.Panel2, Theme.Accent2, Theme.Active)
+	addHover(btn, Theme.PurpleDeep, Theme.PurpleDark, Theme.Active)
 	if UI_READY then
 		task.defer(function()
 			if btn and btn.Parent then registerFunctionButton(btn) end
@@ -561,8 +637,8 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	local btn = Instance.new("TextButton")
 	btn.Size = size
 	btn.Position = pos
-	btn.BackgroundColor3 = Theme.Panel2
-	btn.BackgroundTransparency = 1
+	btn.BackgroundColor3 = Theme.PurpleDeep
+	btn.BackgroundTransparency = 0.14
 	btn.Text = text
 	btn.TextColor3 = BUTTON_TEXT_COLOR
 	btn.TextSize = 12
@@ -572,8 +648,8 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	btn.BorderSizePixel = 0
 	btn.ZIndex = 2
 	btn.Parent = parent
-	mkCorner(btn, 10)
-	mkStroke(btn, Theme.Accent, 0.4, 1)
+	mkCorner(btn, 12)
+	mkStroke(btn, Theme.Purple, 0.36, 1)
 	
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, 16)
@@ -581,13 +657,14 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 
 	local toggleBg = Instance.new("Frame")
 	toggleBg.Name = "ToggleBg"
-	toggleBg.Size = UDim2.new(0, 40, 0, 20)
-	toggleBg.Position = UDim2.new(1, -50, 0.5, -10)
-	toggleBg.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	toggleBg.Size = UDim2.new(0, 38, 0, 20)
+	toggleBg.Position = UDim2.new(1, -48, 0.5, -10)
+	toggleBg.BackgroundColor3 = Color3.fromRGB(24, 18, 32)
 	toggleBg.BorderSizePixel = 0
 	toggleBg.ZIndex = 3
 	toggleBg.Parent = btn
 	mkCorner(toggleBg, 10)
+	mkStroke(toggleBg, Theme.Purple, 0.58, 1)
 
 	local toggleKnob = Instance.new("Frame")
 	toggleKnob.Name = "ToggleKnob"
@@ -603,7 +680,7 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	btn:SetAttribute("IsActive", false)
 	btn:SetAttribute("IsToggle", true)
 	
-	addHover(btn, Theme.Panel2, Theme.Accent2, Theme.Active)
+	addHover(btn, Theme.PurpleDeep, Theme.PurpleDark, Theme.Active)
 	if UI_READY then
 		task.defer(function()
 			if btn and btn.Parent then registerFunctionButton(btn) end
@@ -617,23 +694,44 @@ local function markVipControl(control: GuiObject)
 	control:SetAttribute("HexaVipOnly", true)
 	table.insert(VipControls, control)
 
-	local badge = Instance.new("TextLabel")
-	badge.Name = "HexaVipBadge"
-	badge.AnchorPoint = Vector2.new(1, 0.5)
-	badge.Position = UDim2.new(1, control:IsA("TextButton") and -58 or -4, 0.5, 0)
-	badge.Size = UDim2.new(0, 50, 0, 18)
-	badge.BackgroundColor3 = Color3.fromRGB(65, 52, 10)
-	badge.BackgroundTransparency = 0.05
-	badge.BorderSizePixel = 0
-	badge.Text = "★ VIP"
-	badge.TextColor3 = Color3.fromRGB(255, 211, 46)
-	badge.TextSize = 10
-	badge.Font = Enum.Font.GothamBold
-	badge.ZIndex = math.max(control.ZIndex + 4, 8)
-	badge.Active = false
-	badge.Parent = control
-	mkCorner(badge, 7)
-	mkStroke(badge, Color3.fromRGB(255, 211, 46), 0.25, 1)
+	-- Las barras deslizantes siguen siendo VIP y se bloquean normalmente,
+	-- pero no muestran insignia para no tapar el valor ni la barra.
+	if control:IsA("TextButton") then
+		local isToggle = control:GetAttribute("IsToggle") == true
+
+		local badge = Instance.new("TextLabel")
+		badge.Name = "HexaVipBadge"
+		badge.AnchorPoint = Vector2.new(1, 0.5)
+		-- El toggle NO se mueve. La insignia se coloca justo antes de él, con separación visual.
+		badge.Position = isToggle and UDim2.new(1, -58, 0.5, 0) or UDim2.new(1, -8, 0.5, 0)
+		badge.Size = UDim2.fromOffset(40, 18)
+		badge.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+		badge.BackgroundTransparency = 0.04
+		badge.BorderSizePixel = 0
+		badge.Text = "★ VIP"
+		badge.TextColor3 = Color3.fromRGB(215, 215, 215)
+		badge.TextStrokeTransparency = 1
+		badge.TextSize = 9
+		badge.Font = Enum.Font.GothamBold
+		badge.ZIndex = math.max(control.ZIndex + 4, 8)
+		badge.Active = false
+		badge.Parent = control
+		mkCorner(badge, 7)
+		local badgeStroke = mkStroke(badge, Color3.fromRGB(70, 70, 70), 0.35, 1)
+		badgeStroke.Name = "HexaVipBadgeStroke"
+
+		-- Reservar espacio para que el texto nunca quede debajo de la insignia VIP.
+		local padding = control:FindFirstChildOfClass("UIPadding")
+		if not padding then
+			padding = Instance.new("UIPadding")
+			padding.Parent = control
+		end
+		local requiredRightPadding = isToggle and 108 or 54
+		if padding.PaddingRight.Offset < requiredRightPadding then
+			padding.PaddingRight = UDim.new(0, requiredRightPadding)
+		end
+		control.TextTruncate = Enum.TextTruncate.AtEnd
+	end
 
 	refreshVipControls()
 	return control
@@ -654,14 +752,23 @@ local function setActive(button: TextButton, active: boolean)
 	if isToggle then
 		local toggleBg = button:FindFirstChild("ToggleBg")
 		if toggleBg then
+			toggleBg.Visible = true
 			local toggleKnob = toggleBg:FindFirstChild("ToggleKnob")
-			local targetPosition = active and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
-			local targetColor = active and Theme.ToggleOn or Theme.ToggleOff
-			if PERFORMANCE_MODE then
-				toggleKnob.Position = targetPosition
-				toggleKnob.BackgroundColor3 = targetColor
-			else
-				tween(toggleKnob, ti, {Position = targetPosition, BackgroundColor3 = targetColor})
+			if toggleKnob then
+				toggleKnob.Visible = true
+				local lockedVip = button:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP
+				local targetPosition = active and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+				local targetColor = lockedVip and Color3.fromRGB(112, 112, 112) or (active and Theme.ToggleOn or Theme.ToggleOff)
+				if lockedVip then
+					toggleBg.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+					toggleBg.BackgroundTransparency = 0.02
+				end
+				if PERFORMANCE_MODE then
+					toggleKnob.Position = targetPosition
+					toggleKnob.BackgroundColor3 = targetColor
+				else
+					tween(toggleKnob, ti, {Position = targetPosition, BackgroundColor3 = targetColor})
+				end
 			end
 		end
 		button.TextColor3 = BUTTON_TEXT_COLOR
@@ -670,13 +777,13 @@ local function setActive(button: TextButton, active: boolean)
 		if typeof(title) == "string" then
 			button.Text = active and (title .. (Lang.Current == "EN" and "  •  ON" or "  •  ACTIVO")) or title
 		end
-		if PERFORMANCE_MODE then button.BackgroundColor3 = active and Theme.Active or Theme.Panel2
-		else tween(button, ti, { BackgroundColor3 = active and Theme.Active or Theme.Panel2 }) end
+		if PERFORMANCE_MODE then button.BackgroundColor3 = active and Theme.Active or Theme.PurpleDeep
+		else tween(button, ti, { BackgroundColor3 = active and Theme.Active or Theme.PurpleDeep }) end
 		button.TextColor3 = BUTTON_TEXT_COLOR
 	end
 	if button:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
-		button.BackgroundColor3 = Color3.fromRGB(70, 65, 45)
-		button.TextColor3 = BUTTON_TEXT_COLOR
+		button.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+		button.TextColor3 = Color3.fromRGB(150, 150, 150)
 	end
 end
 
@@ -1072,20 +1179,21 @@ end)
 local VipNotification = Instance.new("Frame")
 VipNotification.Name = "HexaVipNotification"
 VipNotification.AnchorPoint = Vector2.new(0.5, 0)
-VipNotification.Position = UDim2.new(0.5, 0, 0, -100)
-VipNotification.Size = UDim2.fromOffset(math.min(390, GUI_VIEWPORT_SIZE.X - 16), 82)
-VipNotification.BackgroundColor3 = Theme.PurpleDeep
-VipNotification.BackgroundTransparency = 0.04
+VipNotification.Position = UDim2.new(0.5, 0, 0, -72)
+VipNotification.Size = UDim2.fromOffset(math.min(360, math.max(230, GUI_VIEWPORT_SIZE.X - 16)), 58)
+-- Centro negro compacto; se conserva únicamente el borde/acento exterior.
+VipNotification.BackgroundColor3 = Color3.fromRGB(6, 6, 6)
+VipNotification.BackgroundTransparency = 0.02
 VipNotification.BorderSizePixel = 0
 VipNotification.ZIndex = 200
 VipNotification.Parent = ScreenGui
-mkCorner(VipNotification, 13)
+mkCorner(VipNotification, 11)
 mkStroke(VipNotification, Theme.Purple, 0.03, 2)
 
 local VipNotificationTitle = Instance.new("TextLabel")
 VipNotificationTitle.BackgroundTransparency = 1
-VipNotificationTitle.Position = UDim2.new(0, 14, 0, 10)
-VipNotificationTitle.Size = UDim2.new(1, -28, 0, 20)
+VipNotificationTitle.Position = UDim2.new(0, 12, 0, 6)
+VipNotificationTitle.Size = UDim2.new(1, -24, 0, 17)
 VipNotificationTitle.Text = "★ FUNCIÓN VIP"
 VipNotificationTitle.TextColor3 = Theme.TextMain
 VipNotificationTitle.TextSize = 13
@@ -1097,15 +1205,15 @@ VipNotificationTitle:SetAttribute("HexaNoTranslate", true)
 
 local VipNotificationText = Instance.new("TextLabel")
 VipNotificationText.BackgroundTransparency = 1
-VipNotificationText.Position = UDim2.new(0, 14, 0, 34)
-VipNotificationText.Size = UDim2.new(1, -28, 0, 38)
+VipNotificationText.Position = UDim2.new(0, 12, 0, 23)
+VipNotificationText.Size = UDim2.new(1, -24, 0, 29)
 VipNotificationText.Text = "Únete al Discord para saber cómo obtener VIP."
 VipNotificationText.TextColor3 = Color3.fromRGB(235, 235, 230)
 VipNotificationText.TextSize = 12
 VipNotificationText.Font = Enum.Font.GothamMedium
 VipNotificationText.TextWrapped = true
 VipNotificationText.TextXAlignment = Enum.TextXAlignment.Left
-VipNotificationText.TextYAlignment = Enum.TextYAlignment.Top
+VipNotificationText.TextYAlignment = Enum.TextYAlignment.Center
 VipNotificationText.ZIndex = 201
 VipNotificationText.Parent = VipNotification
 VipNotificationText:SetAttribute("HexaNoTranslate", true)
@@ -1586,6 +1694,9 @@ function Lang.Set(language)
 		Lang.MainButton:SetAttribute("BaseText", Lang.MainButton.Text)
 		Lang.Updating[Lang.MainButton] = nil
 	end
+	if FunctionSearchBox and FunctionSearchBox.Parent then
+		FunctionSearchBox.PlaceholderText = Lang.Current == "EN" and "SEARCH FUNCTIONS..." or "BUSCAR FUNCIONES..."
+	end
 	task.defer(function()
 		refreshFavoritesCard()
 		refreshCategoryView()
@@ -1615,7 +1726,7 @@ makeDraggable(KeyFrame, KeyFrame)
 local KeyHeaderLogo = Instance.new("ImageLabel")
 KeyHeaderLogo.Name = "KeyHeaderLogo"
 KeyHeaderLogo.BackgroundTransparency = 1
-KeyHeaderLogo.Size = UDim2.fromOffset(44, 44)
+KeyHeaderLogo.Size = UDim2.fromOffset(28, 28)
 KeyHeaderLogo.Position = UDim2.new(0, 18, 0, 15)
 KeyHeaderLogo.Image = "rbxassetid://89867346084011"
 KeyHeaderLogo.ScaleType = Enum.ScaleType.Fit
@@ -1630,7 +1741,6 @@ KeyTitle.TextColor3 = Theme.TextMain
 KeyTitle.TextSize = 16
 KeyTitle.Font = Enum.Font.GothamBold
 KeyTitle.TextXAlignment = Enum.TextXAlignment.Left
-KeyTitle:SetAttribute("HexaKeepTitleFont", true)
 KeyTitle.Parent = KeyFrame
 
 local KeyBoxContainer = Instance.new("Frame")
@@ -1688,32 +1798,32 @@ MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.Size = UDim2.new(0, 0, 0, 0) 
 MainFrame.BackgroundColor3 = Theme.BG
-MainFrame.BackgroundTransparency = 0.22
+MainFrame.BackgroundTransparency = 0.18
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 mkCorner(MainFrame, 18)
-local MainFrameStroke = mkStroke(MainFrame, Theme.Purple, 0.10, 2)
+local MainFrameStroke = mkStroke(MainFrame, Theme.Purple, 0.04, 2)
 MainFrameStroke.LineJoinMode = Enum.LineJoinMode.Round
 
 local bgGradient = Instance.new("UIGradient")
-bgGradient.Rotation = 25
+bgGradient.Rotation = 32
 bgGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Theme.BG),
-	ColorSequenceKeypoint.new(0.5, Theme.Panel),
-	ColorSequenceKeypoint.new(1, Theme.PurpleDeep),
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 8, 10)),
+	ColorSequenceKeypoint.new(0.52, Color3.fromRGB(18, 14, 24)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(55, 24, 84)),
 })
 bgGradient.Transparency = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0.10),
-	NumberSequenceKeypoint.new(0.55, 0.24),
-	NumberSequenceKeypoint.new(1, 0.38),
+	NumberSequenceKeypoint.new(0, 0.06),
+	NumberSequenceKeypoint.new(0.55, 0.18),
+	NumberSequenceKeypoint.new(1, 0.28),
 })
 bgGradient.Parent = MainFrame
 
 local Header = Instance.new("Frame")
 Header.BackgroundColor3 = Theme.Panel
-Header.BackgroundTransparency = 0.30
+Header.BackgroundTransparency = 0.22
 Header.BorderSizePixel = 0
 Header.Position = UDim2.new(0, 2, 0, 2)
 Header.Size = UDim2.new(1, -4, 0, 58)
@@ -1723,17 +1833,17 @@ mkCorner(Header, 16)
 
 local HeaderGlow = Instance.new("Frame")
 HeaderGlow.BackgroundColor3 = Theme.Purple
-HeaderGlow.BackgroundTransparency = 0.16
+HeaderGlow.BackgroundTransparency = 0.08
 HeaderGlow.BorderSizePixel = 0
-HeaderGlow.Size = UDim2.new(1, 0, 0, 2)
+HeaderGlow.Size = UDim2.new(1, 0, 0, 3)
 HeaderGlow.Position = UDim2.new(0, 0, 1, -2)
 HeaderGlow.Parent = Header
 
 local HeaderLogo = Instance.new("ImageLabel")
 HeaderLogo.Name = "HeaderLogo"
 HeaderLogo.BackgroundTransparency = 1
-HeaderLogo.Size = UDim2.fromOffset(28, 28)
-HeaderLogo.Position = UDim2.new(0, 10, 0, 7)
+HeaderLogo.Size = UDim2.fromOffset(36, 36)
+HeaderLogo.Position = UDim2.new(0, 15, 0, 11)
 HeaderLogo.Image = "rbxassetid://89867346084011"
 HeaderLogo.ScaleType = Enum.ScaleType.Fit
 HeaderLogo.ZIndex = 5
@@ -1741,15 +1851,15 @@ HeaderLogo.Parent = Header
 
 local Title = Instance.new("TextLabel")
 Title.BackgroundTransparency = 1
-Title.Position = UDim2.new(0, 66, 0, 5)
-Title.Size = UDim2.new(1, -258, 0, 30)
+Title.Position = UDim2.new(0, 59, 0, 5)
+Title.Size = UDim2.new(1, -244, 0, 30)
 Title.Text = "H4SK"
 Title.TextColor3 = Theme.TextMain
 Title.TextSize = 18
 Title.Font = Enum.Font.GothamBold
+Title:SetAttribute("HexaNoGlobalFont", true)
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextTruncate = Enum.TextTruncate.AtEnd
-Title:SetAttribute("HexaKeepTitleFont", true)
 Title.Parent = Header
 makeDraggable(MainFrame, Title)
 
@@ -1757,8 +1867,8 @@ do
 	local subtitle = Instance.new("TextLabel")
 	subtitle.Name = "HexaUniversalSubtitle"
 	subtitle.BackgroundTransparency = 1
-	subtitle.Position = UDim2.new(0, 66, 0, 32)
-	subtitle.Size = UDim2.new(1, -258, 0, 18)
+	subtitle.Position = UDim2.new(0, 59, 0, 32)
+	subtitle.Size = UDim2.new(1, -244, 0, 18)
 	subtitle.Text = "UNIVERSAL"
 	subtitle.TextColor3 = Theme.TextMain
 	subtitle.TextTransparency = 0.48
@@ -1771,24 +1881,24 @@ do
 	makeDraggable(MainFrame, subtitle)
 end
 
-local CloseButton = neonButton(Header, "X", UDim2.new(0, 34, 0, 34), UDim2.new(1, -46, 0, 12), 4)
+local CloseButton = neonButton(Header, "X", UDim2.new(0, 36, 0, 34), UDim2.new(1, -48, 0, 12), 4)
 CloseButton.TextColor3 = BUTTON_TEXT_COLOR
-CloseButton.BackgroundColor3 = Theme.Panel2
+CloseButton.BackgroundColor3 = Theme.PurpleDeep
 
-local MinButton = neonButton(Header, "-", UDim2.new(0, 34, 0, 34), UDim2.new(1, -86, 0, 12), 4)
+local MinButton = neonButton(Header, "-", UDim2.new(0, 36, 0, 34), UDim2.new(1, -90, 0, 12), 4)
 MinButton.TextColor3 = BUTTON_TEXT_COLOR
-MinButton.BackgroundColor3 = Theme.Panel2
+MinButton.BackgroundColor3 = Theme.PurpleDeep
 MinButton:SetAttribute("HexaNoFavorite", true)
 CloseButton:SetAttribute("HexaNoFavorite", true)
 
-local TutorialBtn = neonButton(Header, "?", UDim2.new(0, 34, 0, 34), UDim2.new(1, -126, 0, 12), 4)
+local TutorialBtn = neonButton(Header, "?", UDim2.new(0, 36, 0, 34), UDim2.new(1, -132, 0, 12), 4)
 TutorialBtn.TextColor3 = BUTTON_TEXT_COLOR
-TutorialBtn.BackgroundColor3 = Theme.Panel2
+TutorialBtn.BackgroundColor3 = Theme.PurpleDeep
 TutorialBtn:SetAttribute("HexaNoFavorite", true)
 
-Lang.MainButton = neonButton(Header, "ES", UDim2.new(0, 42, 0, 34), UDim2.new(1, -176, 0, 12), 4)
+Lang.MainButton = neonButton(Header, "ES", UDim2.new(0, 44, 0, 34), UDim2.new(1, -182, 0, 12), 4)
 Lang.MainButton.TextColor3 = BUTTON_TEXT_COLOR
-Lang.MainButton.BackgroundColor3 = Theme.Panel2
+Lang.MainButton.BackgroundColor3 = Theme.PurpleDeep
 Lang.MainButton:SetAttribute("HexaNoTranslate", true)
 Lang.MainButton:SetAttribute("HexaNoFavorite", true)
 Lang.MainButton.MouseButton1Click:Connect(function()
@@ -1800,9 +1910,9 @@ Lang.Set(Lang.Current)
 local OwnerVipButton = nil
 local OwnerFrame = nil
 if HEXA_IS_OWNER then
-	Title.Size = UDim2.new(1, -322, 0, 30)
+	Title.Size = UDim2.new(1, -308, 0, 30)
 	if Header:FindFirstChild("HexaUniversalSubtitle") then
-		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -322, 0, 18)
+		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -308, 0, 18)
 	end
 	OwnerVipButton = neonButton(Header, "★ VIP", UDim2.new(0, 58, 0, 34), UDim2.new(1, -246, 0, 12), 4)
 	OwnerVipButton.TextColor3 = BUTTON_TEXT_COLOR
@@ -2028,7 +2138,7 @@ mkStroke(CategoryUI.Frame, Theme.Accent, 0.78, 1)
 
 if MOBILE_DEVICE then
 	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
-	CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 68)
+	CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 104)
 else
 	CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
 	CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -70)
@@ -2048,12 +2158,48 @@ CategoryUI.Title.Visible = not MOBILE_DEVICE
 CategoryUI.Title.ZIndex = 4
 CategoryUI.Title.Parent = CategoryUI.Frame
 
+FunctionSearchBox = Instance.new("TextBox")
+FunctionSearchBox.Name = "HexaFunctionSearch"
+FunctionSearchBox.BackgroundColor3 = Color3.fromRGB(24, 20, 32)
+FunctionSearchBox.BackgroundTransparency = 0.06
+FunctionSearchBox.BorderSizePixel = 0
+FunctionSearchBox.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 7) or UDim2.new(0, 8, 0, 29)
+FunctionSearchBox.Size = UDim2.new(1, -16, 0, 30)
+FunctionSearchBox.Text = ""
+FunctionSearchBox.PlaceholderText = Lang.Current == "EN" and "SEARCH FUNCTIONS..." or "BUSCAR FUNCIONES..."
+FunctionSearchBox.PlaceholderColor3 = Color3.fromRGB(162, 145, 182)
+FunctionSearchBox.TextColor3 = Theme.TextMain
+FunctionSearchBox.TextSize = 10
+FunctionSearchBox.Font = Enum.Font.GothamMedium
+FunctionSearchBox.TextXAlignment = Enum.TextXAlignment.Left
+FunctionSearchBox.ClearTextOnFocus = false
+FunctionSearchBox.MultiLine = false
+FunctionSearchBox.ZIndex = 6
+FunctionSearchBox:SetAttribute("HexaNoTranslate", true)
+FunctionSearchBox.Parent = CategoryUI.Frame
+mkCorner(FunctionSearchBox, 10)
+local FunctionSearchStroke = mkStroke(FunctionSearchBox, Theme.Purple, 0.42, 1)
+local FunctionSearchPadding = Instance.new("UIPadding")
+FunctionSearchPadding.PaddingLeft = UDim.new(0, 10)
+FunctionSearchPadding.PaddingRight = UDim.new(0, 8)
+FunctionSearchPadding.Parent = FunctionSearchBox
+FunctionSearchBox.Focused:Connect(function()
+	FunctionSearchStroke.Color = Color3.fromRGB(203, 151, 255)
+	FunctionSearchStroke.Transparency = 0.04
+	FunctionSearchStroke.Thickness = 2
+end)
+FunctionSearchBox.FocusLost:Connect(function()
+	FunctionSearchStroke.Color = Theme.Purple
+	FunctionSearchStroke.Transparency = 0.42
+	FunctionSearchStroke.Thickness = 1
+end)
+
 CategoryUI.Scroll = Instance.new("ScrollingFrame")
 CategoryUI.Scroll.Name = "HexaCategoryButtons"
 CategoryUI.Scroll.BackgroundTransparency = 1
 CategoryUI.Scroll.BorderSizePixel = 0
-CategoryUI.Scroll.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 6) or UDim2.new(0, 8, 0, 30)
-CategoryUI.Scroll.Size = MOBILE_DEVICE and UDim2.new(1, -16, 1, -12) or UDim2.new(1, -16, 1, -36)
+CategoryUI.Scroll.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 43) or UDim2.new(0, 8, 0, 65)
+CategoryUI.Scroll.Size = MOBILE_DEVICE and UDim2.new(1, -16, 1, -49) or UDim2.new(1, -16, 1, -71)
 CategoryUI.Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 CategoryUI.Scroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 CategoryUI.Scroll.ScrollingDirection = MOBILE_DEVICE and Enum.ScrollingDirection.X or Enum.ScrollingDirection.Y
@@ -2225,8 +2371,8 @@ function CategoryUI:RefreshButtons()
 		end
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
-			stroke.Color = selected and Theme.Purple or Theme.Accent
-			stroke.Transparency = selected and 0.02 or 0.84
+			stroke.Color = selected and Theme.Purple or Theme.PurpleText
+			stroke.Transparency = selected and 0.02 or 0.70
 			stroke.Thickness = selected and 2 or 1
 		end
 	end
@@ -2247,7 +2393,7 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	local button = Instance.new("TextButton")
 	button.Name = "HexaCategory_" .. definition.Key
 	button.LayoutOrder = index
-	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(90, #definition.Label * 6 + 44), 32) or UDim2.new(1, -8, 0, 25)
+	button.Size = MOBILE_DEVICE and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 46), 33) or UDim2.new(1, -8, 0, 27)
 	button.BackgroundColor3 = Theme.Panel2
 	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
@@ -2258,8 +2404,8 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.Parent = CategoryUI.Scroll
 	button:SetAttribute("HexaNoFavorite", true)
 	button:SetAttribute("HexaNoTranslate", true)
-	mkCorner(button, MOBILE_DEVICE and 14 or 12)
-	local stroke = mkStroke(button, Theme.Accent, 0.72, 1)
+	mkCorner(button, MOBILE_DEVICE and 15 or 13)
+	local stroke = mkStroke(button, Theme.Purple, 0.62, 1)
 	stroke.Name = "HexaCategoryStroke"
 	createCategoryIcon(button, definition.Key)
 
@@ -2299,8 +2445,8 @@ Content = Instance.new("ScrollingFrame")
 Content.Name = "HexaFunctionPanel"
 Content.BackgroundTransparency = 1
 Content.BorderSizePixel = 0
-Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 136) or UDim2.new(0, 168, 0, 62)
-Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -138) or UDim2.new(1, -170, 1, -64)
+Content.Position = MOBILE_DEVICE and UDim2.new(0, 2, 0, 172) or UDim2.new(0, 168, 0, 62)
+Content.Size = MOBILE_DEVICE and UDim2.new(1, -4, 1, -174) or UDim2.new(1, -170, 1, -64)
 Content.ScrollBarThickness = MOBILE_DEVICE and 6 or 4
 Content.ScrollBarImageColor3 = Theme.Purple
 Content.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -2519,24 +2665,35 @@ local function refreshMobileCanvas()
 	end
 end
 
-local function fitMobileCard(card, units)
-	if not MOBILE_DEVICE or not card or not card.Parent then return end
+local function fitContentCard(card, units)
+	if not card or not card.Parent then return end
+
+	-- Todas las tarjetas usan posiciones absolutas para sus controles. Antes este
+	-- ajuste solo se hacía en móvil, por lo que en PC una tarjeta con una altura
+	-- demasiado pequeña podía recortar y hacer desaparecer funciones completas.
 	local baseHeight = tonumber(card:GetAttribute("HexaMobileBaseHeight")) or card.Size.Y.Offset
-	local requiredHeight = baseHeight
-	for _, object in ipairs(card:GetChildren()) do
-		if object:IsA("GuiObject") then
-			local originalPosition = CardOriginalPositions[object] or object.Position
-			local bottom = originalPosition.Y.Offset + object.Size.Y.Offset + 24
-			requiredHeight = math.max(requiredHeight, bottom)
-		end
-	end
-	card.Size = UDim2.new(card.Size.X.Scale, card.Size.X.Offset, 0, requiredHeight)
-	CardOriginalSizes[card] = card.Size
+	local requiredHeight = math.max(1, baseHeight)
+
 	if units then
 		for _, unit in ipairs(units) do
 			if not CardOriginalPositions[unit] then CardOriginalPositions[unit] = unit.Position end
 		end
 	end
+
+	for _, object in ipairs(card:GetChildren()) do
+		if object:IsA("GuiObject") then
+			local originalPosition = CardOriginalPositions[object] or object.Position
+			local objectHeight = math.max(0, object.Size.Y.Offset)
+			local anchorOffset = object.AnchorPoint.Y * objectHeight
+			local bottom = originalPosition.Y.Offset - anchorOffset + objectHeight + 20
+			requiredHeight = math.max(requiredHeight, bottom)
+		end
+	end
+
+	card.Size = UDim2.new(card.Size.X.Scale, card.Size.X.Offset, 0, math.ceil(requiredHeight))
+	-- Guardar siempre la altura normal completa. Los modos VIP/buscador pueden
+	-- encoger temporalmente la tarjeta, pero al volver se restaura este tamaño.
+	CardOriginalSizes[card] = card.Size
 end
 
 local function isCardUnit(object)
@@ -2621,15 +2778,99 @@ local function showVipUnits(card, units)
 	return visibleUnits
 end
 
+local function normalizeFunctionSearch(value)
+	local normalized = string.lower(tostring(value or ""))
+	normalized = normalized:gsub("á", "a"):gsub("é", "e"):gsub("í", "i"):gsub("ó", "o"):gsub("ú", "u"):gsub("ü", "u"):gsub("ñ", "n")
+	normalized = normalized:gsub("[^%w%s]", " ")
+	normalized = normalized:gsub("%s+", " ")
+	return normalized:gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function appendFunctionSearchText(parts, value)
+	if typeof(value) ~= "string" or value == "" then return end
+	local spanish = Lang.ToSpanish(value)
+	local english = Lang.ToEnglish(spanish)
+	table.insert(parts, value)
+	if spanish ~= value then table.insert(parts, spanish) end
+	if english ~= value and english ~= spanish then table.insert(parts, english) end
+end
+
+local function getFunctionSearchText(unit)
+	local parts = {}
+	local function collect(object)
+		if not (object:IsA("TextButton") or object:IsA("TextLabel") or object:IsA("TextBox")) then return end
+		appendFunctionSearchText(parts, object.Text)
+		appendFunctionSearchText(parts, object:GetAttribute("BaseText"))
+		appendFunctionSearchText(parts, object:GetAttribute("HexaSpanishText"))
+		appendFunctionSearchText(parts, object:GetAttribute("HexaSpanishBaseText"))
+	end
+	collect(unit)
+	for _, object in ipairs(unit:GetDescendants()) do collect(object) end
+	return normalizeFunctionSearch(table.concat(parts, " "))
+end
+
+local function unitMatchesFunctionSearch(unit, query)
+	local normalizedQuery = normalizeFunctionSearch(query)
+	if normalizedQuery == "" then return true end
+	local haystack = getFunctionSearchText(unit)
+	for token in string.gmatch(normalizedQuery, "%S+") do
+		if not string.find(haystack, token, 1, true) then return false end
+	end
+	return true
+end
+
+local function showSearchUnits(card, units, query)
+	if not CardOriginalSizes[card] then CardOriginalSizes[card] = card.Size end
+	local rows = {}
+	local rowOrder = {}
+	for _, unit in ipairs(units) do
+		local include = unitMatchesFunctionSearch(unit, query)
+		unit.Visible = include
+		if include then
+			local originalPosition = CardOriginalPositions[unit] or unit.Position
+			local rowKey = originalPosition.Y.Offset
+			if not rows[rowKey] then
+				rows[rowKey] = {}
+				table.insert(rowOrder, rowKey)
+			end
+			table.insert(rows[rowKey], unit)
+		end
+	end
+	table.sort(rowOrder)
+	local nextY = 44
+	local visibleUnits = 0
+	for _, rowKey in ipairs(rowOrder) do
+		local rowHeight = 0
+		for _, unit in ipairs(rows[rowKey]) do
+			local originalPosition = CardOriginalPositions[unit] or unit.Position
+			unit.Position = UDim2.new(originalPosition.X.Scale, originalPosition.X.Offset, originalPosition.Y.Scale, nextY)
+			rowHeight = math.max(rowHeight, unit.Size.Y.Offset)
+			visibleUnits += 1
+		end
+		nextY += math.max(30, rowHeight) + 8
+	end
+	if visibleUnits > 0 then
+		local originalSize = CardOriginalSizes[card] or card.Size
+		card.Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset, 0, nextY + 2)
+	end
+	return visibleUnits
+end
+
 refreshCategoryView = function()
+	local searchQuery = FunctionSearchBox and FunctionSearchBox.Text or ""
+	local searching = normalizeFunctionSearch(searchQuery) ~= ""
 	for _, card in ipairs(Content:GetChildren()) do
 		if card:IsA("Frame") and card:GetAttribute("HexaContentCard") == true then
 			local units = getCardUnits(card)
 			restoreCardLayout(card, units)
-			if CategoryUI.Active ~= "VIP" then fitMobileCard(card, units) end
+			if not searching and CategoryUI.Active ~= "VIP" then fitContentCard(card, units) end
 			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
 			local visible
-			if CategoryUI.Active == "VIP" then
+			if searching then
+				-- El buscador es global: muestra únicamente funciones coincidentes,
+				-- independientemente de la categoría que estuviera seleccionada.
+				visible = card ~= FavoritesCard and showSearchUnits(card, units, searchQuery) > 0
+			elseif CategoryUI.Active == "VIP" then
 				-- La categoría VIP reutiliza los controles originales; siguen presentes
 				-- en sus categorías habituales y aquí se muestran solos y ordenados.
 				visible = showVipUnits(card, units) > 0
@@ -2642,7 +2883,29 @@ refreshCategoryView = function()
 	task.defer(refreshMobileCanvas)
 end
 
+local functionSearchGeneration = 0
+FunctionSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+	functionSearchGeneration += 1
+	local generation = functionSearchGeneration
+	task.delay(0.06, function()
+		if generation ~= functionSearchGeneration then return end
+		if Content and Content.Parent then
+			Content.CanvasPosition = Vector2.new(0, 0)
+			refreshCategoryView()
+		end
+	end)
+end)
+
 local categoryRefreshPending = false
+local function scheduleCategoryRefresh()
+	if not UI_READY or categoryRefreshPending then return end
+	categoryRefreshPending = true
+	task.delay(0.12, function()
+		categoryRefreshPending = false
+		if Content and Content.Parent then refreshCategoryView() end
+	end)
+end
+
 Content.DescendantAdded:Connect(function(object)
 	if not UI_READY then return end
 	if object:IsA("TextButton") then
@@ -2650,12 +2913,14 @@ Content.DescendantAdded:Connect(function(object)
 			if object and object.Parent then pcall(registerFunctionButton, object) end
 		end)
 	end
-	if categoryRefreshPending then return end
-	categoryRefreshPending = true
-	task.delay(0.20, function()
-		categoryRefreshPending = false
-		if Content and Content.Parent then refreshCategoryView() end
-	end)
+	-- Las extensiones crean tarjetas y funciones después de que la UI ya está
+	-- abierta. Recalcular evita que una tarjeta conserve una altura vieja.
+	scheduleCategoryRefresh()
+end)
+
+Content.DescendantRemoving:Connect(function()
+	-- Si una función se elimina dinámicamente, restaurar también el layout/canvas.
+	scheduleCategoryRefresh()
 end)
 if MOBILE_DEVICE then
 	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -2675,7 +2940,7 @@ local function sectionCard(height: number)
 	card.BackgroundColor3 = Theme.Panel
 	card.BackgroundTransparency = 0.24
 	card.BorderSizePixel = 0
-	card.ClipsDescendants = true
+	card.ClipsDescendants = false
 	card.Parent = Content
 	card:SetAttribute("HexaContentCard", true)
 	card:SetAttribute("HexaMobileBaseHeight", height)
@@ -2712,21 +2977,21 @@ local VipProfileBadge = Instance.new("TextLabel")
 VipProfileBadge.AnchorPoint = Vector2.new(1, 0)
 VipProfileBadge.Position = UDim2.new(1, -12, 0, 12)
 VipProfileBadge.Size = UDim2.new(0, 76, 0, 24)
-VipProfileBadge.BackgroundColor3 = Color3.fromRGB(65, 52, 10)
+VipProfileBadge.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
 VipProfileBadge.BorderSizePixel = 0
-VipProfileBadge.TextColor3 = Color3.fromRGB(255, 211, 46)
+VipProfileBadge.TextColor3 = Color3.fromRGB(215, 215, 215)
 VipProfileBadge.TextSize = 10
 VipProfileBadge.Font = Enum.Font.GothamBold
 VipProfileBadge.ZIndex = 5
 VipProfileBadge.Parent = ProfileCard
 VipProfileBadge:SetAttribute("HexaNoTranslate", true)
 mkCorner(VipProfileBadge, 8)
-mkStroke(VipProfileBadge, Color3.fromRGB(255, 211, 46), 0.25, 1)
+mkStroke(VipProfileBadge, Color3.fromRGB(75, 75, 75), 0.35, 1)
 
 local function refreshProfileVipBadge()
 	VipProfileBadge.Text = HEXA_IS_OWNER and "★ OWNER" or (HEXA_IS_VIP and "★ VIP" or "FREE")
-	VipProfileBadge.TextColor3 = HEXA_IS_VIP and Color3.fromRGB(255, 211, 46) or Color3.fromRGB(155, 155, 155)
-	VipProfileBadge.BackgroundColor3 = HEXA_IS_VIP and Color3.fromRGB(65, 52, 10) or Color3.fromRGB(45, 45, 45)
+	VipProfileBadge.TextColor3 = HEXA_IS_VIP and Color3.fromRGB(215, 215, 215) or Color3.fromRGB(155, 155, 155)
+	VipProfileBadge.BackgroundColor3 = HEXA_IS_VIP and Color3.fromRGB(22, 22, 22) or Color3.fromRGB(45, 45, 45)
 end
 addVipStateListener(refreshProfileVipBadge)
 refreshProfileVipBadge()
@@ -3047,7 +3312,7 @@ local function updateResponsiveLayout()
 	GUI_VIEWPORT_SIZE = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or GUI_VIEWPORT_SIZE
 	MAIN_SIZE = calculateMainSize()
 	KEY_SIZE = calculateKeySize()
-	VipNotification.Size = UDim2.fromOffset(math.min(390, math.max(250, GUI_VIEWPORT_SIZE.X - 16)), 82)
+	VipNotification.Size = UDim2.fromOffset(math.min(360, math.max(230, GUI_VIEWPORT_SIZE.X - 16)), 58)
 	if MainFrame.Visible and MainFrame.Size.X.Offset > 0 then MainFrame.Size = MAIN_SIZE end
 	if KeyFrame.Visible and KeyFrame.Size.X.Offset > 0 then KeyFrame.Size = KEY_SIZE end
 	if Tutorial.Frame.Visible and Tutorial.Frame.Size.X.Offset > 0 then Tutorial.Frame.Size = Tutorial.getTargetSize() end
@@ -5504,7 +5769,7 @@ task.spawn(function()
 			return connection
 		end
 
-		local EssentialsCard = sectionCard(144)
+		local EssentialsCard = sectionCard(160)
 		EssentialsCard.LayoutOrder = 22
 		sectionTitle(EssentialsCard, "FUNCIONES ESENCIALES", UDim2.new(0, 16, 0, 14))
 
@@ -7140,16 +7405,16 @@ task.spawn(function()
 			categoryVipBadge.AnchorPoint = Vector2.new(1, 0)
 			categoryVipBadge.Position = UDim2.new(1, -14, 0, 10)
 			categoryVipBadge.Size = UDim2.new(0, 54, 0, 20)
-			categoryVipBadge.BackgroundColor3 = Color3.fromRGB(65, 52, 10)
+			categoryVipBadge.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 			categoryVipBadge.BorderSizePixel = 0
 			categoryVipBadge.Text = "★ VIP"
-			categoryVipBadge.TextColor3 = Color3.fromRGB(255, 211, 46)
+			categoryVipBadge.TextColor3 = Color3.fromRGB(215, 215, 215)
 			categoryVipBadge.TextSize = 10
 			categoryVipBadge.Font = Enum.Font.GothamBold
 			categoryVipBadge.ZIndex = 7
 			categoryVipBadge.Parent = self.PersonalCard
 			mkCorner(categoryVipBadge, 7)
-			mkStroke(categoryVipBadge, Color3.fromRGB(255, 211, 46), 0.25, 1)
+			mkStroke(categoryVipBadge, Color3.fromRGB(70, 70, 70), 0.35, 1)
 			local function refreshPersonalCardVip()
 				if self.PersonalCard and self.PersonalCard.Parent then
 					self.PersonalCard.BackgroundTransparency = HEXA_IS_VIP and 0.1 or 0.3
@@ -7202,7 +7467,7 @@ task.spawn(function()
 					DROP = "CAÍDA", BURST = "EXPLOSIÓN",
 				}
 				self.AnimationButton.Text = "ANIMACIÓN DE APERTURA: " .. nombres[self.AnimationStyles[self.AnimationIndex]]
-				self:applyAnimation()
+				self:applyAnimation(true)
 			end)
 			self:connect(self.FontButton.MouseButton1Click, function()
 				if not requireVip() then return end
@@ -7223,9 +7488,12 @@ task.spawn(function()
 			self.Watermark.Position = positions[self.WatermarkIndex]
 		end
 
-		function X:applyAnimation()
+		function X:applyAnimation(preview)
 			openingStyle = self.AnimationStyles[self.AnimationIndex] or "BACK"
-			if MainFrame.Visible and MainFrame.Size.X.Offset > 0 then
+			-- Solo reproducir la animación cuando el usuario la cambia manualmente.
+			-- Los refrescos de estado/configuración pueden actualizar openingStyle sin
+			-- hacer que un panel ya abierto parezca abrirse otra vez.
+			if preview == true and MainFrame.Visible and MainFrame.Size.X.Offset > 0 then
 				animateOpen(MainFrame, MAIN_SIZE, openingStyle)
 			end
 		end
@@ -7233,10 +7501,8 @@ task.spawn(function()
 		function X:applyFont()
 			local font = self.FontOptions[self.FontIndex].font
 			for _, object in ipairs(ScreenGui:GetDescendants()) do
-				if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
-					if object:GetAttribute("HexaKeepTitleFont") ~= true then
-						object.Font = font
-					end
+				if (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) and not object:GetAttribute("HexaNoGlobalFont") then
+					object.Font = font
 				end
 			end
 		end
@@ -7436,7 +7702,9 @@ task.spawn(function()
 			pcall(function() X:updateCrosshair() end)
 			pcall(function() X:restoreCameraSubject() end)
 			pcall(function() X:applyWatermarkPosition() end)
-			pcall(function() X:applyAnimation() end)
+			-- Resetear el estilo sin reproducir la animación durante un refresh VIP.
+			-- Así no existe una "reapertura fantasma" mientras MainFrame ya está abierto.
+			openingStyle = "BACK"
 			pcall(function() X:applyFont() end)
 		end)
 		pcall(function() X:setupGlobalConnections() end)
