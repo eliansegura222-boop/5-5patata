@@ -850,7 +850,7 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 	label.ZIndex = 4
 	label.Parent = container
 
-	local valuePill = Instance.new("TextLabel")
+	local valuePill = Instance.new("TextBox")
 	valuePill.Name = "HexaSliderValue"
 	valuePill.AnchorPoint = Vector2.new(1, 0)
 	valuePill.Position = UDim2.new(1, 0, 0, 0)
@@ -861,9 +861,14 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 	valuePill.TextColor3 = Theme.TextOff
 	valuePill.TextSize = 11
 	valuePill.Font = Enum.Font.GothamBold
-	valuePill.ZIndex = 6
+	valuePill.TextXAlignment = Enum.TextXAlignment.Center
+	valuePill.ClearTextOnFocus = false
+	valuePill.MultiLine = false
+	valuePill.TextEditable = true
+	valuePill.ZIndex = 10
 	valuePill.Parent = container
 	valuePill:SetAttribute("HexaNoTranslate", true)
+	valuePill:SetAttribute("HexaSliderValueInput", true)
 	mkCorner(valuePill, 7)
 	mkStroke(valuePill, Theme.Accent, 0.72, 1)
 
@@ -991,6 +996,64 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 		currentValue = requestedValue
 		controller.Refresh()
 	end
+
+	local editingValue = false
+
+	local function applyTypedValue()
+		local typedText = tostring(valuePill.Text or ""):gsub(",", ".")
+		local requestedValue = tonumber(typedText)
+
+		if requestedValue == nil then
+			-- Entrada inválida: restaurar el valor actual sin cambiar la barra.
+			controller.Refresh()
+			return
+		end
+
+		requestedValue = math.floor(requestedValue + 0.5)
+		local allowedMax = effectiveMax()
+
+		if vipOnly and not HEXA_IS_VIP then
+			requireVip()
+			controller.Refresh()
+			return
+		end
+
+		if not HEXA_IS_VIP and requestedValue > allowedMax then
+			requestedValue = allowedMax
+			notifyVipLocked(
+				("Solo los usuarios VIP pueden sobrepasar el máximo FREE de %d."):format(math.floor(allowedMax + 0.5)),
+				("Only VIP users can exceed the FREE maximum of %d."):format(math.floor(allowedMax + 0.5))
+			)
+		end
+
+		currentValue = math.clamp(requestedValue, minVal, allowedMax)
+		controller.Refresh()
+	end
+
+	valuePill.Focused:Connect(function()
+		if vipOnly and not HEXA_IS_VIP then
+			requireVip()
+			valuePill:ReleaseFocus()
+			return
+		end
+		editingValue = true
+		isInteractingWithSlider = true
+		-- El TextBox ya recibió el foco por el toque/clic. Seleccionar el valor
+		-- facilita reemplazarlo directamente tanto en PC como en móvil.
+		task.defer(function()
+			if valuePill:IsFocused() then
+				valuePill.CursorPosition = #valuePill.Text + 1
+				valuePill.SelectionStart = 1
+			end
+		end)
+	end)
+
+	valuePill.FocusLost:Connect(function()
+		if not editingValue then return end
+		editingValue = false
+		isInteractingWithSlider = false
+		applyTypedValue()
+	end)
 
 	hitbox.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
