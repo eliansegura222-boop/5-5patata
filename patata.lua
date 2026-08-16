@@ -1358,6 +1358,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"H4SK - SISTEMA DE CLAVE", "H4SK - KEY SYSTEM"},
 	{"Escribe la clave aquí...", "Enter the key here..."},
 	{"Escribe la clave o código VIP...", "Enter the key or VIP code..."},
+	{"Escribe la key", "Enter the key"},
 	{"¡VIP ACTIVADO!", "VIP ACTIVATED!"},
 	{"Verificar clave", "Check key"},
 	{"Obtener clave (Discord)", "Get key (Discord)"},
@@ -1634,7 +1635,7 @@ KeyBox.BackgroundTransparency = 1
 KeyBox.Size = UDim2.new(1, -20, 1, 0)
 KeyBox.Position = UDim2.new(0, 10, 0, 0)
 KeyBox.Text = ""
-KeyBox.PlaceholderText = "Escribe la clave o código VIP..."
+KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la key"
 KeyBox.TextColor3 = Theme.TextOff
 KeyBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
 KeyBox.TextSize = 14
@@ -5850,7 +5851,7 @@ CheckKeyBtn.MouseButton1Click:Connect(function()
 			KeyBox.PlaceholderText = "¡Clave incorrecta!"
 		end
 		task.delay(1.5, function()
-			KeyBox.PlaceholderText = "Escribe la clave o código VIP..."
+			KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la key"
 		end)
 	end
 end)
@@ -5858,13 +5859,13 @@ end)
 GetKeyBtn.MouseButton1Click:Connect(function()
 	local link = "https://discord.gg/sewRzHAG5J"
 	if setclipboard then setclipboard(link) elseif toclipboard then toclipboard(link) end
-	GetKeyBtn.Text = "¡COPIADO!"
+	GetKeyBtn.Text = Lang.Current == "EN" and "COPIED!" or "¡COPIADO!"
 
 	vipNotificationGeneration += 1
 	local generation = vipNotificationGeneration
 	VipNotificationTitle.Text = "H4SK"
 	VipNotificationTitle.TextColor3 = Theme.PurpleText
-	VipNotificationText.Text = "Copiado correctamente, ve Al canal #🔑・key"
+	VipNotificationText.Text = Lang.Current == "EN" and "Copied successfully, go to the #🔑・key channel" or "Copiado correctamente, ve Al canal #🔑・key"
 	tween(VipNotification, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Position = UDim2.new(0.5, 0, 0, 18)
 	})
@@ -5875,7 +5876,9 @@ GetKeyBtn.MouseButton1Click:Connect(function()
 		})
 	end)
 
-	task.delay(1.5, function() GetKeyBtn.Text = "Obtener clave (Discord)" end)
+	task.delay(1.5, function()
+		GetKeyBtn.Text = Lang.Current == "EN" and "Get key (Discord)" or "Obtener clave (Discord)"
+	end)
 end)
 
 Runtime.loopConn = RunService.Stepped:Connect(function()
