@@ -25,7 +25,7 @@ local __BootstrapCorner = Instance.new("UICorner")
 __BootstrapCorner.CornerRadius = UDim.new(0, 14)
 __BootstrapCorner.Parent = __BootstrapFrame
 local __BootstrapStroke = Instance.new("UIStroke")
-__BootstrapStroke.Color = Color3.fromRGB(118, 63, 170)
+__BootstrapStroke.Color = Color3.fromRGB(154, 72, 255)
 __BootstrapStroke.Transparency = 0.20
 __BootstrapStroke.Thickness = 2
 __BootstrapStroke.Parent = __BootstrapFrame
@@ -34,7 +34,7 @@ __BootstrapTitle.BackgroundTransparency = 1
 __BootstrapTitle.Position = UDim2.new(0, 14, 0, 12)
 __BootstrapTitle.Size = UDim2.new(1, -28, 0, 24)
 __BootstrapTitle.Text = "H4SK"
-__BootstrapTitle.TextColor3 = Color3.fromRGB(194, 151, 232)
+__BootstrapTitle.TextColor3 = Color3.fromRGB(213, 177, 255)
 __BootstrapTitle.TextSize = 16
 __BootstrapTitle.Font = Enum.Font.GothamBold
 __BootstrapTitle.Parent = __BootstrapFrame
@@ -380,15 +380,15 @@ local Theme = {
 	Panel2 = Color3.fromRGB(245, 245, 245),
 	Accent = Color3.fromRGB(255, 255, 255),
 	Accent2 = Color3.fromRGB(218, 218, 218),
-	Purple = Color3.fromRGB(118, 63, 170),
-	PurpleDark = Color3.fromRGB(58, 28, 86),
-	PurpleDeep = Color3.fromRGB(33, 17, 48),
-	PurpleText = Color3.fromRGB(194, 151, 232),
+	Purple = Color3.fromRGB(154, 72, 255),
+	PurpleDark = Color3.fromRGB(82, 34, 128),
+	PurpleDeep = Color3.fromRGB(45, 18, 70),
+	PurpleText = Color3.fromRGB(213, 177, 255),
 	TextMain = Color3.fromRGB(245, 245, 245),
 	TextOff = Color3.fromRGB(12, 12, 12),
-	Active = Color3.fromRGB(58, 28, 86),
+	Active = Color3.fromRGB(82, 34, 128),
 	ActiveText = Color3.fromRGB(255, 255, 255),
-	ToggleOn = Color3.fromRGB(118, 63, 170),
+	ToggleOn = Color3.fromRGB(154, 72, 255),
 	ToggleOff = Color3.fromRGB(95, 95, 95),
 	VipGold = Color3.fromRGB(255, 211, 46),
 	Danger = Color3.fromRGB(220, 50, 50),
@@ -1608,7 +1608,7 @@ KeyFrame.ClipsDescendants = true
 KeyFrame.Visible = true
 KeyFrame.Parent = ScreenGui
 mkCorner(KeyFrame, 16)
-mkStroke(KeyFrame, Theme.Purple, 0.18, 2)
+mkStroke(KeyFrame, Theme.Purple, 0.10, 2)
 makeDraggable(KeyFrame, KeyFrame)
 
 local KeyTitle = Instance.new("TextLabel")
@@ -1682,7 +1682,7 @@ MainFrame.ClipsDescendants = true
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 mkCorner(MainFrame, 18)
-local MainFrameStroke = mkStroke(MainFrame, Theme.Purple, 0.20, 2)
+local MainFrameStroke = mkStroke(MainFrame, Theme.Purple, 0.10, 2)
 MainFrameStroke.LineJoinMode = Enum.LineJoinMode.Round
 
 local bgGradient = Instance.new("UIGradient")
@@ -1711,7 +1711,7 @@ mkCorner(Header, 16)
 
 local HeaderGlow = Instance.new("Frame")
 HeaderGlow.BackgroundColor3 = Theme.Purple
-HeaderGlow.BackgroundTransparency = 0.30
+HeaderGlow.BackgroundTransparency = 0.16
 HeaderGlow.BorderSizePixel = 0
 HeaderGlow.Size = UDim2.new(1, 0, 0, 2)
 HeaderGlow.Position = UDim2.new(0, 0, 1, -2)
@@ -2183,16 +2183,26 @@ function CategoryUI:RefreshButtons()
 		local selected = key == self.Active
 		button:SetAttribute("IsActive", selected)
 		button.BackgroundColor3 = selected and Theme.PurpleDark or Theme.Panel2
-		button.BackgroundTransparency = selected and 0.18 or 1
-		button.TextColor3 = BUTTON_TEXT_COLOR
+		button.BackgroundTransparency = selected and 0.04 or 1
+		button.TextColor3 = selected and Theme.PurpleText or BUTTON_TEXT_COLOR
 		local label = button:FindFirstChild("HexaCategoryLabel")
 		if label and label:IsA("TextLabel") then
-			label.TextColor3 = BUTTON_TEXT_COLOR
+			label.TextColor3 = selected and Theme.PurpleText or BUTTON_TEXT_COLOR
+		end
+		local icon = button:FindFirstChild("HexaCategoryIcon")
+		if icon then
+			for _, object in ipairs(icon:GetDescendants()) do
+				if object:IsA("Frame") then
+					object.BackgroundColor3 = selected and Theme.PurpleText or BUTTON_TEXT_COLOR
+				elseif object:IsA("UIStroke") then
+					object.Color = selected and Theme.PurpleText or BUTTON_TEXT_COLOR
+				end
+			end
 		end
 		local stroke = button:FindFirstChild("HexaCategoryStroke")
 		if stroke then
 			stroke.Color = selected and Theme.Purple or Theme.Accent
-			stroke.Transparency = selected and 0.08 or 0.84
+			stroke.Transparency = selected and 0.02 or 0.84
 			stroke.Thickness = selected and 2 or 1
 		end
 	end
