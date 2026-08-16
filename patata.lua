@@ -1615,7 +1615,7 @@ makeDraggable(KeyFrame, KeyFrame)
 local KeyHeaderLogo = Instance.new("ImageLabel")
 KeyHeaderLogo.Name = "KeyHeaderLogo"
 KeyHeaderLogo.BackgroundTransparency = 1
-KeyHeaderLogo.Size = UDim2.fromOffset(36, 36)
+KeyHeaderLogo.Size = UDim2.fromOffset(44, 44)
 KeyHeaderLogo.Position = UDim2.new(0, 18, 0, 15)
 KeyHeaderLogo.Image = "rbxassetid://89867346084011"
 KeyHeaderLogo.ScaleType = Enum.ScaleType.Fit
@@ -1630,6 +1630,7 @@ KeyTitle.TextColor3 = Theme.TextMain
 KeyTitle.TextSize = 16
 KeyTitle.Font = Enum.Font.GothamBold
 KeyTitle.TextXAlignment = Enum.TextXAlignment.Left
+KeyTitle:SetAttribute("HexaKeepTitleFont", true)
 KeyTitle.Parent = KeyFrame
 
 local KeyBoxContainer = Instance.new("Frame")
@@ -1732,7 +1733,7 @@ local HeaderLogo = Instance.new("ImageLabel")
 HeaderLogo.Name = "HeaderLogo"
 HeaderLogo.BackgroundTransparency = 1
 HeaderLogo.Size = UDim2.fromOffset(28, 28)
-HeaderLogo.Position = UDim2.new(0, 14, 0, 11)
+HeaderLogo.Position = UDim2.new(0, 10, 0, 7)
 HeaderLogo.Image = "rbxassetid://89867346084011"
 HeaderLogo.ScaleType = Enum.ScaleType.Fit
 HeaderLogo.ZIndex = 5
@@ -1740,14 +1741,15 @@ HeaderLogo.Parent = Header
 
 local Title = Instance.new("TextLabel")
 Title.BackgroundTransparency = 1
-Title.Position = UDim2.new(0, 60, 0, 5)
-Title.Size = UDim2.new(1, -252, 0, 30)
+Title.Position = UDim2.new(0, 66, 0, 5)
+Title.Size = UDim2.new(1, -258, 0, 30)
 Title.Text = "H4SK"
 Title.TextColor3 = Theme.TextMain
 Title.TextSize = 18
 Title.Font = Enum.Font.GothamBold
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextTruncate = Enum.TextTruncate.AtEnd
+Title:SetAttribute("HexaKeepTitleFont", true)
 Title.Parent = Header
 makeDraggable(MainFrame, Title)
 
@@ -1755,8 +1757,8 @@ do
 	local subtitle = Instance.new("TextLabel")
 	subtitle.Name = "HexaUniversalSubtitle"
 	subtitle.BackgroundTransparency = 1
-	subtitle.Position = UDim2.new(0, 60, 0, 32)
-	subtitle.Size = UDim2.new(1, -252, 0, 18)
+	subtitle.Position = UDim2.new(0, 66, 0, 32)
+	subtitle.Size = UDim2.new(1, -258, 0, 18)
 	subtitle.Text = "UNIVERSAL"
 	subtitle.TextColor3 = Theme.TextMain
 	subtitle.TextTransparency = 0.48
@@ -1798,9 +1800,9 @@ Lang.Set(Lang.Current)
 local OwnerVipButton = nil
 local OwnerFrame = nil
 if HEXA_IS_OWNER then
-	Title.Size = UDim2.new(1, -316, 0, 30)
+	Title.Size = UDim2.new(1, -322, 0, 30)
 	if Header:FindFirstChild("HexaUniversalSubtitle") then
-		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -316, 0, 18)
+		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -322, 0, 18)
 	end
 	OwnerVipButton = neonButton(Header, "★ VIP", UDim2.new(0, 58, 0, 34), UDim2.new(1, -246, 0, 12), 4)
 	OwnerVipButton.TextColor3 = BUTTON_TEXT_COLOR
@@ -7232,7 +7234,9 @@ task.spawn(function()
 			local font = self.FontOptions[self.FontIndex].font
 			for _, object in ipairs(ScreenGui:GetDescendants()) do
 				if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
-					object.Font = font
+					if object:GetAttribute("HexaKeepTitleFont") ~= true then
+						object.Font = font
+					end
 				end
 			end
 		end
