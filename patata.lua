@@ -25,7 +25,7 @@ local __BootstrapCorner = Instance.new("UICorner")
 __BootstrapCorner.CornerRadius = UDim.new(0, 14)
 __BootstrapCorner.Parent = __BootstrapFrame
 local __BootstrapStroke = Instance.new("UIStroke")
-__BootstrapStroke.Color = Color3.fromRGB(55, 215, 255)
+__BootstrapStroke.Color = Color3.fromRGB(245, 245, 245)
 __BootstrapStroke.Transparency = 0.20
 __BootstrapStroke.Thickness = 2
 __BootstrapStroke.Parent = __BootstrapFrame
@@ -335,7 +335,7 @@ local function refreshVipControls()
 						object.Size = UDim2.new(0, 38, 0, 20)
 						object.Visible = true
 						object.BackgroundTransparency = locked and 0.02 or 0
-						object.BackgroundColor3 = locked and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(8, 42, 56)
+						object.BackgroundColor3 = locked and Color3.fromRGB(28, 28, 28) or Color3.fromRGB(22, 22, 22)
 					elseif isToggleKnob then
 						object.Visible = true
 						object.BackgroundTransparency = 0
@@ -344,7 +344,7 @@ local function refreshVipControls()
 						else
 							local ownerButton = object.Parent and object.Parent.Parent
 							local isActive = ownerButton and ownerButton:GetAttribute("IsActive") == true
-							object.BackgroundColor3 = isActive and Color3.fromRGB(55, 215, 255) or Color3.fromRGB(95, 95, 95)
+							object.BackgroundColor3 = isActive and Color3.fromRGB(245, 245, 245) or Color3.fromRGB(95, 95, 95)
 							object.Position = isActive and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
 						end
 					elseif object:IsA("GuiObject") then
@@ -464,19 +464,19 @@ end
 
 local Theme = {
 	BG = Color3.fromRGB(8, 8, 8),
-	Panel = Color3.fromRGB(12, 18, 22),
+	Panel = Color3.fromRGB(14, 14, 14),
 	Panel2 = Color3.fromRGB(245, 245, 245),
 	Accent = Color3.fromRGB(255, 255, 255),
 	Accent2 = Color3.fromRGB(218, 218, 218),
-	Purple = Color3.fromRGB(55, 215, 255),
-	PurpleDark = Color3.fromRGB(20, 125, 165),
-	PurpleDeep = Color3.fromRGB(8, 42, 56),
-	PurpleText = Color3.fromRGB(175, 240, 255),
+	Purple = Color3.fromRGB(245, 245, 245),
+	PurpleDark = Color3.fromRGB(165, 165, 165),
+	PurpleDeep = Color3.fromRGB(22, 22, 22),
+	PurpleText = Color3.fromRGB(235, 235, 235),
 	TextMain = Color3.fromRGB(245, 245, 245),
 	TextOff = Color3.fromRGB(12, 12, 12),
-	Active = Color3.fromRGB(20, 155, 200),
+	Active = Color3.fromRGB(255, 255, 255),
 	ActiveText = Color3.fromRGB(255, 255, 255),
-	ToggleOn = Color3.fromRGB(55, 215, 255),
+	ToggleOn = Color3.fromRGB(245, 245, 245),
 	ToggleOff = Color3.fromRGB(95, 95, 95),
 	VipGold = Color3.fromRGB(255, 211, 46),
 	Danger = Color3.fromRGB(220, 50, 50),
@@ -672,7 +672,7 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	toggleBg.Name = "ToggleBg"
 	toggleBg.Size = UDim2.new(0, 38, 0, 20)
 	toggleBg.Position = UDim2.new(1, -48, 0.5, -10)
-	toggleBg.BackgroundColor3 = Color3.fromRGB(8, 42, 56)
+	toggleBg.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
 	toggleBg.BorderSizePixel = 0
 	toggleBg.ZIndex = 3
 	toggleBg.Parent = btn
@@ -1443,6 +1443,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"BALA PENETRANTE DE SUPERFICIES", "SURFACE-PENETRATING BULLET"},
 	{"MODIFICADORES DE ARMAS Y PROYECTILES", "WEAPON AND PROJECTILE MODIFIERS"},
 	{"SUAVIZADO DE PUNTERÍA", "AIM SMOOTHING"},
+	{"BLOQUEO DE AIM", "AIM LOCK"},
 	{"PREDICCIÓN DEL OBJETIVO", "TARGET PREDICTION"},
 	{"RETARDO AL CAMBIAR OBJETIVO", "TARGET SWITCHING DELAY"},
 	{"Retardo de cambio de objetivo (ms)", "Target switching delay (ms)"},
@@ -1815,7 +1816,7 @@ KeyHeaderLogo.Name = "KeyHeaderLogo"
 KeyHeaderLogo.BackgroundTransparency = 1
 KeyHeaderLogo.Size = UDim2.fromOffset(28, 28)
 KeyHeaderLogo.Position = UDim2.new(0, 18, 0, 15)
-KeyHeaderLogo.Image = "rbxassetid://89867346084011"
+KeyHeaderLogo.Image = "rbxassetid://120760903627345"
 KeyHeaderLogo.ScaleType = Enum.ScaleType.Fit
 KeyHeaderLogo.Parent = KeyFrame
 
@@ -1931,7 +1932,7 @@ HeaderLogo.Name = "HeaderLogo"
 HeaderLogo.BackgroundTransparency = 1
 HeaderLogo.Size = UDim2.fromOffset(36, 36)
 HeaderLogo.Position = UDim2.new(0, 15, 0, 11)
-HeaderLogo.Image = "rbxassetid://89867346084011"
+HeaderLogo.Image = "rbxassetid://120760903627345"
 HeaderLogo.ScaleType = Enum.ScaleType.Fit
 HeaderLogo.ZIndex = 5
 HeaderLogo.Parent = Header
@@ -2185,7 +2186,7 @@ RestoreOrb.Position = UDim2.new(0, 18, 0.2, 0)
 RestoreOrb.BackgroundColor3 = Theme.Panel2
 RestoreOrb.BackgroundTransparency = 1 
 RestoreOrb.BorderSizePixel = 0
-RestoreOrb.Image = "rbxassetid://89867346084011" 
+RestoreOrb.Image = "rbxassetid://120760903627345" 
 RestoreOrb.ScaleType = Enum.ScaleType.Fit
 RestoreOrb.AutoButtonColor = false
 RestoreOrb.Parent = ScreenGui
@@ -2247,14 +2248,14 @@ CategoryUI.Title.Parent = CategoryUI.Frame
 
 FunctionSearchBox = Instance.new("TextBox")
 FunctionSearchBox.Name = "HexaFunctionSearch"
-FunctionSearchBox.BackgroundColor3 = Color3.fromRGB(9, 37, 48)
+FunctionSearchBox.BackgroundColor3 = Color3.fromRGB(14, 14, 14)
 FunctionSearchBox.BackgroundTransparency = 0.06
 FunctionSearchBox.BorderSizePixel = 0
 FunctionSearchBox.Position = MOBILE_DEVICE and UDim2.new(0, 8, 0, 7) or UDim2.new(0, 8, 0, 29)
 FunctionSearchBox.Size = UDim2.new(1, -16, 0, 30)
 FunctionSearchBox.Text = ""
 FunctionSearchBox.PlaceholderText = Lang.Current == "EN" and "SEARCH FUNCTIONS..." or "BUSCAR FUNCIONES..."
-FunctionSearchBox.PlaceholderColor3 = Color3.fromRGB(145, 205, 220)
+FunctionSearchBox.PlaceholderColor3 = Color3.fromRGB(160, 160, 160)
 FunctionSearchBox.TextColor3 = Theme.TextMain
 FunctionSearchBox.TextSize = 10
 FunctionSearchBox.Font = Enum.Font.GothamMedium
@@ -2271,7 +2272,7 @@ FunctionSearchPadding.PaddingLeft = UDim.new(0, 10)
 FunctionSearchPadding.PaddingRight = UDim.new(0, 8)
 FunctionSearchPadding.Parent = FunctionSearchBox
 FunctionSearchBox.Focused:Connect(function()
-	FunctionSearchStroke.Color = Color3.fromRGB(120, 235, 255)
+	FunctionSearchStroke.Color = Color3.fromRGB(255, 255, 255)
 	FunctionSearchStroke.Transparency = 0.04
 	FunctionSearchStroke.Thickness = 2
 end)
@@ -3119,6 +3120,7 @@ local AimKeys = {
 	Head = MOBILE_DEVICE and "AUTO" or nil,
 	Body = MOBILE_DEVICE and "AUTO" or nil,
 	Smoothing = MOBILE_DEVICE and "AUTO" or nil,
+	Lock = nil,
 }
 local maxAimDistance = 500
 local fovRadius = 200
@@ -3460,6 +3462,13 @@ local Runtime = {
 	cachedAimAtHead = nil,
 	lastAimRender = 0,
 	aimWasActive = false,
+	aimLockEnabled = false,
+	aimInputCaptured = false,
+	aimSavedMouseBehavior = nil,
+	aimSavedMouseIconEnabled = nil,
+	aimSavedMouseDeltaSensitivity = nil,
+	aimLockWorldPosition = nil,
+	aimLockSmoothing = false,
 	friendCache = setmetatable({}, {__mode = "k"}),
 	wallRaycastParams = RaycastParams.new(),
 	wallFilterCharacter = nil,
@@ -3699,6 +3708,61 @@ end
 Runtime.aimSwitchTarget = nil
 Runtime.aimSwitchCandidate = nil
 Runtime.aimSwitchCandidateSince = 0
+
+function Runtime.captureAimInput()
+	if MOBILE_DEVICE or not Runtime.aimLockEnabled or Runtime.aimInputCaptured then return end
+	Runtime.aimInputCaptured = true
+	pcall(function() Runtime.aimSavedMouseBehavior = UserInputService.MouseBehavior end)
+	pcall(function() Runtime.aimSavedMouseIconEnabled = UserInputService.MouseIconEnabled end)
+	pcall(function() Runtime.aimSavedMouseDeltaSensitivity = UserInputService.MouseDeltaSensitivity end)
+end
+
+function Runtime.enforceAimInputLock()
+	if MOBILE_DEVICE or not Runtime.aimLockEnabled or not Runtime.aimInputCaptured then return end
+	pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter end)
+	pcall(function() UserInputService.MouseIconEnabled = false end)
+	pcall(function() UserInputService.MouseDeltaSensitivity = 0 end)
+end
+
+function Runtime.releaseAimInput()
+	Runtime.aimLockWorldPosition = nil
+	Runtime.aimLockSmoothing = false
+	if MOBILE_DEVICE or not Runtime.aimInputCaptured then return end
+	Runtime.aimInputCaptured = false
+
+	pcall(function()
+		if Runtime.aimSavedMouseBehavior ~= nil then
+			UserInputService.MouseBehavior = Runtime.aimSavedMouseBehavior
+		end
+	end)
+	pcall(function()
+		if Runtime.aimSavedMouseIconEnabled ~= nil then
+			UserInputService.MouseIconEnabled = Runtime.aimSavedMouseIconEnabled
+		end
+	end)
+	pcall(function()
+		if Runtime.aimSavedMouseDeltaSensitivity ~= nil then
+			UserInputService.MouseDeltaSensitivity = Runtime.aimSavedMouseDeltaSensitivity
+		end
+	end)
+
+	Runtime.aimSavedMouseBehavior = nil
+	Runtime.aimSavedMouseIconEnabled = nil
+	Runtime.aimSavedMouseDeltaSensitivity = nil
+end
+
+function Runtime.setAimLockTarget(worldPosition, smoothing)
+	if not Runtime.aimLockEnabled then
+		Runtime.releaseAimInput()
+		return
+	end
+	Runtime.aimLockWorldPosition = worldPosition
+	Runtime.aimLockSmoothing = smoothing == true
+	if not MOBILE_DEVICE then
+		Runtime.captureAimInput()
+		Runtime.enforceAimInputLock()
+	end
+end
 
 function Runtime.resetAimbotTargetSwitching()
 	Runtime.aimSwitchTarget = nil
@@ -3955,6 +4019,7 @@ task.spawn(function()
 			WallCheck = HexaSharedTargetFilters.WallCheck,
 			TeamCheck = HexaSharedTargetFilters.TeamCheck,
 			AimSmoothing = false,
+			AimLock = false,
 			TargetPrediction = false,
 			TargetSwitchDelay = false,
 			TargetSwitchDelayMs = 350,
@@ -4123,7 +4188,7 @@ task.spawn(function()
 		}
 		local HitboxColorNames = {"BLANCO", "ROJO", "VERDE", "AZUL", "AMARILLO", "MORADO"}
 
-		local CombatAdvancedCard = sectionCard(632)
+		local CombatAdvancedCard = sectionCard(678)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -4149,6 +4214,21 @@ task.spawn(function()
 		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 532))
 		markVipControl(InfiniteAmmoButton)
 		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
+		local AimLockButton = createToggleButton(
+			CombatAdvancedCard,
+			"BLOQUEO DE AIM",
+			MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.62, 0, 0, 38),
+			UDim2.new(0, 16, 0, 624)
+		)
+		local AimLockKeybindButton = nil
+		if not MOBILE_DEVICE then
+			AimLockKeybindButton = createKeybindButton(
+				CombatAdvancedCard,
+				UDim2.new(0.32, -8, 0, 38),
+				UDim2.new(0.65, 16, 0, 624),
+				function(key) AimKeys.Lock = key end
+			)
+		end
 
 		local ProjectileModifiersCard = sectionCard(510)
 		ProjectileModifiersCard.LayoutOrder = 24
@@ -4233,6 +4313,7 @@ task.spawn(function()
 			WallCheck = WallButton,
 			TeamCheck = TeamButton,
 			AimSmoothing = AimSmoothingButton,
+			AimLock = AimLockButton,
 			TargetPrediction = PredictionButton,
 			TargetSwitchDelay = TargetSwitchDelayButton,
 			NoRecoil = NoRecoilButton,
@@ -5469,6 +5550,8 @@ task.spawn(function()
 			for settingName in pairs(Buttons) do Settings[settingName] = false end
 			HexaSharedTargetFilters.WallCheck = false
 			HexaSharedTargetFilters.AimSmoothing = false
+			Runtime.aimLockEnabled = false
+			Runtime.releaseAimInput()
 			HexaSharedTargetFilters.TargetPrediction = false
 			HexaSharedTargetFilters.TargetSwitchDelay = false
 			Runtime.resetAimbotTargetSwitching()
@@ -5531,6 +5614,38 @@ task.spawn(function()
 		bindToggle(AimSmoothingButton, "AimSmoothing", function(enabled)
 			HexaSharedTargetFilters.AimSmoothing = enabled
 		end)
+		bindToggle(AimLockButton, "AimLock", function(enabled)
+			Runtime.aimLockEnabled = enabled == true
+			if not Runtime.aimLockEnabled then
+				Runtime.releaseAimInput()
+			end
+		end)
+
+		if AimLockKeybindButton then
+			AimLockKeybindButton:SetAttribute("HexaNoFavorite", true)
+		end
+
+		-- Keybind de tipo toggle: una pulsación activa y la siguiente desactiva.
+		connect(UserInputService.InputBegan, function(input, processed)
+			if processed or MOBILE_DEVICE or AimKeys.Lock == nil then return end
+			local matched = false
+			if typeof(AimKeys.Lock) == "EnumItem" then
+				if AimKeys.Lock.EnumType == Enum.KeyCode then
+					matched = input.KeyCode == AimKeys.Lock
+				elseif AimKeys.Lock.EnumType == Enum.UserInputType then
+					matched = input.UserInputType == AimKeys.Lock
+				end
+			end
+			if not matched then return end
+
+			Settings.AimLock = not Settings.AimLock
+			Runtime.aimLockEnabled = Settings.AimLock == true
+			setActive(AimLockButton, Settings.AimLock)
+			if not Runtime.aimLockEnabled then
+				Runtime.releaseAimInput()
+			end
+		end)
+
 		bindToggle(PredictionButton, "TargetPrediction", function(enabled)
 			HexaSharedTargetFilters.TargetPrediction = enabled
 		end)
@@ -6428,18 +6543,22 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 							targetPosition = targetPosition + targetPart.AssemblyLinearVelocity * HexaSharedTargetFilters.PredictionFactor
 						end)
 					end
+					Runtime.setAimLockTarget(targetPosition, HexaSharedTargetFilters.AimSmoothing)
 					local targetCFrame = CFrame.new(cam.CFrame.Position, targetPosition)
 					if HexaSharedTargetFilters.AimSmoothing then
 						cam.CFrame = cam.CFrame:Lerp(targetCFrame, 1 / HexaSharedTargetFilters.SmoothingFactor)
 					else
 						cam.CFrame = targetCFrame
 					end
+					Runtime.enforceAimInputLock()
 				end
 			else
 				if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
+				Runtime.releaseAimInput()
 			end
 		else
 			if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
+			Runtime.releaseAimInput()
 		end
 	elseif Runtime.aimWasActive then
 		Runtime.aimWasActive = false
@@ -6449,9 +6568,35 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 		Runtime.lastAimScan = 0
 		Runtime.lastAimRender = 0
 		Runtime.resetAimbotTargetSwitching()
+		Runtime.releaseAimInput()
 		if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
 	end
 end)
+
+pcall(function()
+	RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock")
+end)
+RunService:BindToRenderStep(
+	"H3X4X_AimWeaponLock",
+	Enum.RenderPriority.Camera.Value + 20,
+	function()
+		if not Runtime.aimLockEnabled or not Runtime.aimInputCaptured or Runtime.aimLockWorldPosition == nil then return end
+		Runtime.enforceAimInputLock()
+		if workspace.CurrentCamera then
+			if Runtime.aimLockSmoothing then
+				workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(
+					CFrame.new(workspace.CurrentCamera.CFrame.Position, Runtime.aimLockWorldPosition),
+					1 / HexaSharedTargetFilters.SmoothingFactor
+				)
+			else
+				workspace.CurrentCamera.CFrame = CFrame.new(
+					workspace.CurrentCamera.CFrame.Position,
+					Runtime.aimLockWorldPosition
+				)
+			end
+		end
+	end
+)
 
 Runtime.charAddedConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
 	local hum = newChar:WaitForChild("Humanoid", 5)
@@ -6539,6 +6684,8 @@ YesBtn.MouseButton1Click:Connect(function()
 		if Runtime.espConn then Runtime.espConn:Disconnect() end
 		if Runtime.renderConn then Runtime.renderConn:Disconnect() end
 		if Runtime.charAddedConn then Runtime.charAddedConn:Disconnect() end
+		Runtime.releaseAimInput()
+		pcall(function() RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock") end)
 		if ScreenGui then ScreenGui:Destroy() end
 	end)
 end)
@@ -6699,7 +6846,7 @@ task.spawn(function()
 				self:updateCrosshair()
 			end, true)
 			self.CrosshairRainbowButton = createToggleButton(self.CrosshairCard, "MIRA ARCOÍRIS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 340))
-			markVipControl(self.CrosshairStyleButton)
+			-- El tipo de mira (CRUZ/PUNTO) está disponible también para usuarios FREE.
 			markVipControl(self.CrosshairColorButton)
 			markVipControl(self.CrosshairRainbowButton)
 
@@ -6709,7 +6856,6 @@ task.spawn(function()
 				self:updateCrosshair()
 			end)
 			self:connect(self.CrosshairStyleButton.MouseButton1Click, function()
-				if not requireVip() then return end
 				self.CrosshairStyle = self.CrosshairStyle == "CRUZ" and "PUNTO" or "CRUZ"
 				self.CrosshairStyleButton.Text = "TIPO DE MIRA: " .. self.CrosshairStyle
 				self:updateCrosshair()
