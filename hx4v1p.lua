@@ -17,5 +17,10 @@ return {
     ["11150069024"] = { --el pana de tikito
         vip = true,
         expires = "permanent"
+    },        
+
+   ["3808563939"] = { --ALE (SORTEO)
+        vip = true,
+        expires = "permanent"    
     }
 }
