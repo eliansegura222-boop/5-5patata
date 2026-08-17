@@ -21,6 +21,11 @@ return {
 
    ["3808563939"] = { --ALE (SORTEO)
         vip = true,
-        expires = "permanent"    
+        expires = "permanent"  
+    },    
+                
+   ["5385333777"] = { --enma (sorteo)
+        vip = true,
+        expires = "2026-08-17"            
     }
 }
