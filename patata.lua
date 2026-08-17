@@ -62,117 +62,6 @@ local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = __BootstrapPlayer
 
-local VIP_SECRET = "HEXA-X-NONY-2026-VIP-V1"
-local VIP_FILE_NAME = ("HexaX_VIP_%d.txt"):format(LocalPlayer.UserId)
-
-local function normalizeUsername(username)
-	return string.lower((tostring(username or ""):gsub("%s+", "")))
-end
-
-local function rollingHash(text, seed)
-	local hash = seed or 5381
-	for index = 1, #text do
-		hash = (hash * 33 + string.byte(text, index)) % 2147483647
-	end
-	return hash
-end
-
-local function generateLegacyVipCode(username, userId)
-	local numericId = tonumber(userId) or 0
-	local payload = tostring(numericId) .. ":" .. VIP_SECRET
-	local first = rollingHash(payload, 5381)
-	local second = rollingHash(string.reverse(payload), 7919)
-	return ("HXVIP-%08X-%08X"):format(first, second)
-end
-
-local function vipSignature(targetUserId, expiresAt, nonce)
-	local payload = ("U:%d:%d:%s:%s"):format(targetUserId, expiresAt, nonce, VIP_SECRET)
-	local first = rollingHash(payload, 5381)
-	local second = rollingHash(string.reverse(payload), 7919)
-	return first, second
-end
-
-local function generateVipCode(userId, durationSeconds)
-	local targetUserId = math.max(0, math.floor(tonumber(userId) or 0))
-	local duration = math.max(0, math.floor(tonumber(durationSeconds) or 0))
-	local expiresAt = duration > 0 and (os.time() + duration) or 0
-	local nonce = ("%06X"):format(Random.new():NextInteger(0, 16777215))
-	local first, second = vipSignature(targetUserId, expiresAt, nonce)
-	return ("HX2-U-%d-%d-%s-%08X-%08X"):format(targetUserId, expiresAt, nonce, first, second)
-end
-
-local function validateVipCode(code, username, userId)
-	if type(code) ~= "string" then return false, {reason = "INVALID"} end
-	local normalized = string.upper(code:gsub("%s+", ""))
-	local targetText, expiresText, nonce, firstText, secondText = normalized:match(
-		"^HX2%-U%-(%d+)%-(%d+)%-(%x%x%x%x%x%x)%-(%x%x%x%x%x%x%x%x)%-(%x%x%x%x%x%x%x%x)$"
-	)
-
-	if targetText then
-		local targetUserId = tonumber(targetText) or 0
-		local expiresAt = tonumber(expiresText) or 0
-		local expectedFirst, expectedSecond = vipSignature(targetUserId, expiresAt, nonce)
-		if tonumber(firstText, 16) ~= expectedFirst or tonumber(secondText, 16) ~= expectedSecond then
-			return false, {reason = "INVALID"}
-		end
-		if targetUserId ~= (tonumber(userId) or 0) then
-			return false, {reason = "USER"}
-		end
-		if expiresAt > 0 and os.time() >= expiresAt then
-			return false, {reason = "EXPIRED", expiresAt = expiresAt}
-		end
-		return true, {
-			scope = "USER",
-			targetUserId = targetUserId,
-			expiresAt = expiresAt,
-			permanent = expiresAt == 0,
-			nonce = nonce,
-		}
-	end
-
-	if normalized == generateLegacyVipCode(username, userId) then
-		return true, {
-			scope = "USER",
-			targetUserId = tonumber(userId) or 0,
-			expiresAt = 0,
-			permanent = true,
-			legacy = true,
-		}
-	end
-
-	return false, {reason = "INVALID"}
-end
-
-local function isValidVipCode(code, username, userId)
-	local valid = validateVipCode(code, username, userId)
-	return valid
-end
-
-local function readSavedVipCode()
-	if type(isfile) ~= "function" or type(readfile) ~= "function" then return nil end
-	local ok, value = pcall(function()
-		if isfile(VIP_FILE_NAME) then return readfile(VIP_FILE_NAME) end
-	end)
-	return ok and value or nil
-end
-
-local function saveVipCode(code)
-	if type(writefile) ~= "function" then return end
-	pcall(function() writefile(VIP_FILE_NAME, tostring(code)) end)
-end
-
-local function clearSavedVipCode()
-	if type(delfile) == "function" and type(isfile) == "function" then
-		local removed = pcall(function()
-			if isfile(VIP_FILE_NAME) then delfile(VIP_FILE_NAME) end
-		end)
-		if removed then return end
-	end
-	if type(writefile) == "function" then
-		pcall(function() writefile(VIP_FILE_NAME, "") end)
-	end
-end
-
 local RemoteVipState = (function()
 	local VIP_RAW_URL = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/hx4v1p.lua"
 
@@ -278,16 +167,8 @@ local RemoteVipState = (function()
 	return state
 end)()
 
-local HEXA_IS_OWNER = false
-local HEXA_LOCAL_PERMANENT_ACCESS = false
-local HEXA_HAS_PERMANENT_ACCESS = HEXA_LOCAL_PERMANENT_ACCESS
-	or (RemoteVipState:IsActive() and RemoteVipState.info.permanent == true)
-local savedVipCode = readSavedVipCode()
-local savedVipValid, savedVipInfo = validateVipCode(savedVipCode, LocalPlayer.Name, LocalPlayer.UserId)
-if savedVipCode and not savedVipValid then clearSavedVipCode() end
-local HEXA_VIP_EXPIRES_AT = RemoteVipState:IsActive() and (RemoteVipState.info.expiresAt or 0)
-	or (savedVipValid and (savedVipInfo.expiresAt or 0) or 0)
-local HEXA_IS_VIP = HEXA_HAS_PERMANENT_ACCESS or RemoteVipState:IsActive() or savedVipValid
+-- El acceso VIP se controla únicamente desde la lista remota de GitHub.
+local HEXA_IS_VIP = RemoteVipState:IsActive()
 
 local AllSliders = {}
 local VipControls = {}
@@ -405,35 +286,8 @@ local function refreshVipControls()
 	end
 end
 
-local function setVipState(enabled, code, vipInfo)
-	local remoteActive = RemoteVipState:IsActive()
-	HEXA_HAS_PERMANENT_ACCESS = HEXA_LOCAL_PERMANENT_ACCESS
-		or (remoteActive and RemoteVipState.info.permanent == true)
-	if enabled == true and vipInfo then
-		savedVipValid = true
-		savedVipInfo = vipInfo
-		if code then savedVipCode = code end
-	elseif enabled ~= true then
-		savedVipValid = false
-		savedVipInfo = nil
-		savedVipCode = nil
-	end
-	HEXA_IS_VIP = HEXA_HAS_PERMANENT_ACCESS or remoteActive or enabled == true
-	HEXA_VIP_EXPIRES_AT = 0
-	if HEXA_IS_VIP and not HEXA_HAS_PERMANENT_ACCESS then
-		local remoteExpiration = remoteActive and tonumber(RemoteVipState.info.expiresAt) or nil
-		local codeExpiration = enabled and vipInfo and tonumber(vipInfo.expiresAt) or nil
-		if (remoteActive and remoteExpiration == 0) or (enabled and codeExpiration == 0) then
-			HEXA_VIP_EXPIRES_AT = 0
-		else
-			HEXA_VIP_EXPIRES_AT = math.max(remoteExpiration or 0, codeExpiration or 0)
-		end
-	end
-	if HEXA_IS_VIP and code then
-		saveVipCode(code)
-	elseif not HEXA_IS_VIP then
-		clearSavedVipCode()
-	end
+local function syncVipAccessFromGithub()
+	HEXA_IS_VIP = RemoteVipState:IsActive()
 	for _, slider in ipairs(AllSliders) do
 		pcall(function() slider.Refresh() end)
 	end
@@ -1248,17 +1102,12 @@ task.spawn(function()
 		if os.clock() - lastRemoteRefresh >= 30 then
 			lastRemoteRefresh = os.clock()
 			if RemoteVipState:Refresh() then
-				local codeValid, codeInfo = validateVipCode(savedVipCode, LocalPlayer.Name, LocalPlayer.UserId)
-				if not codeValid and savedVipCode then clearSavedVipCode() end
-				savedVipValid = codeValid == true
-				savedVipInfo = codeValid and codeInfo or nil
-				setVipState(savedVipValid, nil, savedVipInfo)
+				syncVipAccessFromGithub()
 			end
-		elseif HEXA_IS_VIP and not HEXA_HAS_PERMANENT_ACCESS and HEXA_VIP_EXPIRES_AT > 0 and os.time() >= HEXA_VIP_EXPIRES_AT then
-			local codeValid, codeInfo = validateVipCode(savedVipCode, LocalPlayer.Name, LocalPlayer.UserId)
-			savedVipValid = codeValid == true
-			savedVipInfo = codeValid and codeInfo or nil
-			setVipState(savedVipValid, nil, savedVipInfo)
+		elseif HEXA_IS_VIP and not RemoteVipState:IsActive() then
+			-- También retirar acceso al cumplirse una expiración remota,
+			-- aunque el archivo de GitHub todavía no haya cambiado.
+			syncVipAccessFromGithub()
 		end
 	end
 end)
@@ -1443,7 +1292,8 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"BALA PENETRANTE DE SUPERFICIES", "SURFACE-PENETRATING BULLET"},
 	{"MODIFICADORES DE ARMAS Y PROYECTILES", "WEAPON AND PROJECTILE MODIFIERS"},
 	{"SUAVIZADO DE PUNTERÍA", "AIM SMOOTHING"},
-	{"BLOQUEO DE AIM", "AIM LOCK"},
+	{"CONTROL DE MIRA", "AIM CONTROL"},
+	{"BLOQUEO DE ARMA", "WEAPON LOCK"},
 	{"PREDICCIÓN DEL OBJETIVO", "TARGET PREDICTION"},
 	{"RETARDO AL CAMBIAR OBJETIVO", "TARGET SWITCHING DELAY"},
 	{"Retardo de cambio de objetivo (ms)", "Target switching delay (ms)"},
@@ -1513,21 +1363,8 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"MODO TRANSMISIÓN", "STREAMER MODE"},
 	{"ACTIVAR MODO PÁNICO", "ACTIVATE PANIC MODE"},
 	{"PERSONALIZACIÓN", "CUSTOMIZATION"},
-	{"ADMINISTRADOR VIP", "VIP ADMINISTRATOR"},
-	{"TIPO: PERMANENTE", "TYPE: PERMANENT"},
-	{"TIPO: TEMPORAL", "TYPE: TEMPORARY"},
-	{"TIEMPO: PERMANENTE", "TIME: PERMANENT"},
-	{"TIEMPO: 1 HORA", "TIME: 1 HOUR"},
-	{"TIEMPO: 1 DÍA", "TIME: 1 DAY"},
-	{"TIEMPO: 7 DÍAS", "TIME: 7 DAYS"},
-	{"TIEMPO: 2 SEMANAS", "TIME: 2 WEEKS"},
-	{"TIEMPO: 1 MES", "TIME: 1 MONTH"},
 	{"SUBIR", "UP"},
 	{"BAJAR", "DOWN"},
-	{"GENERAR CÓDIGO VIP", "GENERATE VIP CODE"},
-	{"USUARIO DE ROBLOX", "ROBLOX USERNAME"},
-	{"Código VIP copiado", "VIP code copied"},
-	{"Usuario no encontrado", "User not found"},
 	{"MARCA DE AGUA: ARRIBA DERECHA", "WATERMARK: TOP RIGHT"},
 	{"MARCA DE AGUA:", "WATERMARK:"},
 	{"ARRIBA DERECHA", "TOP RIGHT"},
@@ -1553,9 +1390,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"EXPLOSIÓN", "BURST"},
 	{"H3X4 X - SISTEMA DE CLAVE", "H3X4 X - KEY SYSTEM"},
 	{"Escribe la clave aquí...", "Enter the key here..."},
-	{"Escribe la clave o código VIP...", "Enter the key or VIP code..."},
 	{"Escribe la key", "Enter the key"},
-	{"¡VIP ACTIVADO!", "VIP ACTIVATED!"},
 	{"Verificar clave", "Check key"},
 	{"Obtener clave (Discord)", "Get key (Discord)"},
 	{"¡Clave incorrecta!", "Incorrect key!"},
@@ -1816,7 +1651,7 @@ KeyHeaderLogo.Name = "KeyHeaderLogo"
 KeyHeaderLogo.BackgroundTransparency = 1
 KeyHeaderLogo.Size = UDim2.fromOffset(28, 28)
 KeyHeaderLogo.Position = UDim2.new(0, 18, 0, 15)
-KeyHeaderLogo.Image = "rbxassetid://120760903627345"
+KeyHeaderLogo.Image = "rbxassetid://72742584610344"
 KeyHeaderLogo.ScaleType = Enum.ScaleType.Fit
 KeyHeaderLogo.Parent = KeyFrame
 
@@ -1932,7 +1767,7 @@ HeaderLogo.Name = "HeaderLogo"
 HeaderLogo.BackgroundTransparency = 1
 HeaderLogo.Size = UDim2.fromOffset(36, 36)
 HeaderLogo.Position = UDim2.new(0, 15, 0, 11)
-HeaderLogo.Image = "rbxassetid://120760903627345"
+HeaderLogo.Image = "rbxassetid://72742584610344"
 HeaderLogo.ScaleType = Enum.ScaleType.Fit
 HeaderLogo.ZIndex = 5
 HeaderLogo.Parent = Header
@@ -1995,190 +1830,6 @@ end)
 
 Lang.Set(Lang.Current)
 
-local OwnerVipButton = nil
-local OwnerFrame = nil
-if HEXA_IS_OWNER then
-	Title.Size = UDim2.new(1, -308, 0, 30)
-	if Header:FindFirstChild("HexaUniversalSubtitle") then
-		Header.HexaUniversalSubtitle.Size = UDim2.new(1, -308, 0, 18)
-	end
-	OwnerVipButton = neonButton(Header, "★ VIP", UDim2.new(0, 58, 0, 34), UDim2.new(1, -246, 0, 12), 4)
-	OwnerVipButton.TextColor3 = BUTTON_TEXT_COLOR
-	OwnerVipButton.BackgroundColor3 = Color3.fromRGB(40, 34, 15)
-	mkStroke(OwnerVipButton, Color3.fromRGB(255, 211, 46), 0.2, 1)
-
-	OwnerFrame = Instance.new("Frame")
-	OwnerFrame.Name = "HexaVipOwnerPanel"
-	OwnerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	OwnerFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-	OwnerFrame.Size = UDim2.fromOffset(430, 410)
-	OwnerFrame.BackgroundColor3 = Theme.BG
-	OwnerFrame.BackgroundTransparency = 0.14
-	OwnerFrame.BorderSizePixel = 0
-	OwnerFrame.Visible = false
-	OwnerFrame.ZIndex = 150
-	OwnerFrame.Parent = ScreenGui
-	mkCorner(OwnerFrame, 16)
-	mkStroke(OwnerFrame, Color3.fromRGB(255, 211, 46), 0.1, 2)
-	makeDraggable(OwnerFrame, OwnerFrame)
-
-	local ownerScale = Instance.new("UIScale")
-	ownerScale.Scale = math.min(1, math.max(0.62, math.min((GUI_VIEWPORT_SIZE.X - 20) / 430, (GUI_VIEWPORT_SIZE.Y - 20) / 410)))
-	ownerScale.Parent = OwnerFrame
-
-	local ownerTitle = Instance.new("TextLabel")
-	ownerTitle.BackgroundTransparency = 1
-	ownerTitle.Position = UDim2.new(0, 16, 0, 12)
-	ownerTitle.Size = UDim2.new(1, -68, 0, 28)
-	ownerTitle.Text = "★ ADMINISTRADOR VIP"
-	ownerTitle.TextColor3 = Color3.fromRGB(180, 135, 0)
-	ownerTitle.TextSize = 15
-	ownerTitle.Font = Enum.Font.GothamBold
-	ownerTitle.TextXAlignment = Enum.TextXAlignment.Left
-	ownerTitle.ZIndex = 151
-	ownerTitle.Parent = OwnerFrame
-
-	local ownerClose = neonButton(OwnerFrame, "X", UDim2.new(0, 34, 0, 34), UDim2.new(1, -46, 0, 10), 152)
-	ownerClose.TextColor3 = BUTTON_TEXT_COLOR
-
-	local ownerInfo = Instance.new("TextLabel")
-	ownerInfo.BackgroundTransparency = 1
-	ownerInfo.Position = UDim2.new(0, 16, 0, 45)
-	ownerInfo.Size = UDim2.new(1, -32, 0, 32)
-	ownerInfo.Text = "Elige si la clave será temporal o permanente. Cada código funcionará únicamente para el usuario indicado."
-	ownerInfo.TextColor3 = Theme.TextMain
-	ownerInfo.TextSize = 11
-	ownerInfo.Font = Enum.Font.GothamMedium
-	ownerInfo.TextWrapped = true
-	ownerInfo.TextXAlignment = Enum.TextXAlignment.Left
-	ownerInfo.TextYAlignment = Enum.TextYAlignment.Top
-	ownerInfo.ZIndex = 151
-	ownerInfo.Parent = OwnerFrame
-
-	local ownerType = "PERMANENT"
-	local ownerDurationIndex = 1
-	local ownerDurations = {
-		{label = "1 HORA", seconds = 3600},
-		{label = "1 DÍA", seconds = 86400},
-		{label = "7 DÍAS", seconds = 604800},
-		{label = "2 SEMANAS", seconds = 1209600},
-		{label = "1 MES", seconds = 2592000},
-	}
-
-	local ownerTypeButton = neonButton(OwnerFrame, "TIPO: PERMANENTE", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 82), 151)
-	local ownerDurationButton = neonButton(OwnerFrame, "TIEMPO: PERMANENTE", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 128), 151)
-
-	local ownerUserBox = Instance.new("TextBox")
-	ownerUserBox.Position = UDim2.new(0, 16, 0, 174)
-	ownerUserBox.Size = UDim2.new(1, -32, 0, 40)
-	ownerUserBox.BackgroundColor3 = Theme.Panel2
-	ownerUserBox.BorderSizePixel = 0
-	ownerUserBox.PlaceholderText = "USUARIO DE ROBLOX"
-	ownerUserBox.Text = ""
-	ownerUserBox.TextColor3 = Theme.TextOff
-	ownerUserBox.PlaceholderColor3 = Color3.fromRGB(145, 145, 145)
-	ownerUserBox.TextSize = 13
-	ownerUserBox.Font = Enum.Font.GothamMedium
-	ownerUserBox.ClearTextOnFocus = false
-	ownerUserBox.ZIndex = 151
-	ownerUserBox.Parent = OwnerFrame
-	mkCorner(ownerUserBox, 9)
-	mkStroke(ownerUserBox, Theme.Accent, 0.5, 1)
-
-	local ownerGenerate = neonButton(OwnerFrame, "GENERAR CÓDIGO VIP", UDim2.new(1, -32, 0, 40), UDim2.new(0, 16, 0, 222), 151)
-	ownerGenerate.TextColor3 = BUTTON_TEXT_COLOR
-
-	local ownerCodeBox = Instance.new("TextBox")
-	ownerCodeBox.Position = UDim2.new(0, 16, 0, 270)
-	ownerCodeBox.Size = UDim2.new(1, -32, 0, 46)
-	ownerCodeBox.BackgroundColor3 = Theme.Panel2
-	ownerCodeBox.BorderSizePixel = 0
-	ownerCodeBox.PlaceholderText = "CÓDIGO VIP"
-	ownerCodeBox.Text = ""
-	ownerCodeBox.TextColor3 = Color3.fromRGB(120, 88, 0)
-	ownerCodeBox.TextSize = 10
-	ownerCodeBox.Font = Enum.Font.Code
-	ownerCodeBox.ClearTextOnFocus = false
-	ownerCodeBox.TextEditable = false
-	ownerCodeBox.TextWrapped = true
-	ownerCodeBox.ZIndex = 151
-	ownerCodeBox.Parent = OwnerFrame
-	mkCorner(ownerCodeBox, 9)
-	mkStroke(ownerCodeBox, Color3.fromRGB(255, 211, 46), 0.35, 1)
-
-	local ownerStatus = Instance.new("TextLabel")
-	ownerStatus.BackgroundTransparency = 1
-	ownerStatus.Position = UDim2.new(0, 16, 0, 324)
-	ownerStatus.Size = UDim2.new(1, -32, 0, 70)
-	ownerStatus.Text = ""
-	ownerStatus.TextColor3 = Theme.TextMain
-	ownerStatus.TextSize = 11
-	ownerStatus.Font = Enum.Font.GothamMedium
-	ownerStatus.TextWrapped = true
-	ownerStatus.TextXAlignment = Enum.TextXAlignment.Center
-	ownerStatus.TextYAlignment = Enum.TextYAlignment.Top
-	ownerStatus.ZIndex = 151
-	ownerStatus.Parent = OwnerFrame
-
-	local function refreshOwnerPanel()
-		ownerTypeButton.Text = ownerType == "TEMPORARY" and "TIPO: TEMPORAL" or "TIPO: PERMANENTE"
-		ownerDurationButton.Text = ownerType == "TEMPORARY"
-			and ("TIEMPO: " .. ownerDurations[ownerDurationIndex].label)
-			or "TIEMPO: PERMANENTE"
-	end
-
-	OwnerVipButton.MouseButton1Click:Connect(function()
-		OwnerFrame.Visible = not OwnerFrame.Visible
-	end)
-	ownerClose.MouseButton1Click:Connect(function() OwnerFrame.Visible = false end)
-	ownerTypeButton.MouseButton1Click:Connect(function()
-		ownerType = ownerType == "PERMANENT" and "TEMPORARY" or "PERMANENT"
-		ownerStatus.Text = ""
-		refreshOwnerPanel()
-	end)
-	ownerDurationButton.MouseButton1Click:Connect(function()
-		if ownerType ~= "TEMPORARY" then return end
-		ownerDurationIndex = ownerDurationIndex % #ownerDurations + 1
-		ownerStatus.Text = ""
-		refreshOwnerPanel()
-	end)
-	ownerGenerate.MouseButton1Click:Connect(function()
-		local requestedName = normalizeUsername(ownerUserBox.Text)
-		if requestedName == "" then
-			ownerStatus.Text = Lang.Current == "EN" and "Enter a username." or "Escribe un nombre de usuario."
-			return
-		end
-
-		ownerGenerate.Text = Lang.Current == "EN" and "SEARCHING..." or "BUSCANDO..."
-		local ok, userId = pcall(function() return Players:GetUserIdFromNameAsync(requestedName) end)
-		if not ok or not userId then
-			ownerStatus.Text = Lang.Current == "EN" and "User not found." or "Usuario no encontrado."
-			ownerGenerate.Text = "GENERAR CÓDIGO VIP"
-			return
-		end
-
-		local canonicalName = requestedName
-		pcall(function() canonicalName = Players:GetNameFromUserIdAsync(userId) end)
-		ownerUserBox.Text = canonicalName
-
-		local durationSeconds = ownerType == "TEMPORARY" and ownerDurations[ownerDurationIndex].seconds or 0
-		local code = generateVipCode(userId, durationSeconds)
-		ownerCodeBox.Text = code
-		if type(setclipboard) == "function" then setclipboard(code)
-		elseif type(toclipboard) == "function" then toclipboard(code) end
-
-		local durationText = ownerType == "TEMPORARY" and ownerDurations[ownerDurationIndex].label or "PERMANENTE"
-		if Lang.Current == "EN" then durationText = Lang.ToEnglish(durationText) end
-		if Lang.Current == "EN" then
-			ownerStatus.Text = "VIP code copied for @" .. canonicalName .. ". Duration: " .. durationText .. "."
-		else
-			ownerStatus.Text = "Código VIP copiado para @" .. canonicalName .. ". Duración: " .. durationText .. "."
-		end
-		ownerGenerate.Text = "GENERAR CÓDIGO VIP"
-	end)
-	refreshOwnerPanel()
-end
-
 local RestoreOrb = Instance.new("ImageButton")
 RestoreOrb.Visible = false
 RestoreOrb.Size = UDim2.new(0, 0, 0, 0)
@@ -2186,7 +1837,7 @@ RestoreOrb.Position = UDim2.new(0, 18, 0.2, 0)
 RestoreOrb.BackgroundColor3 = Theme.Panel2
 RestoreOrb.BackgroundTransparency = 1 
 RestoreOrb.BorderSizePixel = 0
-RestoreOrb.Image = "rbxassetid://120760903627345" 
+RestoreOrb.Image = "rbxassetid://72742584610344" 
 RestoreOrb.ScaleType = Enum.ScaleType.Fit
 RestoreOrb.AutoButtonColor = false
 RestoreOrb.Parent = ScreenGui
@@ -3077,7 +2728,7 @@ mkCorner(VipProfileBadge, 8)
 mkStroke(VipProfileBadge, Color3.fromRGB(75, 75, 75), 0.35, 1)
 
 local function refreshProfileVipBadge()
-	VipProfileBadge.Text = HEXA_IS_OWNER and "★ OWNER" or (HEXA_IS_VIP and "★ VIP" or "FREE")
+	VipProfileBadge.Text = HEXA_IS_VIP and "★ VIP" or "FREE"
 	VipProfileBadge.TextColor3 = HEXA_IS_VIP and Color3.fromRGB(215, 215, 215) or Color3.fromRGB(155, 155, 155)
 	VipProfileBadge.BackgroundColor3 = HEXA_IS_VIP and Color3.fromRGB(22, 22, 22) or Color3.fromRGB(45, 45, 45)
 end
@@ -3120,7 +2771,6 @@ local AimKeys = {
 	Head = MOBILE_DEVICE and "AUTO" or nil,
 	Body = MOBILE_DEVICE and "AUTO" or nil,
 	Smoothing = MOBILE_DEVICE and "AUTO" or nil,
-	Lock = nil,
 }
 local maxAimDistance = 500
 local fovRadius = 200
@@ -3405,10 +3055,6 @@ local function updateResponsiveLayout()
 	if MainFrame.Visible and MainFrame.Size.X.Offset > 0 then MainFrame.Size = MAIN_SIZE end
 	if KeyFrame.Visible and KeyFrame.Size.X.Offset > 0 then KeyFrame.Size = KEY_SIZE end
 	if Tutorial.Frame.Visible and Tutorial.Frame.Size.X.Offset > 0 then Tutorial.Frame.Size = Tutorial.getTargetSize() end
-	if OwnerFrame then
-		local scale = OwnerFrame:FindFirstChildOfClass("UIScale")
-		if scale then scale.Scale = math.min(1, math.max(0.56, math.min((GUI_VIEWPORT_SIZE.X - 12) / 430, (GUI_VIEWPORT_SIZE.Y - 12) / 410))) end
-	end
 end
 
 local function bindViewportResize()
@@ -3462,13 +3108,16 @@ local Runtime = {
 	cachedAimAtHead = nil,
 	lastAimRender = 0,
 	aimWasActive = false,
-	aimLockEnabled = false,
-	aimInputCaptured = false,
-	aimSavedMouseBehavior = nil,
-	aimSavedMouseIconEnabled = nil,
-	aimSavedMouseDeltaSensitivity = nil,
-	aimLockWorldPosition = nil,
-	aimLockSmoothing = false,
+	currentAimWorldPosition = nil,
+	currentAimSmoothing = false,
+	weaponLockEnabled = false,
+	weaponLockKey = nil,
+	weaponLockKeybindReadyAt = 0,
+	weaponLockInputCaptured = false,
+	weaponLockSavedMouseBehavior = nil,
+	weaponLockSavedMouseIconEnabled = nil,
+	weaponLockSavedMouseDeltaSensitivity = nil,
+	weaponLockReleaseUntil = 0,
 	friendCache = setmetatable({}, {__mode = "k"}),
 	wallRaycastParams = RaycastParams.new(),
 	wallFilterCharacter = nil,
@@ -3709,59 +3358,65 @@ Runtime.aimSwitchTarget = nil
 Runtime.aimSwitchCandidate = nil
 Runtime.aimSwitchCandidateSince = 0
 
-function Runtime.captureAimInput()
-	if MOBILE_DEVICE or not Runtime.aimLockEnabled or Runtime.aimInputCaptured then return end
-	Runtime.aimInputCaptured = true
-	pcall(function() Runtime.aimSavedMouseBehavior = UserInputService.MouseBehavior end)
-	pcall(function() Runtime.aimSavedMouseIconEnabled = UserInputService.MouseIconEnabled end)
-	pcall(function() Runtime.aimSavedMouseDeltaSensitivity = UserInputService.MouseDeltaSensitivity end)
+function Runtime.captureWeaponLockInput()
+	if MOBILE_DEVICE or not Runtime.weaponLockEnabled or Runtime.weaponLockInputCaptured then return end
+	Runtime.weaponLockInputCaptured = true
+	pcall(function() Runtime.weaponLockSavedMouseBehavior = UserInputService.MouseBehavior end)
+	pcall(function() Runtime.weaponLockSavedMouseIconEnabled = UserInputService.MouseIconEnabled end)
+	pcall(function() Runtime.weaponLockSavedMouseDeltaSensitivity = UserInputService.MouseDeltaSensitivity end)
 end
 
-function Runtime.enforceAimInputLock()
-	if MOBILE_DEVICE or not Runtime.aimLockEnabled or not Runtime.aimInputCaptured then return end
+function Runtime.enforceWeaponLockInput()
+	if MOBILE_DEVICE or not Runtime.weaponLockEnabled or not Runtime.weaponLockInputCaptured then return end
 	pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter end)
 	pcall(function() UserInputService.MouseIconEnabled = false end)
 	pcall(function() UserInputService.MouseDeltaSensitivity = 0 end)
 end
 
-function Runtime.releaseAimInput()
-	Runtime.aimLockWorldPosition = nil
-	Runtime.aimLockSmoothing = false
-	if MOBILE_DEVICE or not Runtime.aimInputCaptured then return end
-	Runtime.aimInputCaptured = false
+function Runtime.releaseWeaponLockInput(forceUnlock)
+	-- IMPORTANTE: no depender de weaponLockInputCaptured. Si el estado interno
+	-- quedó desincronizado, igualmente hay que devolver el control del mouse.
+	Runtime.weaponLockInputCaptured = false
+	Runtime.currentAimWorldPosition = nil
+	Runtime.currentAimSmoothing = false
 
-	pcall(function()
-		if Runtime.aimSavedMouseBehavior ~= nil then
-			UserInputService.MouseBehavior = Runtime.aimSavedMouseBehavior
-		end
-	end)
-	pcall(function()
-		if Runtime.aimSavedMouseIconEnabled ~= nil then
-			UserInputService.MouseIconEnabled = Runtime.aimSavedMouseIconEnabled
-		end
-	end)
-	pcall(function()
-		if Runtime.aimSavedMouseDeltaSensitivity ~= nil then
-			UserInputService.MouseDeltaSensitivity = Runtime.aimSavedMouseDeltaSensitivity
-		end
-	end)
-
-	Runtime.aimSavedMouseBehavior = nil
-	Runtime.aimSavedMouseIconEnabled = nil
-	Runtime.aimSavedMouseDeltaSensitivity = nil
-end
-
-function Runtime.setAimLockTarget(worldPosition, smoothing)
-	if not Runtime.aimLockEnabled then
-		Runtime.releaseAimInput()
-		return
-	end
-	Runtime.aimLockWorldPosition = worldPosition
-	Runtime.aimLockSmoothing = smoothing == true
 	if not MOBILE_DEVICE then
-		Runtime.captureAimInput()
-		Runtime.enforceAimInputLock()
+		local savedBehavior = Runtime.weaponLockSavedMouseBehavior
+		local savedIcon = Runtime.weaponLockSavedMouseIconEnabled
+		local savedSensitivity = Runtime.weaponLockSavedMouseDeltaSensitivity
+
+		pcall(function()
+			if forceUnlock == true or not Runtime.weaponLockEnabled then
+				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			else
+				UserInputService.MouseBehavior = savedBehavior or Enum.MouseBehavior.Default
+			end
+		end)
+
+		pcall(function()
+			if forceUnlock == true or not Runtime.weaponLockEnabled then
+				UserInputService.MouseIconEnabled = true
+			elseif savedIcon ~= nil then
+				UserInputService.MouseIconEnabled = savedIcon
+			end
+		end)
+
+		pcall(function()
+			local restoreSensitivity = tonumber(savedSensitivity)
+			if restoreSensitivity == nil or restoreSensitivity <= 0 then
+				restoreSensitivity = 1
+			end
+			UserInputService.MouseDeltaSensitivity = restoreSensitivity
+		end)
+
+		if forceUnlock == true or not Runtime.weaponLockEnabled then
+			Runtime.weaponLockReleaseUntil = os.clock() + 0.35
+		end
 	end
+
+	Runtime.weaponLockSavedMouseBehavior = nil
+	Runtime.weaponLockSavedMouseIconEnabled = nil
+	Runtime.weaponLockSavedMouseDeltaSensitivity = nil
 end
 
 function Runtime.resetAimbotTargetSwitching()
@@ -4019,7 +3674,7 @@ task.spawn(function()
 			WallCheck = HexaSharedTargetFilters.WallCheck,
 			TeamCheck = HexaSharedTargetFilters.TeamCheck,
 			AimSmoothing = false,
-			AimLock = false,
+			WeaponLock = false,
 			TargetPrediction = false,
 			TargetSwitchDelay = false,
 			TargetSwitchDelayMs = 350,
@@ -4188,7 +3843,7 @@ task.spawn(function()
 		}
 		local HitboxColorNames = {"BLANCO", "ROJO", "VERDE", "AZUL", "AMARILLO", "MORADO"}
 
-		local CombatAdvancedCard = sectionCard(678)
+		local CombatAdvancedCard = sectionCard(632)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -4214,19 +3869,26 @@ task.spawn(function()
 		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 532))
 		markVipControl(InfiniteAmmoButton)
 		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
-		local AimLockButton = createToggleButton(
-			CombatAdvancedCard,
-			"BLOQUEO DE AIM",
+
+		local WeaponLockCard = sectionCard(96)
+		WeaponLockCard.LayoutOrder = 22
+		sectionTitle(WeaponLockCard, "CONTROL DE MIRA", UDim2.new(0, 16, 0, 14))
+		local WeaponLockButton = createToggleButton(
+			WeaponLockCard,
+			"BLOQUEO DE ARMA",
 			MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.62, 0, 0, 38),
-			UDim2.new(0, 16, 0, 624)
+			UDim2.new(0, 16, 0, 44)
 		)
-		local AimLockKeybindButton = nil
+		local WeaponLockKeybindButton = nil
 		if not MOBILE_DEVICE then
-			AimLockKeybindButton = createKeybindButton(
-				CombatAdvancedCard,
+			WeaponLockKeybindButton = createKeybindButton(
+				WeaponLockCard,
 				UDim2.new(0.32, -8, 0, 38),
-				UDim2.new(0.65, 16, 0, 624),
-				function(key) AimKeys.Lock = key end
+				UDim2.new(0.65, 16, 0, 44),
+				function(key)
+					Runtime.weaponLockKey = key
+					Runtime.weaponLockKeybindReadyAt = os.clock() + 0.25
+				end
 			)
 		end
 
@@ -4313,7 +3975,7 @@ task.spawn(function()
 			WallCheck = WallButton,
 			TeamCheck = TeamButton,
 			AimSmoothing = AimSmoothingButton,
-			AimLock = AimLockButton,
+			WeaponLock = WeaponLockButton,
 			TargetPrediction = PredictionButton,
 			TargetSwitchDelay = TargetSwitchDelayButton,
 			NoRecoil = NoRecoilButton,
@@ -5534,6 +5196,8 @@ task.spawn(function()
 		end
 
 		local function suspend()
+			Runtime.weaponLockEnabled = false
+			Runtime.releaseWeaponLockInput(true)
 			stopDrone()
 			restoreWeapons()
 			restoreHitboxes()
@@ -5550,8 +5214,6 @@ task.spawn(function()
 			for settingName in pairs(Buttons) do Settings[settingName] = false end
 			HexaSharedTargetFilters.WallCheck = false
 			HexaSharedTargetFilters.AimSmoothing = false
-			Runtime.aimLockEnabled = false
-			Runtime.releaseAimInput()
 			HexaSharedTargetFilters.TargetPrediction = false
 			HexaSharedTargetFilters.TargetSwitchDelay = false
 			Runtime.resetAimbotTargetSwitching()
@@ -5614,36 +5276,29 @@ task.spawn(function()
 		bindToggle(AimSmoothingButton, "AimSmoothing", function(enabled)
 			HexaSharedTargetFilters.AimSmoothing = enabled
 		end)
-		bindToggle(AimLockButton, "AimLock", function(enabled)
-			Runtime.aimLockEnabled = enabled == true
-			if not Runtime.aimLockEnabled then
-				Runtime.releaseAimInput()
-			end
+		bindToggle(WeaponLockButton, "WeaponLock", function(enabled)
+			Runtime.weaponLockEnabled = enabled == true
+			if not Runtime.weaponLockEnabled then Runtime.releaseWeaponLockInput(true) end
 		end)
 
-		if AimLockKeybindButton then
-			AimLockKeybindButton:SetAttribute("HexaNoFavorite", true)
-		end
-
-		-- Keybind de tipo toggle: una pulsación activa y la siguiente desactiva.
+		if WeaponLockKeybindButton then WeaponLockKeybindButton:SetAttribute("HexaNoFavorite", true) end
 		connect(UserInputService.InputBegan, function(input, processed)
-			if processed or MOBILE_DEVICE or AimKeys.Lock == nil then return end
+			if MOBILE_DEVICE or Runtime.weaponLockKey == nil then return end
+			if UserInputService:GetFocusedTextBox() then return end
+			if os.clock() < Runtime.weaponLockKeybindReadyAt then return end
 			local matched = false
-			if typeof(AimKeys.Lock) == "EnumItem" then
-				if AimKeys.Lock.EnumType == Enum.KeyCode then
-					matched = input.KeyCode == AimKeys.Lock
-				elseif AimKeys.Lock.EnumType == Enum.UserInputType then
-					matched = input.UserInputType == AimKeys.Lock
+			if typeof(Runtime.weaponLockKey) == "EnumItem" then
+				if Runtime.weaponLockKey.EnumType == Enum.KeyCode then
+					matched = input.KeyCode == Runtime.weaponLockKey
+				elseif Runtime.weaponLockKey.EnumType == Enum.UserInputType then
+					matched = input.UserInputType == Runtime.weaponLockKey
 				end
 			end
 			if not matched then return end
-
-			Settings.AimLock = not Settings.AimLock
-			Runtime.aimLockEnabled = Settings.AimLock == true
-			setActive(AimLockButton, Settings.AimLock)
-			if not Runtime.aimLockEnabled then
-				Runtime.releaseAimInput()
-			end
+			Settings.WeaponLock = not Settings.WeaponLock
+			Runtime.weaponLockEnabled = Settings.WeaponLock
+			setActive(WeaponLockButton, Settings.WeaponLock)
+			if not Runtime.weaponLockEnabled then Runtime.releaseWeaponLockInput(true) end
 		end)
 
 		bindToggle(PredictionButton, "TargetPrediction", function(enabled)
@@ -6329,25 +5984,12 @@ end
 
 CheckKeyBtn.MouseButton1Click:Connect(function()
 	local entered = tostring(KeyBox.Text or "")
-	local normalKey = entered == "ikaH"
-	local vipCode, vipInfo = validateVipCode(entered, LocalPlayer.Name, LocalPlayer.UserId)
-	if normalKey or vipCode then
-		if vipCode then
-			setVipState(true, string.upper(entered:gsub("%s+", "")), vipInfo)
-			KeyBox.Text = ""
-			KeyBox.PlaceholderText = "¡VIP ACTIVADO!"
-		end
+	if entered == "ikaH" then
 		local t = tween(KeyFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
 		t.Completed:Connect(openMainInterface)
 	else
 		KeyBox.Text = ""
-		if vipInfo and vipInfo.reason == "EXPIRED" then
-			KeyBox.PlaceholderText = Lang.Current == "EN" and "VIP code expired!" or "¡Código VIP expirado!"
-		elseif vipInfo and vipInfo.reason == "USER" then
-			KeyBox.PlaceholderText = Lang.Current == "EN" and "Code belongs to another user!" or "¡Código de otro usuario!"
-		else
-			KeyBox.PlaceholderText = "¡Clave incorrecta!"
-		end
+		KeyBox.PlaceholderText = "¡Clave incorrecta!"
 		task.delay(1.5, function()
 			KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la key"
 		end)
@@ -6543,22 +6185,22 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 							targetPosition = targetPosition + targetPart.AssemblyLinearVelocity * HexaSharedTargetFilters.PredictionFactor
 						end)
 					end
-					Runtime.setAimLockTarget(targetPosition, HexaSharedTargetFilters.AimSmoothing)
+					Runtime.currentAimWorldPosition = targetPosition
+					Runtime.currentAimSmoothing = HexaSharedTargetFilters.AimSmoothing
 					local targetCFrame = CFrame.new(cam.CFrame.Position, targetPosition)
 					if HexaSharedTargetFilters.AimSmoothing then
 						cam.CFrame = cam.CFrame:Lerp(targetCFrame, 1 / HexaSharedTargetFilters.SmoothingFactor)
 					else
 						cam.CFrame = targetCFrame
 					end
-					Runtime.enforceAimInputLock()
 				end
 			else
 				if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
-				Runtime.releaseAimInput()
+				Runtime.currentAimWorldPosition = nil
 			end
 		else
 			if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
-			Runtime.releaseAimInput()
+			Runtime.currentAimWorldPosition = nil
 		end
 	elseif Runtime.aimWasActive then
 		Runtime.aimWasActive = false
@@ -6568,35 +6210,60 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 		Runtime.lastAimScan = 0
 		Runtime.lastAimRender = 0
 		Runtime.resetAimbotTargetSwitching()
-		Runtime.releaseAimInput()
+		Runtime.currentAimWorldPosition = nil
 		if AimHighlight.Adornee ~= nil then AimHighlight.Adornee = nil end
 	end
 end)
 
 pcall(function()
+	RunService:UnbindFromRenderStep("H3X4X_WeaponLock")
 	RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock")
 end)
 RunService:BindToRenderStep(
-	"H3X4X_AimWeaponLock",
+	"H3X4X_WeaponLock",
 	Enum.RenderPriority.Camera.Value + 20,
 	function()
-		if not Runtime.aimLockEnabled or not Runtime.aimInputCaptured or Runtime.aimLockWorldPosition == nil then return end
-		Runtime.enforceAimInputLock()
+		if not Runtime.weaponLockEnabled then
+			if Runtime.weaponLockInputCaptured then Runtime.releaseWeaponLockInput(true) end
+			if not MOBILE_DEVICE and os.clock() < Runtime.weaponLockReleaseUntil then
+				pcall(function() UserInputService.MouseBehavior = Enum.MouseBehavior.Default end)
+				pcall(function() UserInputService.MouseIconEnabled = true end)
+				pcall(function()
+					if UserInputService.MouseDeltaSensitivity <= 0 then
+						UserInputService.MouseDeltaSensitivity = 1
+					end
+				end)
+			end
+			return
+		end
+		if Runtime.currentAimWorldPosition == nil then
+			if Runtime.weaponLockInputCaptured then Runtime.releaseWeaponLockInput(false) end
+			return
+		end
+		Runtime.captureWeaponLockInput()
+		Runtime.enforceWeaponLockInput()
 		if workspace.CurrentCamera then
-			if Runtime.aimLockSmoothing then
+			local targetCFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, Runtime.currentAimWorldPosition)
+			if Runtime.currentAimSmoothing then
 				workspace.CurrentCamera.CFrame = workspace.CurrentCamera.CFrame:Lerp(
-					CFrame.new(workspace.CurrentCamera.CFrame.Position, Runtime.aimLockWorldPosition),
+					targetCFrame,
 					1 / HexaSharedTargetFilters.SmoothingFactor
 				)
 			else
-				workspace.CurrentCamera.CFrame = CFrame.new(
-					workspace.CurrentCamera.CFrame.Position,
-					Runtime.aimLockWorldPosition
-				)
+				workspace.CurrentCamera.CFrame = targetCFrame
 			end
 		end
 	end
 )
+
+ScreenGui.Destroying:Connect(function()
+	Runtime.weaponLockEnabled = false
+	Runtime.releaseWeaponLockInput(true)
+	pcall(function()
+		RunService:UnbindFromRenderStep("H3X4X_WeaponLock")
+		RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock")
+	end)
+end)
 
 Runtime.charAddedConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
 	local hum = newChar:WaitForChild("Humanoid", 5)
@@ -6684,8 +6351,12 @@ YesBtn.MouseButton1Click:Connect(function()
 		if Runtime.espConn then Runtime.espConn:Disconnect() end
 		if Runtime.renderConn then Runtime.renderConn:Disconnect() end
 		if Runtime.charAddedConn then Runtime.charAddedConn:Disconnect() end
-		Runtime.releaseAimInput()
-		pcall(function() RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock") end)
+		Runtime.weaponLockEnabled = false
+		Runtime.releaseWeaponLockInput(true)
+		pcall(function()
+			RunService:UnbindFromRenderStep("H3X4X_WeaponLock")
+			RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock")
+		end)
 		if ScreenGui then ScreenGui:Destroy() end
 	end)
 end)
@@ -7634,8 +7305,6 @@ task.spawn(function()
 			PlayerName.Text = self.Streamer and "MODO TRANSMISIÓN" or (LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
 			ByNonyLabel.Visible = not self.Streamer
 			VipProfileBadge.Visible = not self.Streamer
-			if OwnerVipButton then OwnerVipButton.Visible = not self.Streamer end
-			if OwnerFrame and self.Streamer then OwnerFrame.Visible = false end
 			if self.Watermark then self.Watermark.Text = self.Streamer and "H3X4 X" or "H3X4 X  •  POR NONY" end
 		end
 
@@ -7832,7 +7501,7 @@ task.spawn(function()
 			end
 			return contains(MainFrame) or contains(KeyFrame) or contains(ConfirmFrame) or contains(Tutorial.Frame)
 				or contains(RestoreOrb) or contains(self.InfoHud) or contains(self.Watermark) or contains(self.InspectorFrame)
-				or contains(OwnerFrame) or contains(VipNotification) or contains(MobileFlyControls)
+				or contains(VipNotification) or contains(MobileFlyControls)
 		end
 
 		function X:setupGlobalConnections()
