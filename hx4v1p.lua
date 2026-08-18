@@ -26,6 +26,11 @@ return {
                 
    ["5385333777"] = { --enma (sorteo)
         vip = true,
-        expires = "2026-08-17"            
+        expires = "2026-08-17" 
+    },     
+
+   ["1853904678"] = { --discord id 1392649417349271603 (etiqueta)
+        vip = true,
+        expires = "permanent"                
     }
 }
