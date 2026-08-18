@@ -25,7 +25,7 @@ return {
     },    
                 
    ["5385333777"] = { --enma (sorteo)
-        vip = true,
+        vip = false,
         expires = "2026-08-17" 
     },     
 
