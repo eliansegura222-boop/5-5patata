@@ -689,100 +689,6 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	return btn, stroke
 end
 
-local function decorateDeviceSelectorButton(button: TextButton, deviceKind: string)
-	local originalText = tostring(button.Text or "")
-	button.TextTransparency = 1
-	button.TextXAlignment = Enum.TextXAlignment.Left
-
-	local iconHolder = Instance.new("Frame")
-	iconHolder.Name = "DeviceIcon"
-	iconHolder.BackgroundTransparency = 1
-	iconHolder.Size = UDim2.fromOffset(20, 20)
-	iconHolder.Position = UDim2.new(0, 12, 0.5, -10)
-	iconHolder.ZIndex = (button.ZIndex or 2) + 1
-	iconHolder.Parent = button
-
-	local label = Instance.new("TextLabel")
-	label.Name = "DeviceTextLabel"
-	label.BackgroundTransparency = 1
-	label.Position = UDim2.new(0, 40, 0, 0)
-	label.Size = UDim2.new(1, -48, 1, 0)
-	label.Text = originalText
-	label.TextColor3 = BUTTON_TEXT_COLOR
-	label.TextSize = 12
-	label.Font = Enum.Font.GothamSemibold
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.TextYAlignment = Enum.TextYAlignment.Center
-	label.ZIndex = iconHolder.ZIndex
-	label.Parent = button
-	label:SetAttribute("HexaNoTranslate", true)
-
-	local function refreshLabel()
-		label.Text = tostring(button.Text or button:GetAttribute("BaseText") or originalText)
-	end
-	button:GetPropertyChangedSignal("Text"):Connect(refreshLabel)
-	button:GetAttributeChangedSignal("BaseText"):Connect(refreshLabel)
-	refreshLabel()
-
-	if deviceKind == "PC" then
-		local screen = Instance.new("Frame")
-		screen.BackgroundTransparency = 1
-		screen.Size = UDim2.new(1, 0, 0.62, 0)
-		screen.Position = UDim2.new(0, 0, 0.04, 0)
-		screen.BorderSizePixel = 0
-		screen.ZIndex = iconHolder.ZIndex
-		screen.Parent = iconHolder
-		mkCorner(screen, 4)
-		mkStroke(screen, BUTTON_TEXT_COLOR, 0, 2)
-
-		local stem = Instance.new("Frame")
-		stem.BackgroundColor3 = BUTTON_TEXT_COLOR
-		stem.BorderSizePixel = 0
-		stem.Size = UDim2.fromOffset(3, 5)
-		stem.Position = UDim2.new(0.5, -1, 0.66, 0)
-		stem.ZIndex = iconHolder.ZIndex
-		stem.Parent = iconHolder
-		mkCorner(stem, 1)
-
-		local base = Instance.new("Frame")
-		base.BackgroundColor3 = BUTTON_TEXT_COLOR
-		base.BorderSizePixel = 0
-		base.Size = UDim2.fromOffset(12, 2)
-		base.Position = UDim2.new(0.5, -6, 0.9, -2)
-		base.ZIndex = iconHolder.ZIndex
-		base.Parent = iconHolder
-		mkCorner(base, 1)
-	else
-		local phone = Instance.new("Frame")
-		phone.BackgroundTransparency = 1
-		phone.Size = UDim2.fromOffset(12, 18)
-		phone.Position = UDim2.new(0.5, -6, 0.5, -9)
-		phone.BorderSizePixel = 0
-		phone.ZIndex = iconHolder.ZIndex
-		phone.Parent = iconHolder
-		mkCorner(phone, 4)
-		mkStroke(phone, BUTTON_TEXT_COLOR, 0, 2)
-
-		local speaker = Instance.new("Frame")
-		speaker.BackgroundColor3 = BUTTON_TEXT_COLOR
-		speaker.BorderSizePixel = 0
-		speaker.Size = UDim2.fromOffset(4, 1)
-		speaker.Position = UDim2.new(0.5, -2, 0, 3)
-		speaker.ZIndex = iconHolder.ZIndex
-		speaker.Parent = phone
-		mkCorner(speaker, 1)
-
-		local homeBar = Instance.new("Frame")
-		homeBar.BackgroundColor3 = BUTTON_TEXT_COLOR
-		homeBar.BorderSizePixel = 0
-		homeBar.Size = UDim2.fromOffset(5, 1)
-		homeBar.Position = UDim2.new(0.5, -2, 1, -4)
-		homeBar.ZIndex = iconHolder.ZIndex
-		homeBar.Parent = phone
-		mkCorner(homeBar, 1)
-	end
-end
-
 local function createToggleButton(parent: Instance, text: string, size: UDim2, pos: UDim2)
 	local btn = Instance.new("TextButton")
 	btn.Size = size
@@ -2040,8 +1946,40 @@ DeviceSelector.Subtitle.Parent = DeviceSelector.Frame
 
 DeviceSelector.PCButton = neonButton(DeviceSelector.Frame, "COMPUTADORA", UDim2.new(0.5, -25, 0, 44), UDim2.new(0, 20, 0, 111))
 DeviceSelector.MobileButton = neonButton(DeviceSelector.Frame, "CELULAR", UDim2.new(0.5, -25, 0, 44), UDim2.new(0.5, 5, 0, 111))
-decorateDeviceSelectorButton(DeviceSelector.PCButton, "PC")
-decorateDeviceSelectorButton(DeviceSelector.MobileButton, "MOBILE")
+
+-- Iconos gráficos reales del selector (LucideBlox para Roblox).
+-- Se usan ImageLabel/asset IDs, no emojis ni caracteres de texto.
+local DEVICE_SELECTOR_ICONS = {
+	PC = "rbxassetid://7734002839",         -- monitor
+	MOBILE = "rbxassetid://7734058979",    -- smartphone
+}
+
+local function addDeviceSelectorIcon(button: TextButton, iconType: string)
+	button.TextXAlignment = Enum.TextXAlignment.Left
+
+	local padding = button:FindFirstChildOfClass("UIPadding") or Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 36)
+	padding.PaddingRight = UDim.new(0, 8)
+	padding.Parent = button
+
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "DeviceIcon"
+	icon.BackgroundTransparency = 1
+	icon.BorderSizePixel = 0
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 10, 0.5, 0)
+	icon.Size = iconType == "PC" and UDim2.fromOffset(19, 19) or UDim2.fromOffset(18, 18)
+	icon.Image = DEVICE_SELECTOR_ICONS[iconType]
+	icon.ImageColor3 = Color3.fromRGB(235, 235, 235)
+	icon.ImageTransparency = 0
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.ZIndex = button.ZIndex + 2
+	icon.Active = false
+	icon.Parent = button
+end
+
+addDeviceSelectorIcon(DeviceSelector.PCButton, "PC")
+addDeviceSelectorIcon(DeviceSelector.MobileButton, "MOBILE")
 
 DeviceSelector.Hint = Instance.new("TextLabel")
 DeviceSelector.Hint.BackgroundTransparency = 1
