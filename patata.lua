@@ -1947,40 +1947,6 @@ DeviceSelector.Subtitle.Parent = DeviceSelector.Frame
 DeviceSelector.PCButton = neonButton(DeviceSelector.Frame, "COMPUTADORA", UDim2.new(0.5, -25, 0, 44), UDim2.new(0, 20, 0, 111))
 DeviceSelector.MobileButton = neonButton(DeviceSelector.Frame, "CELULAR", UDim2.new(0.5, -25, 0, 44), UDim2.new(0.5, 5, 0, 111))
 
--- Iconos gráficos reales del selector (LucideBlox para Roblox).
--- Se usan ImageLabel/asset IDs, no emojis ni caracteres de texto.
-local DEVICE_SELECTOR_ICONS = {
-	PC = "rbxassetid://7734002839",         -- monitor
-	MOBILE = "rbxassetid://7734058979",    -- smartphone
-}
-
-local function addDeviceSelectorIcon(button: TextButton, iconType: string)
-	button.TextXAlignment = Enum.TextXAlignment.Left
-
-	local padding = button:FindFirstChildOfClass("UIPadding") or Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 36)
-	padding.PaddingRight = UDim.new(0, 8)
-	padding.Parent = button
-
-	local icon = Instance.new("ImageLabel")
-	icon.Name = "DeviceIcon"
-	icon.BackgroundTransparency = 1
-	icon.BorderSizePixel = 0
-	icon.AnchorPoint = Vector2.new(0, 0.5)
-	icon.Position = UDim2.new(0, 10, 0.5, 0)
-	icon.Size = iconType == "PC" and UDim2.fromOffset(19, 19) or UDim2.fromOffset(18, 18)
-	icon.Image = DEVICE_SELECTOR_ICONS[iconType]
-	icon.ImageColor3 = Color3.fromRGB(235, 235, 235)
-	icon.ImageTransparency = 0
-	icon.ScaleType = Enum.ScaleType.Fit
-	icon.ZIndex = button.ZIndex + 2
-	icon.Active = false
-	icon.Parent = button
-end
-
-addDeviceSelectorIcon(DeviceSelector.PCButton, "PC")
-addDeviceSelectorIcon(DeviceSelector.MobileButton, "MOBILE")
-
 DeviceSelector.Hint = Instance.new("TextLabel")
 DeviceSelector.Hint.BackgroundTransparency = 1
 DeviceSelector.Hint.Position = UDim2.new(0, 20, 0, 168)
