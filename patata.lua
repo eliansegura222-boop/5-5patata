@@ -690,10 +690,9 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 end
 
 local function decorateDeviceSelectorButton(button: TextButton, deviceKind: string)
+	local originalText = tostring(button.Text or "")
+	button.TextTransparency = 1
 	button.TextXAlignment = Enum.TextXAlignment.Left
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 42)
-	padding.Parent = button
 
 	local iconHolder = Instance.new("Frame")
 	iconHolder.Name = "DeviceIcon"
@@ -702,6 +701,28 @@ local function decorateDeviceSelectorButton(button: TextButton, deviceKind: stri
 	iconHolder.Position = UDim2.new(0, 12, 0.5, -10)
 	iconHolder.ZIndex = (button.ZIndex or 2) + 1
 	iconHolder.Parent = button
+
+	local label = Instance.new("TextLabel")
+	label.Name = "DeviceTextLabel"
+	label.BackgroundTransparency = 1
+	label.Position = UDim2.new(0, 40, 0, 0)
+	label.Size = UDim2.new(1, -48, 1, 0)
+	label.Text = originalText
+	label.TextColor3 = BUTTON_TEXT_COLOR
+	label.TextSize = 12
+	label.Font = Enum.Font.GothamSemibold
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.ZIndex = iconHolder.ZIndex
+	label.Parent = button
+	label:SetAttribute("HexaNoTranslate", true)
+
+	local function refreshLabel()
+		label.Text = tostring(button.Text or button:GetAttribute("BaseText") or originalText)
+	end
+	button:GetPropertyChangedSignal("Text"):Connect(refreshLabel)
+	button:GetAttributeChangedSignal("BaseText"):Connect(refreshLabel)
+	refreshLabel()
 
 	if deviceKind == "PC" then
 		local screen = Instance.new("Frame")
