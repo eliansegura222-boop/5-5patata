@@ -1,0 +1,3278 @@
+--[[
+    H4SK // SAB TRUE MERGE
+    Rebuilt as ONE Luau program from the supplied archive.
+
+    Design rules:
+      * one ScreenGui only (H4SK_SAB_TRUE_MERGE)
+      * no source hub is executed as a hidden backend
+      * no external script chaining
+      * duplicated gameplay features have one implementation only
+      * every gameplay feature starts OFF
+      * only the UI is initialized at execute time
+      * feature connections are created only when that feature is enabled
+      * low-consumption runtime shares recurring Heartbeat work through one dispatcher
+      * recurring callbacks are rate-limited and isolated so one error cannot kill the runtime
+
+    Duplicate resolution used in this build:
+      3.txt == 5.txt                    -> one copy only
+      7.lua supersedes 2.txt            -> corrected ZAHA mechanics
+      9.lua supersedes 10.txt           -> newer Notz mechanics
+      Dream selected over Mwvane/NineHub for overlapping duel mechanics
+      Notz selected for ESP/steal/automation overlaps
+      Ruby selected for visual spawner/base/trade-specific mechanics
+      Lacazette/NineHub unique mechanics are retained directly
+]]
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local H = {}
+
+-- ============================================================
+-- SERVICES / SAFE ROOT
+-- ============================================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local TextChatService = game:GetService("TextChatService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Stats = game:GetService("Stats")
+
+local LP = Players.LocalPlayer
+local PlayerGui = LP:WaitForChild("PlayerGui")
+
+function H.getUiRoot()
+    if typeof(gethui) == "function" then
+        local ok, root = pcall(gethui)
+        if ok and root then return root end
+    end
+    -- PlayerGui is the safest universal fallback when an executor does not expose gethui().
+    return PlayerGui
+end
+
+local UI_ROOT = H.getUiRoot()
+local MainGui = nil
+local FakeTradeFrame = nil
+
+-- kill only a previous copy of THIS merged UI
+for _, root in ipairs({PlayerGui, CoreGui, UI_ROOT}) do
+    pcall(function()
+        local old = root:FindFirstChild("H4SK_SAB_TRUE_MERGE")
+        if old then old:Destroy() end
+    end)
+end
+
+-- ============================================================
+-- GLOBAL STATE / CONNECTION MANAGER
+-- ============================================================
+local State = {
+    MenuVisible = true,
+    MenuLocked = false,
+    Search = "",
+    -- Runtime-only optimization. This does NOT bypass or hide anything; it only reduces work.
+    LowConsumption = true,
+
+    -- Lacazette / general movement
+    SavedLocation = nil,
+    InfiniteJump = false,
+    Fly = false,
+    FlySpeed = 28,
+    God = false,
+    Chase = false,
+    ChaseSpeed = 32,
+    Invisible = false,
+    NoClip = false,
+    HitboxVisual = false,
+    Float = false,
+    SpinBot = false,
+    SpinSpeed = 20,
+    Unwalk = false,
+    NoPlayerCollision = false,
+
+    -- Dream/NineHub movement
+    SpeedEnabled = false,
+    SpeedMode = "Normal",
+    NormalSpeed = 48,
+    CarrySpeed = 58,
+    LaggerSpeed = 65,
+    LaggerCarrySpeed = 72,
+    AutoCarrySpeed = false,
+    CarpetSpeed = false,
+    CarpetSpeedValue = 140,
+    AutoTPDown = false,
+    AutoTPHeight = 20,
+    ResetOnDeath = false,
+    RagdollCountdown = false,
+
+    -- duel
+    BatAimbot = false,
+    AimbotMode = "Normal",
+    AimbotRadius = 100,
+    AimbotSpeed = 55,
+    LaggerAimbotSpeed = 40,
+    AutoSwing = false,
+    AntiDesync = false,
+    MirrorTPDown = false,
+    BatCounter = false,
+    MedusaCounter = false,
+    SafeMode = false,
+    AutoResetOnMed = false,
+    AutoLeft = false,
+    AutoRight = false,
+    LastTPSide = "none",
+    Taunt = false,
+
+    -- steal / SAB
+    AutoSteal = false,
+    StealMode = "Highest",
+    StealRadius = 62,
+    SemiStealRadius = 9,
+    StealDuration = 0.08,
+    PriorityList = {},
+    AutoStealSpeed = false,
+    StealSpeed = 29,
+    AutoUnlock = false,
+    AutoInvisSteal = false,
+    AutoTPFailedSteal = false,
+    AutoTPBack = false,
+    AutoKickOnSteal = false,
+    DefaultNearest = false,
+    DefaultHighest = true,
+    DefaultPriority = false,
+    AutoBuy = false,
+    AutoBuyRange = 17,
+    RainbowBase = false,
+
+    -- visuals
+    FPSBoost = false,
+    BaseXray = false,
+    PlayerESP = false,
+    BoxESP = false,
+    TracerESP = false,
+    BrainrotESP = false,
+    SubspaceESP = false,
+    DuelBaseESP = false,
+    BestBrainrotTracer = false,
+    LineToBase = false,
+    StretchRez = false,
+    FOV = 70,
+    SkyTheme = "Off",
+    ServerPositionHUD = false,
+    StealSpeedHUD = false,
+
+    -- protection / misc
+    AntiBeeDisco = false,
+    AutoDestroyTurrets = false,
+    CleanErrorGuis = false,
+    Alerts = false,
+    AlertSoundId = "",
+
+    -- Ruby visual subsystem
+    RubySelectedAnimal = nil,
+    RubyMutation = "Normal",
+    RubyTraits = {},
+    RubySpawnCount = 1,
+    RubySpawned = {},
+    RubyAutoRestore = false,
+    RubyAutoSaveBase = false,
+    RubyHideOnRejoin = false,
+    RubyBaseSkin = nil,
+    RubyOneOfOne = false,
+    RubySignMessage = "",
+    RubySignCycle = false,
+    RubySignCycleSeconds = 3,
+    RubyFakeTradeTarget = "",
+    RubyFakeTradeDelay = 0,
+    RubyStreamMode = false,
+}
+
+local Connections = {}
+local Objects = {}
+local Original = {
+    Collision = setmetatable({}, {__mode = "k"}),
+    Xray = setmetatable({}, {__mode = "k"}),
+    FPS = setmetatable({}, {__mode = "k"}),
+    Lighting = nil,
+}
+
+-- ============================================================
+-- LOW-CONSUMPTION RUNTIME
+-- One Heartbeat dispatcher services throttled feature loops.
+-- This is a performance/stability layer only; it does not bypass detection.
+-- ============================================================
+local HeartbeatJobs = {}
+local SchedulerConnection = nil
+local SchedulerSerial = 0
+
+local function schedulerHasJobs()
+    return next(HeartbeatJobs) ~= nil
+end
+
+local function stopSchedulerIfIdle()
+    if SchedulerConnection and not schedulerHasJobs() then
+        pcall(function() SchedulerConnection:Disconnect() end)
+        SchedulerConnection = nil
+    end
+end
+
+local function ensureScheduler()
+    if SchedulerConnection then return end
+    SchedulerConnection = RunService.Heartbeat:Connect(function(dt)
+        local now = os.clock()
+        for token, job in pairs(HeartbeatJobs) do
+            if job.alive and now >= job.nextAt then
+                local hz = State.LowConsumption and job.ecoHz or job.normalHz
+                hz = math.max(1, tonumber(hz) or 30)
+                local interval = 1 / hz
+                local elapsed = now - job.lastAt
+                job.lastAt = now
+                job.nextAt = now + interval
+                local function runJob()
+                    local ok, err = xpcall(function()
+                        job.fn(elapsed > 0 and elapsed or dt)
+                    end, function(e)
+                        return tostring(e)
+                    end)
+                    if ok then
+                        job.errors = 0
+                    else
+                        job.errors = (job.errors or 0) + 1
+                        -- Cool down a repeatedly failing callback so one bad feature cannot spam or stall the rest.
+                        job.nextAt = os.clock() + math.min(2, 0.25 * job.errors)
+                        local warnAt = os.clock()
+                        if not job.lastWarn or warnAt - job.lastWarn >= 1 then
+                            job.lastWarn = warnAt
+                            warn("[H4SK SAB runtime] " .. tostring(job.label or token) .. " -> " .. tostring(err))
+                        end
+                    end
+                    job.running = false
+                end
+                -- Slow/heavy jobs run in their own task because some game interactions can yield.
+                -- High-frequency movement jobs stay inline to avoid creating a coroutine every frame.
+                if job.async then
+                    if not job.running then
+                        job.running = true
+                        task.spawn(runJob)
+                    end
+                else
+                    job.running = true
+                    runJob()
+                end
+            end
+        end
+        stopSchedulerIfIdle()
+    end)
+end
+
+-- Drop-in replacement for RunService.Heartbeat:Connect used by recurring features.
+-- It returns a Disconnect-compatible handle, so the existing connection manager still works.
+function H.heartbeat(normalHz, ecoHz, fn, label)
+    SchedulerSerial = SchedulerSerial + 1
+    local token = "hb_" .. tostring(SchedulerSerial)
+    local now = os.clock()
+    local job = {
+        alive = true, fn = fn, normalHz = normalHz or 60, ecoHz = ecoHz or normalHz or 30,
+        nextAt = now, lastAt = now, errors = 0, label = label or token,
+        async = (tonumber(normalHz) or 60) <= 24, running = false,
+    }
+    HeartbeatJobs[token] = job
+    ensureScheduler()
+    local handle = {_runtimeJob = job}
+    function handle:Disconnect()
+        if not job.alive then return end
+        job.alive = false
+        HeartbeatJobs[token] = nil
+        stopSchedulerIfIdle()
+    end
+    return handle
+end
+
+function H.clearHeartbeatJobs()
+    for token, job in pairs(HeartbeatJobs) do
+        job.alive = false
+        HeartbeatJobs[token] = nil
+    end
+    if SchedulerConnection then
+        pcall(function() SchedulerConnection:Disconnect() end)
+        SchedulerConnection = nil
+    end
+end
+
+function H.setLowConsumption(on)
+    State.LowConsumption = on == true
+    -- Rates are selected dynamically by the scheduler, so no feature needs a restart.
+    return true, State.LowConsumption and "Low-consumption runtime enabled" or "Full-rate runtime enabled"
+end
+
+function H.clearConnection(key)
+    local c = Connections[key]
+    if c then
+        pcall(function() c:Disconnect() end)
+        Connections[key] = nil
+    end
+end
+
+function H.setConnection(key, conn)
+    H.clearConnection(key)
+    if type(conn) == "table" then
+        local runtimeJob = rawget(conn, "_runtimeJob")
+        if type(runtimeJob) == "table" then runtimeJob.label = tostring(key) end
+    end
+    Connections[key] = conn
+    return conn
+end
+
+function H.clearConnectionsPrefix(prefix)
+    prefix = tostring(prefix or "")
+    for key, c in pairs(Connections) do
+        if tostring(key):sub(1, #prefix) == prefix then
+            pcall(function() c:Disconnect() end)
+            Connections[key] = nil
+        end
+    end
+end
+
+function H.clearObject(key)
+    local o = Objects[key]
+    if o then
+        if type(o) == "table" then
+            for _, v in pairs(o) do
+                pcall(function()
+                    if typeof(v) == "Instance" then v:Destroy()
+                    elseif v.Remove then v:Remove() end
+                end)
+            end
+        else
+            pcall(function()
+                if typeof(o) == "Instance" then o:Destroy()
+                elseif o.Remove then o:Remove() end
+            end)
+        end
+        Objects[key] = nil
+    end
+end
+
+local RuntimeCache = {
+    Character = nil,
+    Humanoid = nil,
+    Root = nil,
+    Backpack = nil,
+}
+
+function H.refreshCharacterCache(c)
+    RuntimeCache.Character = c
+    RuntimeCache.Humanoid = c and c:FindFirstChildOfClass("Humanoid") or nil
+    RuntimeCache.Root = c and c:FindFirstChild("HumanoidRootPart") or nil
+    H.clearConnection("CacheCharacterChild")
+    if c then
+        H.setConnection("CacheCharacterChild", c.ChildAdded:Connect(function(child)
+            if child:IsA("Humanoid") then RuntimeCache.Humanoid = child
+            elseif child.Name == "HumanoidRootPart" and child:IsA("BasePart") then RuntimeCache.Root = child end
+        end))
+    end
+end
+
+H.refreshCharacterCache(LP.Character)
+RuntimeCache.Backpack = LP:FindFirstChildOfClass("Backpack")
+H.setConnection("CacheCharacterAdded", LP.CharacterAdded:Connect(function(c) H.refreshCharacterCache(c) end))
+H.setConnection("CacheCharacterRemoving", LP.CharacterRemoving:Connect(function(c)
+    if RuntimeCache.Character == c then
+        RuntimeCache.Character = nil; RuntimeCache.Humanoid = nil; RuntimeCache.Root = nil
+        H.clearConnection("CacheCharacterChild")
+    end
+end))
+H.setConnection("CachePlayerChild", LP.ChildAdded:Connect(function(child)
+    if child:IsA("Backpack") then RuntimeCache.Backpack = child end
+end))
+
+function H.character()
+    local c = RuntimeCache.Character
+    if c and c.Parent then return c end
+    c = LP.Character
+    if c then H.refreshCharacterCache(c) end
+    return c
+end
+
+function H.humanoid()
+    local h = RuntimeCache.Humanoid
+    if h and h.Parent then return h end
+    local c = H.character()
+    h = c and c:FindFirstChildOfClass("Humanoid") or nil
+    RuntimeCache.Humanoid = h
+    return h
+end
+
+function H.rootPart()
+    local r = RuntimeCache.Root
+    if r and r.Parent then return r end
+    local c = H.character()
+    r = c and c:FindFirstChild("HumanoidRootPart") or nil
+    RuntimeCache.Root = r
+    return r
+end
+
+function H.backpack()
+    local bp = RuntimeCache.Backpack
+    if bp and bp.Parent == LP then return bp end
+    bp = LP:FindFirstChildOfClass("Backpack")
+    RuntimeCache.Backpack = bp
+    return bp
+end
+
+function H.safePivot(cf)
+    local c = H.character()
+    if not c then return false, "Character unavailable" end
+    local ok, err = pcall(function()
+        c:PivotTo(cf)
+        local r = c:FindFirstChild("HumanoidRootPart")
+        if r then
+            r.AssemblyLinearVelocity = Vector3.zero
+            r.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+    return ok, err
+end
+
+function H.safeFirePrompt(prompt, hold)
+    if not prompt or not prompt.Parent or not prompt:IsA("ProximityPrompt") then return false end
+    local ok = false
+    if typeof(fireproximityprompt) == "function" then
+        ok = pcall(function()
+            fireproximityprompt(prompt, hold or 0)
+        end)
+        if ok then return true end
+    end
+    ok = pcall(function()
+        prompt:InputHoldBegin()
+        task.wait(hold or math.min(prompt.HoldDuration, 0.08))
+        prompt:InputHoldEnd()
+    end)
+    return ok
+end
+
+function H.lower(s)
+    return string.lower(tostring(s or ""))
+end
+
+function H.trim(s)
+    return tostring(s or ""):match("^%s*(.-)%s*$")
+end
+
+function H.parseCompactNumber(text)
+    text = tostring(text or ""):gsub("[$,%s/]", "")
+    text = text:gsub("[pP][eE][rR][sS]", "")
+    text = text:gsub("[sS]$", "")
+    local suffix = text:sub(-1):lower()
+    local mult = 1
+    if suffix == "k" then mult = 1e3; text = text:sub(1,-2)
+    elseif suffix == "m" then mult = 1e6; text = text:sub(1,-2)
+    elseif suffix == "b" then mult = 1e9; text = text:sub(1,-2)
+    elseif suffix == "t" then mult = 1e12; text = text:sub(1,-2)
+    elseif suffix == "q" then mult = 1e15; text = text:sub(1,-2) end
+    return (tonumber(text) or 0) * mult
+end
+
+function H.formatCompact(n)
+    n = tonumber(n) or 0
+    local a = math.abs(n)
+    if a >= 1e15 then return string.format("%.2fQ", n/1e15)
+    elseif a >= 1e12 then return string.format("%.2fT", n/1e12)
+    elseif a >= 1e9 then return string.format("%.2fB", n/1e9)
+    elseif a >= 1e6 then return string.format("%.2fM", n/1e6)
+    elseif a >= 1e3 then return string.format("%.2fK", n/1e3)
+    end
+    return tostring(math.floor(n + 0.5))
+end
+
+function H.isOurPlot(plot)
+    if not plot then return false end
+    local sign = plot:FindFirstChild("PlotSign")
+    if sign then
+        local yourBase = sign:FindFirstChild("YourBase")
+        if yourBase and (yourBase:IsA("BillboardGui") or yourBase:IsA("SurfaceGui")) and yourBase.Enabled then
+            return true
+        end
+        for _, d in ipairs(sign:GetDescendants()) do
+            if d:IsA("TextLabel") then
+                local t = H.lower(d.Text)
+                if t:find(H.lower(LP.Name), 1, true) or t:find(H.lower(LP.DisplayName), 1, true) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+function H.getOurPlot()
+    local plots = Workspace:FindFirstChild("Plots")
+    if not plots then return nil end
+    for _, p in ipairs(plots:GetChildren()) do
+        if H.isOurPlot(p) then return p end
+    end
+    return nil
+end
+
+function H.getModelRoot(model)
+    if not model then return nil end
+    if model:IsA("BasePart") then return model end
+    if model:IsA("Model") then
+        return model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart", true)
+    end
+    return nil
+end
+
+-- ============================================================
+-- NOTIFICATION BUS (single small overlay, never blocks execution)
+-- ============================================================
+local NotifyEvent = Instance.new("BindableEvent")
+function H.notify(title, message, kind)
+    NotifyEvent:Fire(tostring(title or "H4SK"), tostring(message or ""), kind or "info")
+end
+
+function H.protected(label, fn, ...)
+    local args = table.pack(...)
+    local ok, a, b, c = xpcall(function()
+        return fn(table.unpack(args, 1, args.n))
+    end, function(err)
+        local dbg=debug
+        if dbg and type(dbg.traceback)=="function" then return dbg.traceback(tostring(err),2) end
+        return tostring(err)
+    end)
+    if not ok then
+        warn("[H4SK SAB] " .. tostring(label) .. " -> " .. tostring(a))
+        H.notify(label, tostring(a):match("^[^\n]+") or tostring(a), "error")
+        return false, a
+    end
+    return true, a, b, c
+end
+
+-- ============================================================
+-- BRAINROT / PLOT SCANNER (shared by Notz, ZAHA, Ruby features)
+-- ============================================================
+function H.findPodiumSpawn(podium)
+    if not podium then return nil end
+    local base = podium:FindFirstChild("Base")
+    if base then
+        local sp = base:FindFirstChild("Spawn")
+        if sp and sp:IsA("BasePart") then return sp end
+    end
+    local sp = podium:FindFirstChild("Spawn", true)
+    if sp and sp:IsA("BasePart") then return sp end
+    return podium:FindFirstChildWhichIsA("BasePart", true)
+end
+
+function H.getAnimalNameFromPodium(podium)
+    if not podium then return "Unknown" end
+    local best = nil
+    for _, d in ipairs(podium:GetDescendants()) do
+        if d:IsA("TextLabel") and d.Text and d.Text ~= "" then
+            local t = H.trim(d.Text)
+            local l = H.lower(t)
+            if not l:find("empty",1,true)
+                and not l:find("steal",1,true)
+                and not l:find("sell",1,true)
+                and not t:match("^%$[%d%.,]+[KkMmBbTtQq]?/?[sS]?$")
+                and #t > 1 then
+                best = best or t
+            end
+        end
+    end
+    if best then return best end
+    for _, d in ipairs(podium:GetChildren()) do
+        if d:IsA("Model") and d.Name ~= "Base" then return d.Name end
+    end
+    return podium.Name
+end
+
+function H.getGenerationFromPodium(podium)
+    local best = 0
+    local bestText = ""
+    if not podium then return 0, "" end
+    for _, d in ipairs(podium:GetDescendants()) do
+        if d:IsA("TextLabel") and d.Text then
+            local t = d.Text
+            if t:find("$") or H.lower(t):find("/s",1,true) then
+                local n = H.parseCompactNumber(t)
+                if n > best then best = n; bestText = t end
+            end
+        end
+    end
+    return best, bestText
+end
+
+function H.findStealPrompt(podium)
+    if not podium then return nil end
+    local candidate = nil
+    for _, d in ipairs(podium:GetDescendants()) do
+        if d:IsA("ProximityPrompt") and d.Enabled then
+            local txt = H.lower((d.ActionText or "") .. " " .. (d.ObjectText or "") .. " " .. d.Name)
+            if txt:find("steal",1,true) or txt:find("grab",1,true) or txt:find("take",1,true) then
+                return d
+            end
+            candidate = candidate or d
+        end
+    end
+    return candidate
+end
+
+local BrainrotScanCache = {
+    others = {at = 0, list = {}},
+    all = {at = 0, list = {}},
+}
+
+local function cloneBrainrotScan(base)
+    local out = {}
+    local root = H.rootPart()
+    for _, rec in ipairs(base or {}) do
+        if rec.spawn and rec.spawn.Parent and rec.podium and rec.podium.Parent and rec.plot and rec.plot.Parent then
+            local copy = {}
+            for k, v in pairs(rec) do copy[k] = v end
+            copy.distance = root and (rec.spawn.Position - root.Position).Magnitude or math.huge
+            table.insert(out, copy)
+        end
+    end
+    table.sort(out, function(a,b)
+        if a.generation == b.generation then return a.distance < b.distance end
+        return a.generation > b.generation
+    end)
+    return out
+end
+
+function H.scanBrainrots(includeOwn)
+    local cache = includeOwn and BrainrotScanCache.all or BrainrotScanCache.others
+    local now = os.clock()
+    local ttl = State.LowConsumption and 0.18 or 0.06
+    if now - cache.at <= ttl and cache.list then
+        return cloneBrainrotScan(cache.list)
+    end
+
+    local out = {}
+    local plots = Workspace:FindFirstChild("Plots")
+    if not plots then cache.at=now; cache.list=out; return out end
+    local myRoot = H.rootPart()
+    for _, plot in ipairs(plots:GetChildren()) do
+        local own = H.isOurPlot(plot)
+        if includeOwn or not own then
+            local pods = plot:FindFirstChild("AnimalPodiums")
+            if pods then
+                for _, podium in ipairs(pods:GetChildren()) do
+                    local spawn = H.findPodiumSpawn(podium)
+                    if spawn then
+                        local name = H.getAnimalNameFromPodium(podium)
+                        local gen, genText = H.getGenerationFromPodium(podium)
+                        local prompt = H.findStealPrompt(podium)
+                        local dist = myRoot and (spawn.Position - myRoot.Position).Magnitude or math.huge
+                        table.insert(out, {
+                            plot = plot,
+                            podium = podium,
+                            spawn = spawn,
+                            name = name,
+                            generation = gen,
+                            generationText = genText,
+                            prompt = prompt,
+                            distance = dist,
+                            own = own,
+                            uid = plot.Name .. "/" .. podium.Name,
+                        })
+                    end
+                end
+            end
+        end
+    end
+    table.sort(out, function(a,b)
+        if a.generation == b.generation then return a.distance < b.distance end
+        return a.generation > b.generation
+    end)
+    cache.at = now
+    cache.list = out
+    return cloneBrainrotScan(out)
+end
+
+function H.priorityRank(name)
+    local n = H.lower(name)
+    for i, wanted in ipairs(State.PriorityList) do
+        if H.lower(wanted) == n then return i end
+    end
+    return math.huge
+end
+
+function H.chooseBrainrot(mode)
+    local list = H.scanBrainrots(false)
+    if #list == 0 then return nil end
+    mode = mode or State.StealMode
+    if mode == "Nearest" then
+        table.sort(list, function(a,b) return a.distance < b.distance end)
+    elseif mode == "Priority" and #State.PriorityList > 0 then
+        table.sort(list, function(a,b)
+            local ra, rb = H.priorityRank(a.name), H.priorityRank(b.name)
+            if ra == rb then return a.generation > b.generation end
+            return ra < rb
+        end)
+    else
+        table.sort(list, function(a,b) return a.generation > b.generation end)
+    end
+    return list[1]
+end
+
+function H.isCarryingBrainrot()
+    local c = H.character()
+    if not c then return false end
+    for _, name in ipairs({"Carrying","IsCarrying","Grabbed","Holding","StealHold","HasGrab"}) do
+        local v = c:FindFirstChild(name)
+        if v and ((v:IsA("BoolValue") and v.Value) or not v:IsA("BoolValue")) then return true end
+    end
+    for _, ch in ipairs(c:GetChildren()) do
+        if ch:IsA("Tool") then
+            local l = H.lower(ch.Name)
+            if not l:find("bat",1,true) and not l:find("slap",1,true) and not l:find("carpet",1,true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- ============================================================
+-- TOOL HELPERS
+-- ============================================================
+local SLAP_NAMES = {
+    "Bat","Slap","Iron Slap","Gold Slap","Diamond Slap","Emerald Slap",
+    "Ruby Slap","Dark Matter Slap","Flame Slap","Nuclear Slap","Galaxy Slap","Glitched Slap"
+}
+
+function H.findToolByNames(names)
+    local c, bp = H.character(), H.backpack()
+    for _, n in ipairs(names) do
+        local t = c and c:FindFirstChild(n)
+        if t and t:IsA("Tool") then return t end
+        t = bp and bp:FindFirstChild(n)
+        if t and t:IsA("Tool") then return t end
+    end
+    return nil
+end
+
+function H.findBat()
+    local c, bp = H.character(), H.backpack()
+    for _, container in ipairs({c,bp}) do
+        if container then
+            for _, ch in ipairs(container:GetChildren()) do
+                if ch:IsA("Tool") then
+                    local n = H.lower(ch.Name)
+                    if n:find("bat",1,true) or n:find("slap",1,true) then return ch end
+                end
+            end
+        end
+    end
+    return H.findToolByNames(SLAP_NAMES)
+end
+
+function H.equipTool(tool)
+    if not tool then return false end
+    local h = H.humanoid()
+    if h and tool.Parent ~= H.character() then
+        pcall(function() h:EquipTool(tool) end)
+    end
+    return tool.Parent == H.character()
+end
+
+function H.nearestEnemy(radius)
+    local r = H.rootPart()
+    if not r then return nil end
+    local best, bestDist = nil, radius or math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character then
+            local pr = p.Character:FindFirstChild("HumanoidRootPart")
+            local ph = p.Character:FindFirstChildOfClass("Humanoid")
+            if pr and ph and ph.Health > 0 then
+                local d = (pr.Position-r.Position).Magnitude
+                if d < bestDist then best, bestDist = p, d end
+            end
+        end
+    end
+    return best, bestDist
+end
+
+-- ============================================================
+-- FEATURE REGISTRY
+-- ============================================================
+local Features = {}
+local FeatureList = {}
+
+function H.register(feature)
+    assert(type(feature) == "table" and feature.id and feature.name and feature.category, "invalid feature")
+    if Features[feature.id] then return end
+    Features[feature.id] = feature
+    table.insert(FeatureList, feature)
+end
+
+function H.addToggle(id, category, name, description, getter, setter)
+    H.register({id=id, category=category, name=name, description=description or "", kind="toggle", get=getter, set=setter})
+end
+
+function H.addAction(id, category, name, description, action)
+    H.register({id=id, category=category, name=name, description=description or "", kind="action", action=action})
+end
+
+function H.addInput(id, category, name, description, getter, setter, numeric)
+    H.register({id=id, category=category, name=name, description=description or "", kind="input", get=getter, set=setter, numeric=numeric==true})
+end
+
+function H.addChoice(id, category, name, description, getter, options, setter)
+    H.register({id=id, category=category, name=name, description=description or "", kind="choice", get=getter, options=options, set=setter})
+end
+
+-- ============================================================
+-- MOVEMENT / LACAZETTE UNIQUE FEATURES
+-- ============================================================
+function H.setInfiniteJump(on)
+    State.InfiniteJump = on == true
+    H.clearConnection("InfiniteJump")
+    if not State.InfiniteJump then return end
+    H.setConnection("InfiniteJump", UIS.JumpRequest:Connect(function()
+        if not State.InfiniteJump then return end
+        local h = H.humanoid()
+        local r = H.rootPart()
+        if h and r and h.Health > 0 then
+            r.AssemblyLinearVelocity = Vector3.new(r.AssemblyLinearVelocity.X, 55, r.AssemblyLinearVelocity.Z)
+            h:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end))
+end
+
+function H.setFly(on)
+    State.Fly = on == true
+    H.clearConnection("Fly")
+    local h = H.humanoid()
+    local r = H.rootPart()
+    if not State.Fly then
+        if h then h.PlatformStand = false end
+        if r then r.AssemblyLinearVelocity = Vector3.zero end
+        return
+    end
+    if not h or not r then State.Fly = false; return end
+    h.PlatformStand = true
+    H.setConnection("Fly", RunService.RenderStepped:Connect(function()
+        local hh = H.humanoid()
+        local rr = H.rootPart()
+        if not State.Fly or not hh or not rr then return end
+        local v = hh.MoveDirection * State.FlySpeed
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then v = v + Vector3.new(0, State.FlySpeed, 0) end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.LeftShift) or UIS:IsKeyDown(Enum.KeyCode.X) then
+            v = v + Vector3.new(0, -State.FlySpeed, 0)
+        end
+        rr.AssemblyLinearVelocity = v
+    end))
+end
+
+local godHealthConn = nil
+local godCharConn = nil
+function H.bindGod()
+    if godHealthConn then godHealthConn:Disconnect(); godHealthConn=nil end
+    local h = H.humanoid()
+    if not h then return end
+    if h.Health > 0 then h.Health = h.MaxHealth end
+    godHealthConn = h.HealthChanged:Connect(function()
+        if State.God and h.Parent and h.Health > 0 then
+            h.Health = h.MaxHealth
+        end
+    end)
+end
+
+function H.setGod(on)
+    State.God = on == true
+    if State.God then
+        H.bindGod()
+        if not godCharConn then
+            godCharConn = LP.CharacterAdded:Connect(function()
+                task.wait(0.35)
+                if State.God then H.bindGod() end
+            end)
+        end
+    else
+        if godHealthConn then godHealthConn:Disconnect(); godHealthConn=nil end
+    end
+end
+
+function H.setChase(on)
+    State.Chase = on == true
+    H.clearConnection("Chase")
+    if not State.Chase then
+        local r = H.rootPart(); if r then r.AssemblyLinearVelocity = Vector3.zero end
+        return
+    end
+    H.setConnection("Chase", H.heartbeat(60,30,function()
+        if not State.Chase then return end
+        local r = H.rootPart()
+        if not r then return end
+        local p = H.nearestEnemy()
+        local tr = p and p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+        if tr then
+            local delta = tr.Position - r.Position
+            if delta.Magnitude > 2 then
+                r.AssemblyLinearVelocity = delta.Unit * State.ChaseSpeed
+            else
+                r.AssemblyLinearVelocity = tr.AssemblyLinearVelocity
+            end
+        end
+    end))
+end
+
+local invisOriginal=setmetatable({}, {__mode="k"})
+function H.setInvisible(on)
+    State.Invisible = on == true
+    local c = H.character()
+    if State.Invisible then
+        if not c then return end
+        for _,v in ipairs(c:GetDescendants()) do
+            if v:IsA("BasePart") then
+                if invisOriginal[v]==nil then invisOriginal[v]={kind="part",value=v.LocalTransparencyModifier} end
+                v.LocalTransparencyModifier=1
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                if invisOriginal[v]==nil then invisOriginal[v]={kind="transparency",value=v.Transparency} end
+                v.Transparency=1
+            elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+                if invisOriginal[v]==nil then invisOriginal[v]={kind="enabled",value=v.Enabled} end
+                v.Enabled=false
+            end
+        end
+    else
+        for v,rec in pairs(invisOriginal) do
+            if v and v.Parent then pcall(function()
+                if rec.kind=="part" then v.LocalTransparencyModifier=rec.value
+                elseif rec.kind=="transparency" then v.Transparency=rec.value
+                elseif rec.kind=="enabled" then v.Enabled=rec.value end
+            end) end
+        end
+        invisOriginal=setmetatable({}, {__mode="k"})
+    end
+end
+
+function H.setNoClip(on)
+    State.NoClip = on == true
+    H.clearConnection("NoClip")
+    if not State.NoClip then
+        for part, can in pairs(Original.Collision) do
+            if part and part.Parent then pcall(function() part.CanCollide = can end) end
+        end
+        Original.Collision = setmetatable({}, {__mode="k"})
+        return
+    end
+    H.setConnection("NoClip", RunService.Stepped:Connect(function()
+        local c = H.character()
+        if not c then return end
+        for _, p in ipairs(c:GetDescendants()) do
+            if p:IsA("BasePart") then
+                if Original.Collision[p] == nil then Original.Collision[p] = p.CanCollide end
+                p.CanCollide = false
+            end
+        end
+    end))
+end
+
+local hitboxObjects = {}
+function H.clearHitboxVisual()
+    for _, o in ipairs(hitboxObjects) do pcall(function() o:Destroy() end) end
+    hitboxObjects = {}
+end
+
+function H.refreshHitboxVisual()
+    H.clearHitboxVisual()
+    if not State.HitboxVisual then return end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character then
+            for _, part in ipairs(p.Character:GetChildren()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    local ad = Instance.new("BoxHandleAdornment")
+                    ad.Name = "H4SK_HitboxVisual"
+                    ad.Adornee = part
+                    ad.AlwaysOnTop = true
+                    ad.ZIndex = 10
+                    ad.Size = part.Size
+                    ad.Transparency = 0.72
+                    ad.Color3 = Color3.fromRGB(52, 220, 160)
+                    ad.Parent = part
+                    table.insert(hitboxObjects, ad)
+                end
+            end
+        end
+    end
+end
+
+function H.setHitboxVisual(on)
+    State.HitboxVisual = on == true
+    H.clearConnection("HitboxVisual")
+    if not State.HitboxVisual then H.clearHitboxVisual(); return end
+    H.refreshHitboxVisual()
+    local acc = 0
+    H.setConnection("HitboxVisual", H.heartbeat(2,1,function(dt)
+        acc = acc + dt
+        if acc >= 1 then acc = 0; H.refreshHitboxVisual() end
+    end))
+end
+
+local floatHeight = 8
+function H.setFloat(on)
+    State.Float = on == true
+    H.clearConnection("Float")
+    if not State.Float then return end
+    H.setConnection("Float", H.heartbeat(60,30,function()
+        local c, r = H.character(), H.rootPart()
+        if not c or not r then return end
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = {c}
+        local result = Workspace:Raycast(r.Position, Vector3.new(0,-60,0), params)
+        if result then
+            local targetY = result.Position.Y + floatHeight
+            local dy = targetY - r.Position.Y
+            local v = r.AssemblyLinearVelocity
+            r.AssemblyLinearVelocity = Vector3.new(v.X, math.clamp(dy*14, -60, 60), v.Z)
+        end
+    end))
+end
+
+local spinAttachment, spinAlign
+function H.cleanupSpin()
+    H.clearConnection("SpinBot")
+    if spinAlign then spinAlign:Destroy(); spinAlign=nil end
+    if spinAttachment then spinAttachment:Destroy(); spinAttachment=nil end
+end
+
+function H.setSpinBot(on)
+    State.SpinBot = on == true
+    H.cleanupSpin()
+    if not State.SpinBot then return end
+    local r = H.rootPart(); if not r then State.SpinBot=false; return end
+    spinAttachment = Instance.new("Attachment")
+    spinAttachment.Name = "H4SK_SpinAttachment"
+    spinAttachment.Parent = r
+    spinAlign = Instance.new("AlignOrientation")
+    spinAlign.Name = "H4SK_SpinAlign"
+    spinAlign.Attachment0 = spinAttachment
+    spinAlign.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    spinAlign.Responsiveness = 30
+    spinAlign.MaxTorque = math.huge
+    spinAlign.RigidityEnabled = false
+    spinAlign.Parent = r
+    local angle = 0
+    H.setConnection("SpinBot", H.heartbeat(60,30,function(dt)
+        if not State.SpinBot or not spinAlign or not spinAlign.Parent then return end
+        angle = angle + State.SpinSpeed * dt
+        spinAlign.CFrame = CFrame.Angles(0,angle,0)
+    end))
+end
+
+function H.setUnwalk(on)
+    State.Unwalk = on == true
+    H.clearConnection("Unwalk")
+    if not State.Unwalk then return end
+    H.setConnection("Unwalk", H.heartbeat(20,10,function()
+        local h = H.humanoid(); if not h then return end
+        local animator = h:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, tr in ipairs(animator:GetPlayingAnimationTracks()) do
+                pcall(function() tr:Stop(0) end)
+            end
+        end
+    end))
+end
+
+local noPlayerCollisionOrig = setmetatable({}, {__mode="k"})
+function H.setNoPlayerCollision(on)
+    State.NoPlayerCollision = on == true
+    H.clearConnection("NoPlayerCollision")
+    if not State.NoPlayerCollision then
+        for p, old in pairs(noPlayerCollisionOrig) do
+            if p and p.Parent then p.CanCollide = old end
+        end
+        noPlayerCollisionOrig = setmetatable({}, {__mode="k"})
+        return
+    end
+    H.setConnection("NoPlayerCollision", RunService.Stepped:Connect(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LP and plr.Character then
+                for _, p in ipairs(plr.Character:GetDescendants()) do
+                    if p:IsA("BasePart") then
+                        if noPlayerCollisionOrig[p] == nil then noPlayerCollisionOrig[p] = p.CanCollide end
+                        p.CanCollide = false
+                    end
+                end
+            end
+        end
+    end))
+end
+
+function H.forceReset()
+    local h = H.humanoid()
+    local r = H.rootPart()
+    if h then
+        h.Health = 0
+    elseif r then
+        r.CFrame = CFrame.new(r.Position.X, -500, r.Position.Z)
+    end
+end
+
+-- ============================================================
+-- DREAM SPEED ENGINE / CARRY MODES
+-- ============================================================
+local speedAttachment, speedLV
+function H.destroySpeedLV()
+    if speedLV then pcall(function() speedLV:Destroy() end); speedLV=nil end
+    if speedAttachment then pcall(function() speedAttachment:Destroy() end); speedAttachment=nil end
+end
+
+function H.currentSpeedValue()
+    if State.SpeedMode == "Carry" then return State.CarrySpeed end
+    if State.SpeedMode == "Lagger" then return State.LaggerSpeed end
+    if State.SpeedMode == "Lagger Carry" then return State.LaggerCarrySpeed end
+    return State.NormalSpeed
+end
+
+function H.ensureSpeedLV(r)
+    if speedLV and speedLV.Parent == r and speedAttachment and speedAttachment.Parent == r then return speedLV end
+    H.destroySpeedLV()
+    speedAttachment = Instance.new("Attachment")
+    speedAttachment.Name = "H4SK_SpeedAttachment"
+    speedAttachment.Parent = r
+    speedLV = Instance.new("LinearVelocity")
+    speedLV.Name = "H4SK_SpeedLV"
+    speedLV.Attachment0 = speedAttachment
+    speedLV.RelativeTo = Enum.ActuatorRelativeTo.World
+    speedLV.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+    pcall(function() speedLV.ForceLimitMode = Enum.ForceLimitMode.PerAxis end)
+    speedLV.MaxAxesForce = Vector3.zero
+    speedLV.VectorVelocity = Vector3.zero
+    speedLV.Enabled = false
+    speedLV.Parent = r
+    return speedLV
+end
+
+function H.setSpeedEnabled(on)
+    State.SpeedEnabled = on == true
+    H.clearConnection("SpeedEngine")
+    if not State.SpeedEnabled then H.destroySpeedLV(); return end
+    H.setConnection("SpeedEngine", H.heartbeat(60,30,function()
+        local h,r = H.humanoid(),H.rootPart()
+        if not h or not r then H.destroySpeedLV(); return end
+        local md = h.MoveDirection
+        if md.Magnitude < 0.05 then
+            if speedLV then speedLV.Enabled=false; speedLV.VectorVelocity=Vector3.zero end
+            return
+        end
+        local lv = H.ensureSpeedLV(r)
+        local dir = Vector3.new(md.X,0,md.Z)
+        if dir.Magnitude <= 0 then return end
+        dir = dir.Unit
+        local spd = H.currentSpeedValue()
+        local mass = math.max(1, r.AssemblyMass)
+        local maxF = math.clamp(mass * math.max(spd,16) * 42, 10000, 90000)
+        lv.MaxAxesForce = Vector3.new(maxF,0,maxF)
+        lv.VectorVelocity = Vector3.new(dir.X*spd,0,dir.Z*spd)
+        lv.Enabled = true
+    end))
+end
+
+function H.setAutoCarrySpeed(on)
+    State.AutoCarrySpeed = on == true
+    H.clearConnection("AutoCarrySpeed")
+    if not State.AutoCarrySpeed then return end
+    local previousMode = State.SpeedMode
+    local autoApplied = false
+    H.setConnection("AutoCarrySpeed", H.heartbeat(12,6,function()
+        local carrying = H.isCarryingBrainrot()
+        if carrying and not autoApplied then
+            previousMode = State.SpeedMode
+            if previousMode == "Lagger" then State.SpeedMode = "Lagger Carry" else State.SpeedMode = "Carry" end
+            autoApplied = true
+        elseif not carrying and autoApplied then
+            State.SpeedMode = previousMode
+            autoApplied = false
+        end
+    end))
+end
+
+function H.setCarpetSpeed(on)
+    State.CarpetSpeed = on == true
+    H.clearConnection("CarpetSpeed")
+    if not State.CarpetSpeed then return end
+    H.setConnection("CarpetSpeed", H.heartbeat(40,24,function()
+        local c,h,r = H.character(),H.humanoid(),H.rootPart()
+        if not c or not h or not r then return end
+        local tool = c:FindFirstChild("Flying Carpet") or (H.backpack() and H.backpack():FindFirstChild("Flying Carpet"))
+        if tool and tool.Parent ~= c then pcall(function() h:EquipTool(tool) end) end
+        if c:FindFirstChild("Flying Carpet") then
+            local md = h.MoveDirection
+            if md.Magnitude > 0 then
+                r.AssemblyLinearVelocity = Vector3.new(md.X*State.CarpetSpeedValue, r.AssemblyLinearVelocity.Y, md.Z*State.CarpetSpeedValue)
+            end
+        end
+    end))
+end
+
+-- ============================================================
+-- AUTO TP DOWN / DROP / RAGDOLL / RESET-ON-DEATH
+-- ============================================================
+function H.tpDown(force)
+    local h,r = H.humanoid(),H.rootPart()
+    if not h or not r then return false end
+    if not force then
+        if h.FloorMaterial ~= Enum.Material.Air then return false end
+        if r.Position.Y < State.AutoTPHeight then return false end
+    end
+    local _, yaw, _ = r.CFrame:ToEulerAnglesYXZ()
+    r.CFrame = CFrame.new(r.Position.X,-7,r.Position.Z) * CFrame.Angles(0,yaw,0)
+    r.AssemblyLinearVelocity = Vector3.zero
+    return true
+end
+
+function H.setAutoTPDown(on)
+    State.AutoTPDown = on == true
+    H.clearConnection("AutoTPDown")
+    if not State.AutoTPDown then return end
+    local last = 0
+    H.setConnection("AutoTPDown", H.heartbeat(12,8,function()
+        if os.clock()-last < 0.1 then return end
+        last = os.clock()
+        H.tpDown(false)
+    end))
+end
+
+local dropBusy = false
+function H.dropBrainrot()
+    if dropBusy then return end
+    local r = H.rootPart(); if not r then return end
+    dropBusy = true
+    local started = os.clock()
+    local conn
+    conn = H.heartbeat(60,30,function()
+        local rr = H.rootPart()
+        if not rr then if conn then conn:Disconnect() end; dropBusy=false; return end
+        if os.clock()-started >= 0.2 then
+            conn:Disconnect()
+            local c = H.character()
+            local params = RaycastParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            params.FilterDescendantsInstances = c and {c} or {}
+            local hit = Workspace:Raycast(rr.Position, Vector3.new(0,-2000,0), params)
+            if hit then
+                local h = H.humanoid()
+                local offset = (h and h.HipHeight or 2) + rr.Size.Y/2
+                rr.CFrame = CFrame.new(rr.Position.X,hit.Position.Y+offset,rr.Position.Z)
+                rr.AssemblyLinearVelocity = Vector3.zero
+                rr.AssemblyAngularVelocity = Vector3.zero
+            end
+            dropBusy=false
+            return
+        end
+        local v=rr.AssemblyLinearVelocity
+        rr.AssemblyLinearVelocity=Vector3.new(v.X,150,v.Z)
+    end)
+end
+
+function H.ragdollSelf()
+    local h = H.humanoid()
+    if h then
+        h:ChangeState(Enum.HumanoidStateType.Ragdoll)
+        h.PlatformStand = true
+        task.delay(1.1,function()
+            if h and h.Parent then h.PlatformStand=false; h:ChangeState(Enum.HumanoidStateType.GettingUp) end
+        end)
+    end
+end
+
+function H.setResetOnDeath(on)
+    State.ResetOnDeath = on == true
+    H.clearConnection("ResetOnDeath")
+    if not State.ResetOnDeath then return end
+    local function hook(c)
+        local h = c:WaitForChild("Humanoid",5)
+        if not h then return end
+        H.clearConnection("ResetOnDeathHum")
+        H.setConnection("ResetOnDeathHum", h.Died:Connect(function()
+            if State.ResetOnDeath then
+                task.wait(0.2)
+                pcall(function() LP:LoadCharacter() end)
+            end
+        end))
+    end
+    if H.character() then hook(H.character()) end
+    H.setConnection("ResetOnDeath", LP.CharacterAdded:Connect(function(c)
+        if State.ResetOnDeath then task.wait(0.2); hook(c) end
+    end))
+end
+
+-- ============================================================
+-- ANTI-RAGDOLL (Notz V2 style selected over duplicates)
+-- ============================================================
+local antiRagCharConns = {}
+function H.clearAntiRagCharConns()
+    for _, c in ipairs(antiRagCharConns) do pcall(function() c:Disconnect() end) end
+    antiRagCharConns = {}
+end
+
+function H.ragdollState(h)
+    if not h then return false end
+    local s = h:GetState()
+    return h.PlatformStand
+        or s == Enum.HumanoidStateType.Physics
+        or s == Enum.HumanoidStateType.Ragdoll
+        or s == Enum.HumanoidStateType.FallingDown
+        or s == Enum.HumanoidStateType.GettingUp
+end
+
+function H.cleanRagdoll(c)
+    if not c then return end
+    local h = c:FindFirstChildOfClass("Humanoid")
+    local r = c:FindFirstChild("HumanoidRootPart")
+    if h then
+        h.PlatformStand = false
+        pcall(function() h:ChangeState(Enum.HumanoidStateType.Running) end)
+        pcall(function() Workspace.CurrentCamera.CameraSubject = h end)
+    end
+    if r then
+        local v = r.AssemblyLinearVelocity
+        if v.Magnitude > 25 then
+            r.AssemblyLinearVelocity = v.Unit * math.min(v.Magnitude,15)
+        end
+        r.AssemblyAngularVelocity = Vector3.zero
+    end
+    for _, d in ipairs(c:GetDescendants()) do
+        if d:IsA("Motor6D") and not d.Enabled then d.Enabled = true end
+        if d:IsA("BallSocketConstraint") or d:IsA("HingeConstraint") then
+            local n = H.lower(d.Name)
+            if n:find("rag",1,true) then pcall(function() d.Enabled=false end) end
+        end
+    end
+    pcall(function()
+        local ps = LP:FindFirstChild("PlayerScripts")
+        local pm = ps and ps:FindFirstChild("PlayerModule")
+        if pm then require(pm):GetControls():Enable() end
+    end)
+end
+
+function H.hookAntiRagdoll(c)
+    H.clearAntiRagCharConns()
+    if not c then return end
+    local h = c:WaitForChild("Humanoid",5)
+    local r = c:WaitForChild("HumanoidRootPart",5)
+    if not h or not r then return end
+    table.insert(antiRagCharConns, h.StateChanged:Connect(function(_,newState)
+        if State.AntiRagdoll and (newState==Enum.HumanoidStateType.Physics or newState==Enum.HumanoidStateType.Ragdoll or newState==Enum.HumanoidStateType.FallingDown or newState==Enum.HumanoidStateType.GettingUp) then
+            H.cleanRagdoll(c)
+        end
+    end))
+    table.insert(antiRagCharConns, c.DescendantAdded:Connect(function(d)
+        if State.AntiRagdoll and (d:IsA("BallSocketConstraint") or d:IsA("HingeConstraint") or d.Name=="Ragdoll" or d.Name=="IsRagdoll") then
+            task.defer(H.cleanRagdoll,c)
+        end
+    end))
+    table.insert(antiRagCharConns, H.heartbeat(60,30,function()
+        if State.AntiRagdoll and H.ragdollState(h) then H.cleanRagdoll(c) end
+    end))
+    H.cleanRagdoll(c)
+end
+
+State.AntiRagdoll = false
+function H.setAntiRagdoll(on)
+    State.AntiRagdoll = on == true
+    H.clearAntiRagCharConns()
+    H.clearConnection("AntiRagRespawn")
+    if not State.AntiRagdoll then return end
+    if H.character() then task.spawn(H.hookAntiRagdoll,H.character()) end
+    H.setConnection("AntiRagRespawn", LP.CharacterAdded:Connect(function(c)
+        if State.AntiRagdoll then task.wait(0.25); H.hookAntiRagdoll(c) end
+    end))
+end
+
+-- ============================================================
+-- ANIMATION PACK / RAGDOLL HUD
+-- ============================================================
+local AnimationPacks = {
+    Off = nil,
+    Zombie = {idle="rbxassetid://616158929",walk="rbxassetid://616168032",run="rbxassetid://616163682",jump="rbxassetid://616161997",fall="rbxassetid://616157476",climb="rbxassetid://616156119"},
+    Ninja = {idle="rbxassetid://656117400",walk="rbxassetid://656121766",run="rbxassetid://656118852",jump="rbxassetid://656117878",fall="rbxassetid://656115606",climb="rbxassetid://656114359"},
+    Robot = {idle="rbxassetid://616088211",walk="rbxassetid://616095330",run="rbxassetid://616091570",jump="rbxassetid://616090535",fall="rbxassetid://616087089",climb="rbxassetid://616086039"},
+    Stylish = {idle="rbxassetid://616136790",walk="rbxassetid://616146177",run="rbxassetid://616140816",jump="rbxassetid://616139451",fall="rbxassetid://616134815",climb="rbxassetid://616133594"},
+    Mage = {idle="rbxassetid://707742142",walk="rbxassetid://707897309",run="rbxassetid://707861613",jump="rbxassetid://707853694",fall="rbxassetid://707829716",climb="rbxassetid://707826056"},
+}
+State.AnimationPack = "Off"
+local savedAnimIds = {}
+function H.setAnimId(obj,id)
+    if obj and obj:IsA("Animation") and id then obj.AnimationId=id end
+end
+function H.applyAnimationPack(name)
+    name = AnimationPacks[name] and name or "Off"
+    State.AnimationPack=name
+    local c=H.character(); if not c then return end
+    local animate=c:FindFirstChild("Animate"); if not animate then return end
+    if next(savedAnimIds)==nil then
+        for _,d in ipairs(animate:GetDescendants()) do if d:IsA("Animation") then savedAnimIds[d]=d.AnimationId end end
+    end
+    local pack=AnimationPacks[name]
+    if not pack then
+        for obj,id in pairs(savedAnimIds) do if obj and obj.Parent then obj.AnimationId=id end end
+    else
+        local map={idle=pack.idle,walk=pack.walk,run=pack.run,jump=pack.jump,fall=pack.fall,climb=pack.climb}
+        for _,d in ipairs(animate:GetDescendants()) do
+            if d:IsA("Animation") then
+                local p=d.Parent and H.lower(d.Parent.Name) or H.lower(d.Name)
+                for key,id in pairs(map) do if p:find(key,1,true) then H.setAnimId(d,id); break end end
+            end
+        end
+    end
+    local h=H.humanoid(); local an=h and h:FindFirstChildOfClass("Animator")
+    if an then for _,tr in ipairs(an:GetPlayingAnimationTracks()) do pcall(function() tr:Stop(0) end) end end
+    animate.Disabled=true; task.wait(); animate.Disabled=false
+end
+
+function H.setRagdollCountdown(on)
+    State.RagdollCountdown=on==true
+    H.clearConnection("RagdollCountdown")
+    H.clearObject("RagdollCountdown")
+    if not State.RagdollCountdown then return end
+    if not MainGui then return end
+    local holder=Instance.new("Frame"); holder.Name="H4SK_RagdollCountdown"; holder.BackgroundTransparency=1; holder.Size=UDim2.fromScale(1,1); holder.Parent=MainGui
+    local lbl=Instance.new("TextLabel"); lbl.AnchorPoint=Vector2.new(0.5,0); lbl.Position=UDim2.new(0.5,0,0.12,0); lbl.Size=UDim2.new(0,180,0,34); lbl.BackgroundColor3=Color3.fromRGB(8,12,14); lbl.BackgroundTransparency=0.15; lbl.TextColor3=Color3.fromRGB(70,240,170); lbl.Font=Enum.Font.GothamBold; lbl.TextSize=16; lbl.Visible=false; lbl.Parent=holder
+    Instance.new("UICorner",lbl).CornerRadius=UDim.new(0,10)
+    Objects.RagdollCountdown=holder
+    local endAt=0
+    H.setConnection("RagdollCountdown",RunService.RenderStepped:Connect(function()
+        local h=H.humanoid()
+        if h and H.ragdollState(h) and endAt<os.clock() then endAt=os.clock()+2.6 end
+        local left=math.max(0,endAt-os.clock())
+        lbl.Visible=left>0
+        if left>0 then lbl.Text=string.format("RAGDOLL %.1f",left) end
+    end))
+end
+
+-- ============================================================
+-- DUEL AIMBOT / COUNTERS (Dream implementation family)
+-- ============================================================
+function H.currentAimbotSpeed()
+    if State.SpeedMode=="Lagger" or State.SpeedMode=="Lagger Carry" then return State.LaggerAimbotSpeed end
+    return State.AimbotSpeed
+end
+
+function H.swingBat(tool)
+    if not tool then return false end
+    H.equipTool(tool)
+    return pcall(function() tool:Activate() end)
+end
+
+function H.setBatAimbot(on)
+    State.BatAimbot=on==true
+    H.clearConnection("BatAimbot")
+    if not State.BatAimbot then
+        local h=H.humanoid(); if h then h.AutoRotate=true end
+        return
+    end
+    local swingCd=false
+    H.setConnection("BatAimbot",H.heartbeat(60,30,function()
+        if not State.BatAimbot then return end
+        if State.SafeMode and H.isCarryingBrainrot() then return end
+        local c,h,r=H.character(),H.humanoid(),H.rootPart(); if not c or not h or not r then return end
+        local bat=H.findBat(); if bat then H.equipTool(bat) end
+        local target,dist=H.nearestEnemy(State.AimbotRadius)
+        local tr=target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+        local torso=target and target.Character and (target.Character:FindFirstChild("UpperTorso") or target.Character:FindFirstChild("Torso") or tr)
+        if not tr or not torso then return end
+        local predicted=torso.Position + torso.AssemblyLinearVelocity*0.13
+        local delta=predicted-r.Position
+        local flat=Vector3.new(delta.X,0,delta.Z)
+        if State.AimbotMode=="Anti Bypass" or State.AntiDesync then
+            h.AutoRotate=false
+            if flat.Magnitude>0.05 then r.CFrame=CFrame.lookAt(r.Position,r.Position+flat.Unit) end
+        else
+            h.AutoRotate=true
+        end
+        if delta.Magnitude>1.5 then
+            r.AssemblyLinearVelocity=delta.Unit*H.currentAimbotSpeed()
+        else
+            r.AssemblyLinearVelocity=tr.AssemblyLinearVelocity
+        end
+        if State.MirrorTPDown and tr.Position.Y < r.Position.Y-2.5 then
+            r.CFrame=CFrame.new(r.Position.X,tr.Position.Y+3,r.Position.Z) * (r.CFrame-r.Position)
+        end
+        if State.AutoSwing and bat and dist and dist<=12 and not swingCd then
+            swingCd=true; H.swingBat(bat); task.delay(0.16,function() swingCd=false end)
+        end
+    end))
+end
+
+function H.setAntiDesync(on)
+    State.AntiDesync=on==true
+    if State.BatAimbot then H.setBatAimbot(false); H.setBatAimbot(true) end
+end
+
+function H.setBatCounter(on)
+    State.BatCounter=on==true
+    H.clearConnection("BatCounter")
+    if not State.BatCounter then return end
+    local cd=false
+    H.setConnection("BatCounter",H.heartbeat(30,18,function()
+        local h=H.humanoid(); if not h or not H.ragdollState(h) or cd then return end
+        local bat=H.findBat(); if not bat then return end
+        H.equipTool(bat)
+        local p,dist=H.nearestEnemy(16)
+        if p and dist then cd=true; H.swingBat(bat); task.delay(0.45,function() cd=false end) end
+    end))
+end
+
+function H.findMedusa()
+    local c,bp=H.character(),H.backpack()
+    for _,container in ipairs({c,bp}) do
+        if container then
+            for _,t in ipairs(container:GetChildren()) do
+                if t:IsA("Tool") and H.lower(t.Name):find("medusa",1,true) then return t end
+            end
+        end
+    end
+end
+
+function H.useMedusa()
+    local t=H.findMedusa(); if not t then return false end
+    H.equipTool(t); pcall(function() t:Activate() end); return true
+end
+
+function H.setMedusaCounter(on)
+    State.MedusaCounter=on==true
+    H.clearConnection("MedusaCounter")
+    if not State.MedusaCounter then return end
+    local last=0
+    H.setConnection("MedusaCounter",H.heartbeat(15,8,function()
+        local r=H.rootPart(); if not r then return end
+        if r.Anchored and os.clock()-last>2 then last=os.clock(); H.useMedusa() end
+    end))
+end
+
+function H.setAutoResetOnMed(on)
+    State.AutoResetOnMed=on==true
+    H.clearConnection("AutoResetOnMed")
+    if not State.AutoResetOnMed then return end
+    local last=false
+    H.setConnection("AutoResetOnMed",H.heartbeat(15,8,function()
+        local r=H.rootPart(); local now=r and r.Anchored or false
+        if now and not last then task.defer(H.forceReset) end
+        last=now
+    end))
+end
+
+-- ============================================================
+-- NINEHUB DUEL PATHS / TP SIDES
+-- ============================================================
+local RIGHT_WAYPOINTS={
+    Vector3.new(-473.04,-6.99,29.71),Vector3.new(-483.57,-5.10,18.74),Vector3.new(-475.00,-6.99,26.43),Vector3.new(-474.67,-6.94,105.48)
+}
+local LEFT_WAYPOINTS={
+    Vector3.new(-472.49,-7.00,90.62),Vector3.new(-484.62,-5.10,100.37),Vector3.new(-475.08,-7.00,93.29),Vector3.new(-474.22,-6.96,16.18)
+}
+local TP_FINAL_LEFT=Vector3.new(-483.59,-5.04,104.24)
+local TP_FINAL_RIGHT=Vector3.new(-483.51,-5.10,18.89)
+local TP_CHECK_A=Vector3.new(-472.60,-7.00,57.52)
+local TP_CHECK_LEFT=Vector3.new(-472.65,-7.00,95.69)
+local TP_CHECK_RIGHT=Vector3.new(-471.76,-7.00,26.22)
+
+function H.doTPSide(side)
+    local seq = side=="left" and {TP_CHECK_A,TP_CHECK_LEFT,TP_FINAL_LEFT} or {TP_CHECK_A,TP_CHECK_RIGHT,TP_FINAL_RIGHT}
+    for _,p in ipairs(seq) do H.safePivot(CFrame.new(p)); task.wait(0.1) end
+    State.LastTPSide=side
+end
+
+function H.runPath(side)
+    State.AutoLeft=side=="left"
+    State.AutoRight=side=="right"
+    H.clearConnection("DuelPath")
+    local way=side=="left" and LEFT_WAYPOINTS or RIGHT_WAYPOINTS
+    local idx=1
+    H.setConnection("DuelPath",H.heartbeat(40,24,function()
+        if (side=="left" and not State.AutoLeft) or (side=="right" and not State.AutoRight) then H.clearConnection("DuelPath"); return end
+        local r=H.rootPart(); if not r then return end
+        local target=way[idx]; if not target then idx=1; target=way[idx] end
+        local cur=Vector3.new(r.Position.X,0,r.Position.Z)
+        local tar=Vector3.new(target.X,0,target.Z)
+        local d=(tar-cur).Magnitude
+        if d>3 then
+            local spd=idx>=3 and 29.4 or 60
+            local dir=(tar-cur).Unit
+            r.AssemblyLinearVelocity=Vector3.new(dir.X*spd,r.AssemblyLinearVelocity.Y,dir.Z*spd)
+        else
+            idx=idx+1
+            if idx>#way then idx=1 end
+        end
+    end))
+end
+
+function H.stopPaths()
+    State.AutoLeft=false; State.AutoRight=false
+    H.clearConnection("DuelPath")
+end
+
+function H.setAutoLeft(on)
+    if on then State.AutoRight=false; H.runPath("left") else State.AutoLeft=false; if not State.AutoRight then H.clearConnection("DuelPath") end end
+end
+function H.setAutoRight(on)
+    if on then State.AutoLeft=false; H.runPath("right") else State.AutoRight=false; if not State.AutoLeft then H.clearConnection("DuelPath") end end
+end
+
+function H.setTaunt(on)
+    State.Taunt=on==true
+    H.clearConnection("Taunt")
+    if not State.Taunt then return end
+    local last=0
+    H.setConnection("Taunt",H.heartbeat(4,2,function()
+        if os.clock()-last<0.5 then return end
+        last=os.clock()
+        pcall(function()
+            local channels=TextChatService:FindFirstChild("TextChannels")
+            local ch=channels and channels:FindFirstChild("RBXGeneral")
+            if ch then ch:SendAsync("/nines hub") end
+        end)
+    end))
+end
+
+-- ============================================================
+-- STEAL SPEED / AUTO STEAL (Notz selected over NineHub/Dream duplicate)
+-- ============================================================
+function H.setStealSpeed(on)
+    State.AutoStealSpeed=on==true
+    H.clearConnection("StealSpeed")
+    if not State.AutoStealSpeed then return end
+    H.setConnection("StealSpeed",H.heartbeat(40,24,function()
+        local h,r=H.humanoid(),H.rootPart(); if not h or not r then return end
+        if h.MoveDirection.Magnitude>0.1 then
+            local dir=h.MoveDirection.Unit
+            r.AssemblyLinearVelocity=Vector3.new(dir.X*State.StealSpeed,r.AssemblyLinearVelocity.Y,dir.Z*State.StealSpeed)
+        end
+    end))
+end
+
+function H.unlockPlot(plot)
+    if not plot then return 0 end
+    local count=0
+    local folder=plot:FindFirstChild("Unlock")
+    if not folder then return 0 end
+    for _,d in ipairs(folder:GetDescendants()) do
+        if d:IsA("ProximityPrompt") and d.Enabled then
+            if H.safeFirePrompt(d,0) then count=count+1 end
+        end
+    end
+    return count
+end
+
+function H.setAutoUnlock(on)
+    State.AutoUnlock=on==true
+    H.clearConnection("AutoUnlock")
+    if not State.AutoUnlock then return end
+    local last=0
+    H.setConnection("AutoUnlock",H.heartbeat(6,3,function()
+        if os.clock()-last<0.35 then return end
+        last=os.clock()
+        local target=H.chooseBrainrot(State.StealMode)
+        if target then H.unlockPlot(target.plot) end
+    end))
+end
+
+local stealBusy=false
+local stealLastTarget=nil
+local stealOrigin=nil
+function H.attemptSteal(target)
+    if stealBusy or not target then return false,"No target" end
+    local r=H.rootPart(); if not r then return false,"Character unavailable" end
+    local radius = State.StealMode=="Semi" and State.SemiStealRadius or State.StealRadius
+    if target.distance>radius then return false,"Target out of radius" end
+    if not target.prompt then return false,"Prompt not found" end
+    stealBusy=true
+    stealLastTarget=target
+    stealOrigin=r.CFrame
+    if State.AutoUnlock then H.unlockPlot(target.plot) end
+    if State.AutoInvisSteal then H.setInvisible(true) end
+    local ok=H.safeFirePrompt(target.prompt,State.StealDuration)
+    task.wait(math.max(0.03,State.StealDuration))
+    if State.AutoInvisSteal and not State.Invisible then H.setInvisible(false) end
+    stealBusy=false
+    return ok, ok and "Steal triggered" or "Prompt failed"
+end
+
+function H.setAutoSteal(on)
+    State.AutoSteal=on==true
+    H.clearConnection("AutoSteal")
+    if not State.AutoSteal then return end
+    local last=0
+    H.setConnection("AutoSteal",H.heartbeat(24,14,function()
+        if os.clock()-last<0.18 or stealBusy then return end
+        last=os.clock()
+        local target=H.chooseBrainrot(State.StealMode)
+        if target then
+            local ok,why=H.attemptSteal(target)
+            if not ok and State.AutoTPFailedSteal and target.spawn then
+                H.safePivot(CFrame.new(target.spawn.Position+Vector3.new(0,2,0)))
+            end
+        end
+    end))
+end
+
+function H.instantGrab()
+    local target=H.chooseBrainrot(State.StealMode)
+    if not target then return false,"No brainrot found" end
+    local r=H.rootPart(); if not r then return false,"Character unavailable" end
+    if target.spawn and (target.spawn.Position-r.Position).Magnitude>State.StealRadius then
+        H.safePivot(CFrame.new(target.spawn.Position+Vector3.new(0,2,0)))
+        task.wait(0.08)
+    end
+    return H.attemptSteal(target)
+end
+
+function H.setAutoInvisSteal(on)
+    State.AutoInvisSteal=on==true
+end
+
+function H.setAutoTPBack(on)
+    State.AutoTPBack=on==true
+    H.clearConnection("AutoTPBack")
+    if not State.AutoTPBack then return end
+    local wasCarry=H.isCarryingBrainrot()
+    H.setConnection("AutoTPBack",H.heartbeat(12,6,function()
+        local now=H.isCarryingBrainrot()
+        if wasCarry and not now and stealLastTarget and stealLastTarget.spawn and stealLastTarget.spawn.Parent then
+            H.safePivot(CFrame.new(stealLastTarget.spawn.Position+Vector3.new(0,2,0)))
+        end
+        wasCarry=now
+    end))
+end
+
+function H.setAutoKickOnSteal(on)
+    State.AutoKickOnSteal=on==true
+    H.clearConnection("AutoKickOnSteal")
+    if not State.AutoKickOnSteal then return end
+    local was=H.isCarryingBrainrot()
+    H.setConnection("AutoKickOnSteal",H.heartbeat(8,4,function()
+        local now=H.isCarryingBrainrot()
+        if now and not was then
+            task.delay(0.25,function()
+                if State.AutoKickOnSteal and H.isCarryingBrainrot() then LP:Kick("Auto-Kick after steal") end
+            end)
+        end
+        was=now
+    end))
+end
+
+-- ============================================================
+-- ZAHA TP IMPLEMENTATION (7.lua selected over 2.txt; no key wrapper)
+-- ============================================================
+local zahaRandom=Random.new()
+local zahaBusy=false
+function H.zahaTpAmount()
+    local ping=0
+    pcall(function() ping=LP:GetNetworkPing()*1000 end)
+    return math.clamp(math.floor(ping*0.8),10,150)
+end
+
+function H.zahaTP(cf)
+    if zahaBusy then return false end
+    local r=H.rootPart(); if not r then return false end
+    zahaBusy=true
+    r.CFrame=cf+Vector3.new(zahaRandom:NextNumber(-0.0001,0.0001),zahaRandom:NextNumber(-0.0001,0.0001),zahaRandom:NextNumber(-0.0001,0.0001))
+    RunService.Heartbeat:Wait()
+    zahaBusy=false
+    return true
+end
+
+function H.findDeliveryHitbox()
+    local plots=Workspace:FindFirstChild("Plots"); if not plots then return nil end
+    for _,plot in ipairs(plots:GetChildren()) do
+        if H.isOurPlot(plot) then
+            local h=plot:FindFirstChild("DeliveryHitbox")
+            if h and h:IsA("BasePart") then return h end
+        end
+    end
+end
+
+function H.zahaTeleportDelivery()
+    local h=H.findDeliveryHitbox(); if not h then return false,"DeliveryHitbox not found" end
+    local target=h.CFrame*CFrame.new(0,-3,0)
+    local n=H.zahaTpAmount()
+    for _=1,n do H.zahaTP(target) end
+    local r=H.rootPart(); if r then r.CFrame=CFrame.new(0,-3e38,0); RunService.Heartbeat:Wait(); r.CFrame=target end
+    return true,"Delivery teleport complete"
+end
+
+function H.zahaNearestBase()
+    local r=H.rootPart(); if not r then return false,"Character unavailable" end
+    local best,bestD=nil,math.huge
+    for _,a in ipairs(H.scanBrainrots(false)) do
+        if a.spawn then
+            local d=(a.spawn.Position-r.Position).Magnitude
+            if d<bestD then best=a;bestD=d end
+        end
+    end
+    if not best then return false,"No enemy podium found" end
+    local target=best.spawn.CFrame*CFrame.new(0,2,0)
+    local n=H.zahaTpAmount()
+    for _=1,n do H.zahaTP(target) end
+    r=H.rootPart(); if r then r.CFrame=CFrame.new(0,-3e38,0); RunService.Heartbeat:Wait(); r.CFrame=target end
+    return true,"Nearest base teleport complete"
+end
+
+function H.zahaTweenSteal()
+    local delivery=H.findDeliveryHitbox(); if not delivery then return false,"DeliveryHitbox not found" end
+    local r=H.rootPart(); if not r then return false,"Character unavailable" end
+    local target=delivery.CFrame*CFrame.new(0,zahaRandom:NextInteger(-3,-1),0)
+    local from=r.CFrame
+    local steps=85
+    for i=1,steps do
+        r=H.rootPart(); if not r then return false,"Character lost" end
+        local t=i/steps
+        local smooth=t*t*(3-2*t)
+        local p=from.Position:Lerp(target.Position,smooth)+Vector3.new(zahaRandom:NextNumber(-0.0002,0.0002),zahaRandom:NextNumber(-0.0002,0.0002),zahaRandom:NextNumber(-0.0002,0.0002))
+        r.CFrame=CFrame.new(p)*(r.CFrame-r.Position)
+        task.wait(zahaRandom:NextNumber(0.005,0.015))
+    end
+    for _=1,3 do
+        r=H.rootPart(); if not r then break end
+        r.CFrame=CFrame.new(0,-3e38,0); task.wait(0.05); r.CFrame=target; task.wait(0.05)
+    end
+    return true,"Tween steal movement complete"
+end
+
+-- ============================================================
+-- NOTZ AUTO-BUY / REMOTE SELL / RAINBOW BASE
+-- ============================================================
+local autoBuyTarget=nil
+local autoBuyRing=nil
+function H.destroyAutoBuyRing()
+    if autoBuyRing then autoBuyRing:Destroy(); autoBuyRing=nil end
+end
+function H.createAutoBuyRing()
+    H.destroyAutoBuyRing()
+    local r=Instance.new("Part"); r.Name="H4SK_AutoBuyRing"; r.Shape=Enum.PartType.Cylinder; r.Anchored=true; r.CanCollide=false; r.CanTouch=false; r.CanQuery=false; r.CastShadow=false; r.Material=Enum.Material.Neon; r.Transparency=0.55; r.Color=Color3.fromRGB(52,220,160); r.Size=Vector3.new(0.5,State.AutoBuyRange*2,State.AutoBuyRange*2); r.Parent=Workspace
+    autoBuyRing=r
+end
+
+function H.scanPurchasePrompts()
+    local list={}
+    local r=H.rootPart()
+    for _,d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("ProximityPrompt") and d.Enabled then
+            local txt=H.lower((d.ActionText or "").." "..(d.ObjectText or ""))
+            if txt:find("purchase",1,true) or txt:find("buy",1,true) or txt:find("comprar",1,true) then
+                local p=d.Parent
+                if p and p:IsA("Attachment") then p=p.Parent end
+                if p and p:IsA("BasePart") then
+                    table.insert(list,{prompt=d,part=p,distance=r and (p.Position-r.Position).Magnitude or math.huge})
+                end
+            end
+        end
+    end
+    table.sort(list,function(a,b) return a.distance<b.distance end)
+    return list
+end
+
+function H.setAutoBuy(on)
+    State.AutoBuy=on==true
+    H.clearConnection("AutoBuy")
+    H.destroyAutoBuyRing()
+    autoBuyTarget=nil
+    if not State.AutoBuy then return end
+    H.createAutoBuyRing()
+    local scanAt=0; local buyAt=0
+    H.setConnection("AutoBuy",H.heartbeat(10,5,function()
+        local r=H.rootPart(); if not r then return end
+        if autoBuyRing then
+            autoBuyRing.Size=Vector3.new(0.5,State.AutoBuyRange*2,State.AutoBuyRange*2)
+            autoBuyRing.CFrame=r.CFrame*CFrame.Angles(0,0,math.rad(90))+Vector3.new(0,-2.5,0)
+        end
+        if os.clock()-scanAt>(State.LowConsumption and 0.7 or 0.3) then
+            scanAt=os.clock()
+            local list=H.scanPurchasePrompts()
+            autoBuyTarget=list[1]
+        end
+        if autoBuyTarget and autoBuyTarget.part and autoBuyTarget.part.Parent then
+            local d=(autoBuyTarget.part.Position-r.Position).Magnitude
+            if d<=math.max(State.AutoBuyRange,4) then
+                r.CFrame=CFrame.new(autoBuyTarget.part.Position+Vector3.new(0,5,0))
+                if os.clock()-buyAt>0.08 then buyAt=os.clock(); H.safeFirePrompt(autoBuyTarget.prompt,0) end
+            end
+        end
+    end))
+end
+
+function H.remoteSellAll()
+    local plot=H.getOurPlot(); if not plot then return false,"Your plot not found" end
+    local count=0
+    for _,d in ipairs(plot:GetDescendants()) do
+        if d:IsA("ProximityPrompt") and d.Enabled then
+            local t=H.lower((d.ActionText or "").." "..(d.ObjectText or "").." "..d.Name)
+            if t:find("sell",1,true) or t:find("vender",1,true) then
+                if H.safeFirePrompt(d,0) then count=count+1 end
+            end
+        end
+    end
+    return true,"Sell prompts triggered: "..count
+end
+
+local rainbowOriginal={}
+function H.setRainbowBase(on)
+    State.RainbowBase=on==true
+    H.clearConnection("RainbowBase")
+    if not State.RainbowBase then
+        for p,c in pairs(rainbowOriginal) do if p and p.Parent then p.Color=c end end
+        rainbowOriginal={}
+        return
+    end
+    local hue=0
+    H.setConnection("RainbowBase",H.heartbeat(20,10,function(dt)
+        hue=(hue+dt*0.15)%1
+        local plot=H.getOurPlot(); if not plot then return end
+        local color=Color3.fromHSV(hue,0.75,1)
+        for _,p in ipairs(plot:GetDescendants()) do
+            if p:IsA("BasePart") then
+                if rainbowOriginal[p]==nil then rainbowOriginal[p]=p.Color end
+                p.Color=color
+            end
+        end
+    end))
+end
+
+-- ============================================================
+-- VISUALS (merged / deduplicated; Notz implementation style)
+-- ============================================================
+function H.makeBillboard(adornee, text, yOffset, sizeX)
+    if not adornee or not adornee.Parent then return nil end
+    local gui=Instance.new("BillboardGui")
+    gui.Name="H4SKBillboard"
+    gui.Adornee=adornee
+    gui.AlwaysOnTop=true
+    gui.Size=UDim2.fromOffset(sizeX or 170,28)
+    gui.StudsOffset=Vector3.new(0,yOffset or 3.6,0)
+    gui.MaxDistance=2000
+    local label=Instance.new("TextLabel")
+    label.BackgroundTransparency=1
+    label.Size=UDim2.fromScale(1,1)
+    label.Font=Enum.Font.GothamBold
+    label.TextSize=13
+    label.TextStrokeTransparency=0.2
+    label.TextColor3=Color3.new(1,1,1)
+    label.Text=text or ""
+    label.Parent=gui
+    gui.Parent=adornee
+    return gui,label
+end
+
+local PlayerVisuals={}
+function H.clearPlayerVisual(plr)
+    local b=PlayerVisuals[plr]
+    if not b then return end
+    for _,key in ipairs({"Highlight","Info","Box","Beam","A0","A1"}) do
+        local v=b[key]
+        if v then pcall(function() v:Destroy() end) end
+    end
+    PlayerVisuals[plr]=nil
+end
+
+function H.ensurePlayerVisual(plr)
+    if plr==LP then return nil end
+    local char=plr.Character
+    local hrp=char and char:FindFirstChild("HumanoidRootPart")
+    local hum=char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then H.clearPlayerVisual(plr); return nil end
+    local b=PlayerVisuals[plr]
+    if b and b.Char~=char then H.clearPlayerVisual(plr); b=nil end
+    if not b then b={Char=char}; PlayerVisuals[plr]=b end
+
+    if State.PlayerESP and not b.Highlight then
+        local h=Instance.new("Highlight")
+        h.Name="H4SK_PlayerESP"
+        h.Adornee=char
+        h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+        h.FillTransparency=0.72
+        h.OutlineTransparency=0
+        h.Parent=char
+        b.Highlight=h
+    elseif not State.PlayerESP and b.Highlight then b.Highlight:Destroy(); b.Highlight=nil end
+
+    if State.PlayerESP and not b.Info then
+        local g,l=H.makeBillboard(hrp,"",3.5,190); b.Info=g; b.InfoLabel=l
+    elseif not State.PlayerESP and b.Info then b.Info:Destroy(); b.Info=nil; b.InfoLabel=nil end
+
+    if State.BoxESP and not b.Box then
+        local box=Instance.new("BoxHandleAdornment")
+        box.Name="H4SK_BoxESP"
+        box.Adornee=hrp
+        box.AlwaysOnTop=true
+        box.ZIndex=5
+        box.Transparency=0.65
+        box.Size=Vector3.new(4.5,6.5,2.8)
+        box.Parent=hrp
+        b.Box=box
+    elseif not State.BoxESP and b.Box then b.Box:Destroy(); b.Box=nil end
+
+    if State.TracerESP and not b.Beam then
+        local localRoot=H.rootPart()
+        if localRoot then
+            local a0=Instance.new("Attachment"); a0.Name="H4SKTracer0"; a0.Parent=localRoot
+            local a1=Instance.new("Attachment"); a1.Name="H4SKTracer1"; a1.Parent=hrp
+            local beam=Instance.new("Beam")
+            beam.Name="H4SK_TracerESP"
+            beam.Attachment0=a0; beam.Attachment1=a1
+            beam.FaceCamera=true; beam.Width0=0.045; beam.Width1=0.045
+            beam.LightEmission=0.9; beam.Transparency=NumberSequence.new(0.18)
+            beam.Parent=localRoot
+            b.A0=a0; b.A1=a1; b.Beam=beam
+        end
+    elseif not State.TracerESP and b.Beam then
+        if b.Beam then b.Beam:Destroy() end; if b.A0 then b.A0:Destroy() end; if b.A1 then b.A1:Destroy() end
+        b.Beam=nil; b.A0=nil; b.A1=nil
+    end
+
+    if b.InfoLabel then
+        local dist=(H.rootPart() and (H.rootPart().Position-hrp.Position).Magnitude) or 0
+        b.InfoLabel.Text=string.format("%s  |  %d HP  |  %.0f studs", plr.DisplayName, math.max(0,math.floor(hum.Health)),dist)
+    end
+    return b
+end
+
+local BrainrotVisuals={}
+function H.clearBrainrotVisuals()
+    for k,v in pairs(BrainrotVisuals) do pcall(function() if v then v:Destroy() end end); BrainrotVisuals[k]=nil end
+end
+
+function H.updateBrainrotESP()
+    if not State.BrainrotESP then H.clearBrainrotVisuals(); return end
+    local seen={}
+    for _,entry in ipairs(H.scanBrainrots(true)) do
+        local adornee=entry.root or entry.spawn
+        if adornee and adornee:IsA("BasePart") then
+            seen[adornee]=true
+            local gui=BrainrotVisuals[adornee]
+            if not gui then
+                local g,l=H.makeBillboard(adornee,"",2.8,210); gui=g
+                if gui then gui:SetAttribute("LabelRef","") end
+                BrainrotVisuals[adornee]=gui
+                if l then l.Name="Value" end
+            end
+            if gui and gui.Parent then
+                local l=gui:FindFirstChild("Value")
+                if l then
+                    local gen=tonumber(entry.generation) or 0
+                    l.Text=string.format("%s  |  $%s/s", tostring(entry.name or "Brainrot"), compactNumber(gen))
+                end
+            end
+        end
+    end
+    for adornee,gui in pairs(BrainrotVisuals) do
+        if not seen[adornee] or not adornee.Parent then pcall(function() gui:Destroy() end); BrainrotVisuals[adornee]=nil end
+    end
+end
+
+local MiscVisuals={}
+function H.clearMiscVisuals(prefix)
+    for k,v in pairs(MiscVisuals) do
+        if not prefix or tostring(k):sub(1,#prefix)==prefix then
+            pcall(function() if v then v:Destroy() end end); MiscVisuals[k]=nil
+        end
+    end
+end
+
+function H.updateSubspaceESP()
+    if not State.SubspaceESP then H.clearMiscVisuals("mine:"); return end
+    local seen={}
+    for _,d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("BasePart") and H.lower(d.Name):find("subspace",1,true) then
+            local key="mine:"..d:GetFullName(); seen[key]=true
+            if not MiscVisuals[key] then
+                local g,l=H.makeBillboard(d,"SUBSPACE MINE",2.4,160)
+                if l then l.Text="SUBSPACE MINE" end
+                MiscVisuals[key]=g
+            end
+        end
+    end
+    for k,v in pairs(MiscVisuals) do if k:sub(1,5)=="mine:" and not seen[k] then pcall(function() v:Destroy() end); MiscVisuals[k]=nil end end
+end
+
+function H.plotRoot(plot)
+    if not plot then return nil end
+    local r=plot:FindFirstChild("Spawn") or plot:FindFirstChild("MainRoot") or plot.PrimaryPart
+    if r and r:IsA("BasePart") then return r end
+    return plot:FindFirstChildWhichIsA("BasePart",true)
+end
+
+function H.updateDuelBaseESP()
+    if not State.DuelBaseESP then H.clearMiscVisuals("plot:"); return end
+    local plots=Workspace:FindFirstChild("Plots"); if not plots then return end
+    local mine=H.getOurPlot(); local seen={}
+    for _,plot in ipairs(plots:GetChildren()) do
+        if plot~=mine then
+            local key="plot:"..plot:GetFullName(); seen[key]=true
+            if not MiscVisuals[key] then
+                local h=Instance.new("Highlight"); h.Name="H4SK_DuelBaseESP"; h.Adornee=plot
+                h.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop; h.FillTransparency=.88; h.OutlineTransparency=.15; h.Parent=plot
+                MiscVisuals[key]=h
+            end
+        end
+    end
+    for k,v in pairs(MiscVisuals) do if k:sub(1,5)=="plot:" and not seen[k] then pcall(function() v:Destroy() end); MiscVisuals[k]=nil end end
+end
+
+function H.destroyBeamBundle(key)
+    local b=Objects[key]; if not b then return end
+    for _,name in ipairs({"Beam","A0","A1"}) do
+        local x=b[name]; if x then pcall(function() x:Destroy() end) end
+    end
+    Objects[key]=nil
+end
+
+function H.updateTargetBeam(key,targetPart)
+    if not targetPart or not targetPart.Parent then H.destroyBeamBundle(key); return end
+    local r=H.rootPart(); if not r then H.destroyBeamBundle(key); return end
+    local b=Objects[key]
+    if b and (b.Target~=targetPart or not b.Beam or not b.Beam.Parent) then H.destroyBeamBundle(key); b=nil end
+    if not b then
+        local a0=Instance.new("Attachment"); a0.Name="H4SKLine0"; a0.Parent=r
+        local a1=Instance.new("Attachment"); a1.Name="H4SKLine1"; a1.Parent=targetPart
+        local beam=Instance.new("Beam"); beam.Name="H4SK_Line"; beam.Attachment0=a0; beam.Attachment1=a1
+        beam.FaceCamera=true; beam.Width0=.07; beam.Width1=.07; beam.LightEmission=1; beam.Transparency=NumberSequence.new(.1); beam.Parent=r
+        Objects[key]={A0=a0,A1=a1,Beam=beam,Target=targetPart}
+    end
+end
+
+local hudGui=nil
+local hudLabels={}
+function H.ensureHUD()
+    if hudGui and hudGui.Parent then return hudGui end
+    if not MainGui then return nil end
+    hudGui=Instance.new("Frame"); hudGui.Name="H4SK_RuntimeHUD"; hudGui.BackgroundTransparency=1; hudGui.Size=UDim2.fromScale(1,1); hudGui.Parent=MainGui
+    return hudGui
+end
+function H.setHudLine(key,text,index,on)
+    if not on then if hudLabels[key] then hudLabels[key]:Destroy(); hudLabels[key]=nil end; return end
+    local hud=H.ensureHUD(); if not hud then return end
+    local l=hudLabels[key]
+    if not l then
+        l=Instance.new("TextLabel"); l.Name=key; l.AnchorPoint=Vector2.new(1,0); l.Position=UDim2.new(1,-18,0,70+(index-1)*28)
+        l.Size=UDim2.fromOffset(260,24); l.BackgroundTransparency=.25; l.BackgroundColor3=Color3.fromRGB(12,12,16)
+        l.BorderSizePixel=0; l.Font=Enum.Font.GothamMedium; l.TextSize=12; l.TextColor3=Color3.new(1,1,1); l.TextXAlignment=Enum.TextXAlignment.Right
+        local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,7); c.Parent=l
+        l.Parent=hudGui; hudLabels[key]=l
+    end
+    l.Text=text
+end
+
+function H.updateVisualHeartbeat()
+    for _,plr in ipairs(Players:GetPlayers()) do H.ensurePlayerVisual(plr) end
+    for plr in pairs(PlayerVisuals) do if not plr.Parent then H.clearPlayerVisual(plr) end end
+    H.updateBrainrotESP()
+    H.updateSubspaceESP()
+    H.updateDuelBaseESP()
+
+    if State.BestBrainrotTracer then
+        local best=H.chooseBrainrot("Highest")
+        H.updateTargetBeam("BestBrainrotTracer",best and (best.root or best.spawn))
+    else H.destroyBeamBundle("BestBrainrotTracer") end
+    if State.LineToBase then H.updateTargetBeam("LineToBase",H.plotRoot(H.getOurPlot())) else H.destroyBeamBundle("LineToBase") end
+
+    local r=H.rootPart()
+    H.setHudLine("ServerPosition",r and string.format("SERVER POS  X %.1f  Y %.1f  Z %.1f",r.Position.X,r.Position.Y,r.Position.Z) or "SERVER POS  --",1,State.ServerPositionHUD)
+    local speed=0
+    if r then speed=Vector3.new(r.AssemblyLinearVelocity.X,0,r.AssemblyLinearVelocity.Z).Magnitude end
+    H.setHudLine("StealSpeed",string.format("STEAL SPEED  %.1f",speed),2,State.StealSpeedHUD)
+end
+
+function H.anyVisualRuntime()
+    return State.PlayerESP or State.BoxESP or State.TracerESP or State.BrainrotESP or State.SubspaceESP or State.DuelBaseESP or State.BestBrainrotTracer or State.LineToBase or State.ServerPositionHUD or State.StealSpeedHUD
+end
+function H.refreshVisualRuntime()
+    H.clearConnection("VisualRuntime")
+    if H.anyVisualRuntime() then
+        local acc=0
+        H.setConnection("VisualRuntime",H.heartbeat(30,18,function(dt)
+            acc=acc+dt; local interval=State.LowConsumption and 0.25 or 0.12; if acc<interval then return end; acc=0
+            pcall(H.updateVisualHeartbeat)
+        end))
+    else
+        for p in pairs(PlayerVisuals) do H.clearPlayerVisual(p) end
+        H.clearBrainrotVisuals(); H.clearMiscVisuals(); H.destroyBeamBundle("BestBrainrotTracer"); H.destroyBeamBundle("LineToBase")
+        H.setHudLine("ServerPosition","",1,false); H.setHudLine("StealSpeed","",2,false)
+    end
+end
+
+function H.setVisualFlag(field,on)
+    State[field]=on==true
+    H.refreshVisualRuntime()
+end
+
+function H.setBaseXray(on)
+    State.BaseXray=on==true
+    if not State.BaseXray then
+        for p,t in pairs(Original.Xray) do if p and p.Parent then p.LocalTransparencyModifier=t end end
+        Original.Xray=setmetatable({}, {__mode="k"}); return
+    end
+    local plots=Workspace:FindFirstChild("Plots"); if not plots then return end
+    for _,p in ipairs(plots:GetDescendants()) do
+        if p:IsA("BasePart") then Original.Xray[p]=p.LocalTransparencyModifier; p.LocalTransparencyModifier=.78 end
+    end
+end
+
+local fpsDescConn=nil
+local fpsScanSerial=0
+function H.optimizeOne(obj)
+    if obj:IsDescendantOf(H.character() or LP) then return end
+    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+        if Original.FPS[obj]==nil then Original.FPS[obj]={Enabled=obj.Enabled} end; obj.Enabled=false
+    elseif obj:IsA("BasePart") then
+        if Original.FPS[obj]==nil then Original.FPS[obj]={Material=obj.Material,Reflectance=obj.Reflectance,CastShadow=obj.CastShadow} end
+        obj.Material=Enum.Material.SmoothPlastic; obj.Reflectance=0; obj.CastShadow=false
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        if Original.FPS[obj]==nil then Original.FPS[obj]={Transparency=obj.Transparency} end; obj.Transparency=1
+    elseif obj:IsA("PostEffect") then
+        if Original.FPS[obj]==nil then Original.FPS[obj]={Enabled=obj.Enabled} end; obj.Enabled=false
+    end
+end
+function H.setFPSBoost(on)
+    State.FPSBoost=on==true
+    fpsScanSerial=fpsScanSerial+1
+    local myScan=fpsScanSerial
+    if fpsDescConn then fpsDescConn:Disconnect(); fpsDescConn=nil end
+    if not State.FPSBoost then
+        for obj,s in pairs(Original.FPS) do
+            if obj and obj.Parent then pcall(function()
+                if s.Enabled~=nil then obj.Enabled=s.Enabled end
+                if s.Material~=nil then obj.Material=s.Material end
+                if s.Reflectance~=nil then obj.Reflectance=s.Reflectance end
+                if s.CastShadow~=nil then obj.CastShadow=s.CastShadow end
+                if s.Transparency~=nil then obj.Transparency=s.Transparency end
+            end) end
+        end
+        Original.FPS=setmetatable({}, {__mode="k"})
+        if Original.Lighting then
+            pcall(function() Lighting.GlobalShadows=Original.Lighting.GlobalShadows; Lighting.EnvironmentDiffuseScale=Original.Lighting.EnvironmentDiffuseScale; Lighting.EnvironmentSpecularScale=Original.Lighting.EnvironmentSpecularScale end)
+        end
+        return
+    end
+    if not Original.Lighting then Original.Lighting={GlobalShadows=Lighting.GlobalShadows,EnvironmentDiffuseScale=Lighting.EnvironmentDiffuseScale,EnvironmentSpecularScale=Lighting.EnvironmentSpecularScale} end
+    Lighting.GlobalShadows=false; Lighting.EnvironmentDiffuseScale=0; Lighting.EnvironmentSpecularScale=0
+    fpsDescConn=Workspace.DescendantAdded:Connect(function(obj) if State.FPSBoost then task.defer(function() pcall(H.optimizeOne,obj) end) end end)
+    -- Process large worlds in chunks so enabling FPS Boost does not freeze the client for one long frame.
+    task.spawn(function()
+        local function scan(list)
+            for i,obj in ipairs(list) do
+                if not State.FPSBoost or myScan~=fpsScanSerial then return false end
+                pcall(H.optimizeOne,obj)
+                local batch=State.LowConsumption and 120 or 260
+                if i%batch==0 then task.wait() end
+            end
+            return true
+        end
+        if not scan(Workspace:GetDescendants()) then return end
+        scan(Lighting:GetDescendants())
+    end)
+end
+
+local stretchOriginalFOV=nil
+function H.setStretchRez(on)
+    State.StretchRez=on==true
+    local cam=Workspace.CurrentCamera; if not cam then return end
+    if State.StretchRez then if not stretchOriginalFOV then stretchOriginalFOV=cam.FieldOfView end; cam.FieldOfView=120
+    else cam.FieldOfView=tonumber(State.FOV) or stretchOriginalFOV or 70; stretchOriginalFOV=nil end
+end
+function H.setFOV(v)
+    v=math.clamp(tonumber(v) or 70,40,120); State.FOV=v
+    if not State.StretchRez and Workspace.CurrentCamera then Workspace.CurrentCamera.FieldOfView=v end
+end
+
+local skyOriginal=nil
+local SkyPresets={
+    Off=nil,
+    Night={ClockTime=0,Brightness=1,Ambient=Color3.fromRGB(50,45,90),OutdoorAmbient=Color3.fromRGB(35,35,65)},
+    Purple={ClockTime=18.3,Brightness=2,Ambient=Color3.fromRGB(105,60,145),OutdoorAmbient=Color3.fromRGB(55,35,90)},
+    Red={ClockTime=18.7,Brightness=2,Ambient=Color3.fromRGB(145,55,55),OutdoorAmbient=Color3.fromRGB(80,35,35)},
+    Blue={ClockTime=14,Brightness=2.2,Ambient=Color3.fromRGB(55,95,155),OutdoorAmbient=Color3.fromRGB(45,70,125)},
+}
+function H.setSkyTheme(name)
+    name=SkyPresets[name] and name or "Off"; State.SkyTheme=name
+    if not skyOriginal then skyOriginal={ClockTime=Lighting.ClockTime,Brightness=Lighting.Brightness,Ambient=Lighting.Ambient,OutdoorAmbient=Lighting.OutdoorAmbient} end
+    if name=="Off" then
+        if skyOriginal then Lighting.ClockTime=skyOriginal.ClockTime; Lighting.Brightness=skyOriginal.Brightness; Lighting.Ambient=skyOriginal.Ambient; Lighting.OutdoorAmbient=skyOriginal.OutdoorAmbient end
+    else
+        local p=SkyPresets[name]; Lighting.ClockTime=p.ClockTime; Lighting.Brightness=p.Brightness; Lighting.Ambient=p.Ambient; Lighting.OutdoorAmbient=p.OutdoorAmbient
+    end
+end
+
+-- ============================================================
+-- PROTECTION / AUTOMATION (merged from Notz/Dream duplicates)
+-- ============================================================
+function H.suspiciousPartyObject(d)
+    local n=H.lower(d.Name)
+    return n:find("bee",1,true) or n:find("disco",1,true) or n:find("hive",1,true)
+end
+function H.neutralizePartyObject(d)
+    if not H.suspiciousPartyObject(d) then return end
+    pcall(function()
+        if d:IsA("Sound") then d:Stop(); d.Volume=0
+        elseif d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then d.Enabled=false
+        elseif d:IsA("BasePart") and not d:IsDescendantOf(H.character() or LP) then d.CanTouch=false; d.CanQuery=false end
+    end)
+end
+function H.setAntiBeeDisco(on)
+    State.AntiBeeDisco=on==true; H.clearConnection("AntiBeeDisco")
+    if not State.AntiBeeDisco then return end
+    for _,d in ipairs(Workspace:GetDescendants()) do H.neutralizePartyObject(d) end
+    H.setConnection("AntiBeeDisco",Workspace.DescendantAdded:Connect(function(d) if State.AntiBeeDisco then task.defer(function() H.neutralizePartyObject(d) end) end end))
+end
+function H.isTurret(d)
+    local n=H.lower(d.Name); return n:find("turret",1,true) or n:find("sentry",1,true)
+end
+function H.neutralizeTurret(d)
+    if not H.isTurret(d) then return end
+    pcall(function()
+        if d:IsA("BasePart") then d.CanTouch=false; d.CanQuery=false; d.LocalTransparencyModifier=1
+        elseif d:IsA("Model") then
+            for _,p in ipairs(d:GetDescendants()) do if p:IsA("BasePart") then p.CanTouch=false; p.CanQuery=false; p.LocalTransparencyModifier=1 end end
+        end
+    end)
+end
+function H.setAutoDestroyTurrets(on)
+    State.AutoDestroyTurrets=on==true; H.clearConnection("Turrets")
+    if not State.AutoDestroyTurrets then return end
+    for _,d in ipairs(Workspace:GetDescendants()) do H.neutralizeTurret(d) end
+    H.setConnection("Turrets",Workspace.DescendantAdded:Connect(function(d) if State.AutoDestroyTurrets then task.defer(function() H.neutralizeTurret(d) end) end end))
+end
+function H.cleanErrorGuisOnce()
+    for _,d in ipairs(PlayerGui:GetDescendants()) do
+        local n=H.lower(d.Name); local text=""
+        pcall(function() if d:IsA("TextLabel") or d:IsA("TextButton") then text=H.lower(d.Text) end end)
+        if n:find("error",1,true) or text:find("error caused by player death",1,true) then
+            pcall(function()
+                local gui=d:IsA("ScreenGui") and d or d:FindFirstAncestorOfClass("ScreenGui")
+                if gui and gui~=hudGui then gui:Destroy() elseif d:IsA("GuiObject") then d.Visible=false end
+            end)
+        end
+    end
+end
+function H.setCleanErrorGuis(on)
+    State.CleanErrorGuis=on==true; H.clearConnection("CleanErrors")
+    if not State.CleanErrorGuis then return end
+    H.cleanErrorGuisOnce()
+    H.setConnection("CleanErrors",PlayerGui.DescendantAdded:Connect(function() if State.CleanErrorGuis then task.defer(H.cleanErrorGuisOnce) end end))
+end
+
+local alertSound=nil
+function H.playAlert(text)
+    H.notify(text or "Alert")
+    if State.AlertSoundId~="" then
+        if not alertSound then alertSound=Instance.new("Sound"); alertSound.Name="H4SKAlert"; alertSound.Parent=UI_ROOT end
+        local id=tostring(State.AlertSoundId):gsub("%D","")
+        if id~="" then alertSound.SoundId="rbxassetid://"..id; pcall(function() alertSound:Play() end) end
+    end
+end
+function H.setAlerts(on)
+    State.Alerts=on==true; H.clearConnection("AlertsJoin")
+    if not State.Alerts then return end
+    H.setConnection("AlertsJoin",Players.PlayerAdded:Connect(function(p) H.playAlert(p.DisplayName.." joined") end))
+end
+
+function H.autoResetBalloonOnce()
+    local c=H.character(); if not c then return false end
+    for _,d in ipairs(c:GetDescendants()) do
+        if H.lower(d.Name):find("balloon",1,true) then H.forceReset(); return true end
+    end
+    return false
+end
+function H.setAutoResetBalloon(on)
+    State.AutoResetBalloon=on==true; H.clearConnection("AutoResetBalloon")
+    if not State.AutoResetBalloon then return end
+    H.setConnection("AutoResetBalloon",H.heartbeat(8,4,function() if State.AutoResetBalloon then H.autoResetBalloonOnce() end end))
+end
+function H.homeKick()
+    local ok=pcall(function() TeleportService:Teleport(0,LP) end)
+    if not ok then LP:Kick("Home") end
+end
+function H.joinJob(jobId)
+    jobId=H.trim(jobId or ""); if jobId=="" then return false,"Enter a JobId" end
+    local ok,err=pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId,jobId,LP) end)
+    return ok, ok and "Joining job" or tostring(err)
+end
+
+-- ============================================================
+-- ADMIN-PANEL BRIDGE (Notz feature, integrated as individual action)
+-- ============================================================
+local ADMIN_COMMANDS={"balloon","inverse","jail","jumpscare","morph","nightvision","ragdoll","rocket","tiny"}
+function H.fireGuiButton(btn)
+    if not btn then return false end
+    if typeof(firesignal)=="function" then
+        pcall(function() firesignal(btn.MouseButton1Click); firesignal(btn.Activated) end); return true
+    end
+    local ok=pcall(function()
+        local p,s=btn.AbsolutePosition,btn.AbsoluteSize
+        VirtualInputManager:SendMouseButtonEvent(p.X+s.X/2,p.Y+s.Y/2,0,true,game,0)
+        VirtualInputManager:SendMouseButtonEvent(p.X+s.X/2,p.Y+s.Y/2,0,false,game,0)
+    end)
+    return ok
+end
+function H.runAdminCommand(target,cmd)
+    if not target then return false,"Player not found" end
+    local gui=PlayerGui:FindFirstChild("AdminPanel")
+    if not gui then return false,"Game AdminPanel not available" end
+    local ap=gui:FindFirstChild("AdminPanel"); if not ap then return false,"AdminPanel layout changed" end
+    local content=ap:FindFirstChild("Content"); local cscroll=content and content:FindFirstChild("ScrollingFrame")
+    local profiles=ap:FindFirstChild("Profiles"); local pscroll=profiles and profiles:FindFirstChild("ScrollingFrame")
+    if not cscroll or not pscroll then return false,"AdminPanel layout changed" end
+    local cmdBtn=cscroll:FindFirstChild(cmd); local plrBtn=pscroll:FindFirstChild(target.Name)
+    if not cmdBtn or not plrBtn then return false,"Command/player button unavailable" end
+    H.fireGuiButton(cmdBtn); task.wait(.05); H.fireGuiButton(plrBtn)
+    return true,cmd.." -> "..target.Name
+end
+function H.resolvePlayer(text)
+    text=H.lower(H.trim(text or "")); if text=="" then return nil end
+    for _,p in ipairs(Players:GetPlayers()) do
+        if H.lower(p.Name):sub(1,#text)==text or H.lower(p.DisplayName):sub(1,#text)==text then return p end
+    end
+end
+function H.runAllAdminCommands(target)
+    if not target then return false,"Player not found" end
+    task.spawn(function()
+        for _,cmd in ipairs(ADMIN_COMMANDS) do pcall(function() H.runAdminCommand(target,cmd) end); task.wait(.12) end
+    end)
+    return true,"Running available commands"
+end
+
+-- ============================================================
+-- RUBY VISUAL SYSTEM (code integrated, no Ruby hub/backend)
+-- ============================================================
+local BrainrotAssetsCache=nil
+local SharedAnimalsCache=nil
+function H.getBrainrotAssets()
+    if BrainrotAssetsCache~=nil then return BrainrotAssetsCache or nil end
+    BrainrotAssetsCache=false
+    pcall(function()
+        local shared=ReplicatedStorage:FindFirstChild("Shared")
+        local mod=shared and shared:FindFirstChild("BrainrotAssets")
+        if mod and mod:IsA("ModuleScript") then BrainrotAssetsCache=require(mod) end
+    end)
+    return BrainrotAssetsCache or nil
+end
+function H.getSharedAnimals()
+    if SharedAnimalsCache~=nil then return SharedAnimalsCache or nil end
+    SharedAnimalsCache=false
+    pcall(function()
+        local shared=ReplicatedStorage:FindFirstChild("Shared")
+        local mod=shared and shared:FindFirstChild("Animals")
+        if mod and mod:IsA("ModuleScript") then SharedAnimalsCache=require(mod) end
+    end)
+    return SharedAnimalsCache or nil
+end
+function H.acquireVisualAnimal(name)
+    name=H.trim(name); if name=="" then return nil end
+    local model=nil; local provider=H.getBrainrotAssets()
+    if provider and type(provider.getModel)=="function" then
+        pcall(function() local m=provider.getModel(name); if m and m:IsA("Model") then model=m:Clone() end end)
+    end
+    if not model then
+        local models=ReplicatedStorage:FindFirstChild("Models")
+        local animals=models and models:FindFirstChild("Animals")
+        local src=animals and animals:FindFirstChild(name)
+        if not src and animals then
+            for _,m in ipairs(animals:GetChildren()) do if H.lower(m.Name)==H.lower(name) then src=m; break end end
+        end
+        if src and src:IsA("Model") then model=src:Clone() end
+    end
+    return model
+end
+function H.availableAnimals()
+    local out={}
+    local models=ReplicatedStorage:FindFirstChild("Models"); local animals=models and models:FindFirstChild("Animals")
+    if animals then for _,m in ipairs(animals:GetChildren()) do if m:IsA("Model") then table.insert(out,m.Name) end end end
+    table.sort(out,function(a,b) return H.lower(a)<H.lower(b) end)
+    return out
+end
+function H.rubyPodiumSpawns()
+    local plot=H.getOurPlot(); local out={}; if not plot then return out end
+    local pods=plot:FindFirstChild("AnimalPodiums"); if not pods then return out end
+    local list=pods:GetChildren()
+    table.sort(list,function(a,b) return (tonumber(a.Name) or 999)<(tonumber(b.Name) or 999) end)
+    local rebirths=0; pcall(function() local ls=LP:FindFirstChild("leaderstats"); local r=ls and ls:FindFirstChild("Rebirths"); rebirths=tonumber(r and r.Value) or 0 end)
+    local maxSlots=math.min(10+rebirths,#list)
+    for i=1,maxSlots do
+        local base=list[i]:FindFirstChild("Base"); local sp=base and base:FindFirstChild("Spawn")
+        if sp and sp:IsA("BasePart") then table.insert(out,{index=tonumber(list[i].Name) or i,part=sp}) end
+    end
+    return out
+end
+function H.rubyApplyMutation(model,animalName,mutation)
+    mutation=H.trim(mutation or "Normal")
+    if mutation=="" or H.lower(mutation)=="normal" or H.lower(mutation)=="none" then return end
+    local sa=H.getSharedAnimals()
+    if sa and type(sa.ApplyMutation)=="function" then
+        local ok=pcall(function() sa:ApplyMutation(model,animalName,mutation) end); if ok then return end
+    end
+    -- lightweight fallback so the visual feature still works if the game module changed
+    local hue=(#mutation*0.083)%1
+    for _,p in ipairs(model:GetDescendants()) do if p:IsA("BasePart") and not p:GetAttribute("IgnoreColor") then p.Color=Color3.fromHSV(hue,.68,1) end end
+end
+function H.rubyApplyTraits(model,animalName,traits)
+    if not traits or #traits==0 then return end
+    local sa=H.getSharedAnimals()
+    if sa and type(sa.ApplyTraits)=="function" then
+        local ok=pcall(function() sa:ApplyTraits(model,animalName,traits) end); if ok then return end
+    end
+    local models=ReplicatedStorage:FindFirstChild("Models")
+    local tap=models and models:FindFirstChild("TraitsPerAnimal")
+    local generic=models and models:FindFirstChild("Traits")
+    for _,trait in ipairs(traits) do pcall(function()
+        local src=(tap and tap:FindFirstChild(trait) and tap[trait]:FindFirstChild(animalName)) or (generic and generic:FindFirstChild(trait))
+        if src then local c=src:Clone(); c.Name="_Trait."..trait; c.Parent=model end
+    end) end
+end
+function H.prepareVisualModel(model)
+    for _,d in ipairs(model:GetDescendants()) do
+        if d:IsA("BasePart") then d.Anchored=true; d.CanCollide=false; d.CanTouch=false; d.CanQuery=false
+        elseif d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then d:Destroy() end
+    end
+end
+function H.rubySpawn(animalName,mutation,traits,count)
+    animalName=H.trim(animalName or State.RubySelectedAnimal or "")
+    if animalName=="" then return false,"Select/type an animal" end
+    count=math.clamp(math.floor(tonumber(count) or State.RubySpawnCount or 1),1,20)
+    local slots=H.rubyPodiumSpawns(); if #slots==0 then return false,"No podium slots found" end
+    local used={}
+    for _,record in ipairs(State.RubySpawned) do
+        if record.model and record.model.Parent then used[record.slot]=true end
+    end
+    local spawned=0
+    for _=1,count do
+        local slot=nil
+        for _,s in ipairs(slots) do if not used[s.index] then slot=s; break end end
+        if not slot then break end
+        local model=H.acquireVisualAnimal(animalName); if not model then return spawned>0,"Model not found: "..animalName end
+        H.rubyApplyMutation(model,animalName,mutation)
+        H.rubyApplyTraits(model,animalName,traits)
+        H.prepareVisualModel(model)
+        model.Name="H4SK_VISUAL_"..animalName
+        model.Parent=Workspace
+        model:PivotTo(slot.part.CFrame)
+        table.insert(State.RubySpawned,{model=model,slot=slot.index,name=animalName,mutation=mutation or "Normal",traits=traits or {}})
+        used[slot.index]=true; spawned=spawned+1
+    end
+    return spawned>0,"Spawned "..spawned.." visual(s)"
+end
+function H.rubyClearSpawned()
+    local n=0
+    for _,record in ipairs(State.RubySpawned) do if record.model then pcall(function() record.model:Destroy() end); n=n+1 end end
+    State.RubySpawned={}; return true,"Cleared "..n.." visual(s)"
+end
+function H.rubyDuplicateLastVisual()
+    for i=#State.RubySpawned,1,-1 do
+        local r=State.RubySpawned[i]
+        if r.model and r.model.Parent then return H.rubySpawn(r.name,r.mutation,r.traits,1) end
+    end
+    return false,"No spawned visual to duplicate"
+end
+function H.rubyApplyOneOfOne()
+    local r=State.RubySpawned[#State.RubySpawned]; if not r or not r.model or not r.model.Parent then return false,"Spawn a visual first" end
+    State.RubyOneOfOne=not State.RubyOneOfOne
+    for _,p in ipairs(r.model:GetDescendants()) do if p:IsA("BasePart") then
+        p.Material=State.RubyOneOfOne and Enum.Material.Neon or Enum.Material.SmoothPlastic
+        if State.RubyOneOfOne then p.Color=Color3.fromHSV((os.clock()*.07+#p.Name*.03)%1,.75,1) end
+    end end
+    return true,State.RubyOneOfOne and "1OF1 visual applied" or "1OF1 visual normalized"
+end
+
+-- self-contained base-skin replacement: uses only parts already in the plot
+local BaseSkinPalettes={
+    Default=nil,
+    Galaxy={Color3.fromRGB(60,30,120),Enum.Material.Neon},
+    Rainbow={Color3.fromRGB(255,70,180),Enum.Material.Neon},
+    Christmas={Color3.fromRGB(35,145,65),Enum.Material.SmoothPlastic},
+    Halloween={Color3.fromRGB(225,85,20),Enum.Material.Neon},
+    Valentine={Color3.fromRGB(235,80,140),Enum.Material.SmoothPlastic},
+    Gold={Color3.fromRGB(235,180,35),Enum.Material.Metal},
+    Ice={Color3.fromRGB(100,200,255),Enum.Material.Glass},
+}
+local BaseSkinOriginal=setmetatable({}, {__mode="k"})
+function H.resetBaseSkin()
+    for p,s in pairs(BaseSkinOriginal) do if p and p.Parent then p.Color=s.Color; p.Material=s.Material; p.Transparency=s.Transparency end end
+    BaseSkinOriginal=setmetatable({}, {__mode="k"}); State.RubyBaseSkin=nil; return true,"Base skin reset"
+end
+function H.applyBaseSkin(name)
+    name=H.trim(name or ""); if name=="" or H.lower(name)=="default" then return H.resetBaseSkin() end
+    local palette=nil
+    for k,v in pairs(BaseSkinPalettes) do if H.lower(k)==H.lower(name) then name=k; palette=v; break end end
+    if not palette then return false,"Skin: Default/Galaxy/Rainbow/Christmas/Halloween/Valentine/Gold/Ice" end
+    H.resetBaseSkin(); local plot=H.getOurPlot(); if not plot then return false,"Your plot not found" end
+    local protectedNames={Spawn=true,MainRoot=true,Hitbox=true,AnimalPodiums=true,Claim=true,DeliveryBox=true,DeliveryHitbox=true,CollectZone=true,LaserHitbox=true,StealHitbox=true,CashPad=true}
+    for _,p in ipairs(plot:GetDescendants()) do
+        if p:IsA("BasePart") and not protectedNames[p.Name] then BaseSkinOriginal[p]={Color=p.Color,Material=p.Material,Transparency=p.Transparency}; p.Color=palette[1]; p.Material=palette[2] end
+    end
+    State.RubyBaseSkin=name; return true,"Applied base skin: "..name
+end
+
+local signOriginal=setmetatable({}, {__mode="k"})
+function H.findPlotSignLabels()
+    local out={}; local plot=H.getOurPlot(); if not plot then return out end
+    for _,d in ipairs(plot:GetDescendants()) do
+        if (d:IsA("TextLabel") or d:IsA("TextButton")) then
+            local anc=d.Parent; local isSign=false
+            while anc and anc~=plot do local n=H.lower(anc.Name); if n:find("sign",1,true) then isSign=true; break end; anc=anc.Parent end
+            if isSign then table.insert(out,d) end
+        end
+    end
+    return out
+end
+function H.applySignMessage(msg)
+    msg=tostring(msg or State.RubySignMessage or ""); State.RubySignMessage=msg
+    local labels=H.findPlotSignLabels(); if #labels==0 then return false,"Plot sign not found" end
+    for _,l in ipairs(labels) do if signOriginal[l]==nil then signOriginal[l]=l.Text end; l.Text=msg end
+    return true,"Sign updated"
+end
+local signMessages={"H4SK BASE","STEAL IF YOU CAN","NO CAMPING","GOOD LUCK","W BASE","COME TRY"}
+function H.setSignCycle(on)
+    State.RubySignCycle=on==true; H.clearConnection("SignCycle")
+    if not State.RubySignCycle then return end
+    local t=0;i=1
+    H.setConnection("SignCycle",H.heartbeat(4,2,function(dt)
+        t=t+dt; if t<(tonumber(State.RubySignCycleSeconds) or 3) then return end; t=0
+        i=(i%#signMessages)+1; H.applySignMessage(signMessages[i])
+    end))
+end
+function H.resetSignMessage()
+    for l,t in pairs(signOriginal) do if l and l.Parent then l.Text=t end end
+    signOriginal=setmetatable({}, {__mode="k"}); return true,"Sign reset"
+end
+
+function H.rubyRejoin() return pcall(function() TeleportService:Teleport(game.PlaceId,LP) end) end
+
+-- fake trade is visual only, matching Ruby's original behavior; it lives inside this ONE ScreenGui
+function H.closeFakeTrade() if FakeTradeFrame then FakeTradeFrame:Destroy(); FakeTradeFrame=nil end end
+function H.launchFakeTrade(targetName)
+    if not MainGui then return false,"UI not ready" end
+    H.closeFakeTrade(); targetName=H.trim(targetName or State.RubyFakeTradeTarget or "Player"); if targetName=="" then targetName="Player" end
+    local f=Instance.new("Frame"); FakeTradeFrame=f; f.Name="FakeTradeOverlay"; f.AnchorPoint=Vector2.new(.5,.5); f.Position=UDim2.fromScale(.5,.5); f.Size=UDim2.fromOffset(500,330); f.BackgroundColor3=Color3.fromRGB(9,12,18); f.BorderSizePixel=0; f.Parent=MainGui
+    local co=Instance.new("UICorner"); co.CornerRadius=UDim.new(0,16); co.Parent=f
+    local st=Instance.new("UIStroke"); st.Color=Color3.fromRGB(100,100,125); st.Transparency=.25; st.Parent=f
+    local title=Instance.new("TextLabel"); title.BackgroundTransparency=1; title.Position=UDim2.fromOffset(18,12); title.Size=UDim2.new(1,-60,0,34); title.Font=Enum.Font.GothamBold; title.TextSize=18; title.TextColor3=Color3.new(1,1,1); title.TextXAlignment=Enum.TextXAlignment.Left; title.Text="VISUAL TRADE  •  "..targetName; title.Parent=f
+    local x=Instance.new("TextButton"); x.Position=UDim2.new(1,-45,0,10); x.Size=UDim2.fromOffset(34,34); x.Text="×"; x.Font=Enum.Font.GothamBold; x.TextSize=22; x.TextColor3=Color3.new(1,1,1); x.BackgroundColor3=Color3.fromRGB(30,35,48); x.BorderSizePixel=0; x.Parent=f; local xc=co:Clone(); xc.CornerRadius=UDim.new(0,9); xc.Parent=x; x.Activated:Connect(H.closeFakeTrade)
+    local me=Instance.new("TextLabel"); me.BackgroundTransparency=1; me.Position=UDim2.fromOffset(20,58); me.Size=UDim2.fromOffset(215,30); me.Text="YOU"; me.Font=Enum.Font.GothamBold; me.TextSize=14; me.TextColor3=Color3.fromRGB(180,185,200); me.Parent=f
+    local them=me:Clone(); them.Position=UDim2.fromOffset(265,58); them.Text=targetName:upper(); them.Parent=f
+    local left=Instance.new("Frame"); left.Position=UDim2.fromOffset(20,92); left.Size=UDim2.fromOffset(215,160); left.BackgroundColor3=Color3.fromRGB(16,20,29); left.BorderSizePixel=0; left.Parent=f; co:Clone().Parent=left
+    local right=left:Clone(); right.Position=UDim2.fromOffset(265,92); right.Parent=f
+    local item=State.RubySpawned[#State.RubySpawned]
+    local function itemLabel(parent,text)
+        local l=Instance.new("TextLabel"); l.BackgroundTransparency=1; l.Size=UDim2.new(1,-20,0,45); l.Position=UDim2.fromOffset(10,10); l.Font=Enum.Font.GothamMedium; l.TextWrapped=true; l.TextSize=13; l.TextColor3=Color3.new(1,1,1); l.Text=text; l.Parent=parent
+    end
+    itemLabel(left,item and (item.name.."\n"..tostring(item.mutation or "Normal")) or "No visual selected")
+    itemLabel(right,"Their visual offer\n(client-side preview)")
+    local accept=Instance.new("TextButton"); accept.Position=UDim2.fromOffset(145,272); accept.Size=UDim2.fromOffset(210,40); accept.BackgroundColor3=Color3.fromRGB(38,145,86); accept.BorderSizePixel=0; accept.Text="FORCE ACCEPT (VISUAL)"; accept.Font=Enum.Font.GothamBold; accept.TextSize=13; accept.TextColor3=Color3.new(1,1,1); accept.Parent=f; co:Clone().Parent=accept
+    accept.Activated:Connect(function() accept.Text="ACCEPTED ✓"; task.delay(1.2,H.closeFakeTrade) end)
+    return true,"Visual trade opened"
+end
+
+function H.tradeNotification()
+    local target=State.RubyFakeTradeTarget~="" and State.RubyFakeTradeTarget or "player"
+    H.playAlert("Trade notification: "..target)
+    return true,"Trade notification shown"
+end
+
+local RUBY_SAVE_FILE="H4SK_SAB_RUBY_STATE.json"
+function H.saveRubyState()
+    if typeof(writefile)~="function" then return false,"writefile unsupported" end
+    local defs={}
+    for _,r in ipairs(State.RubySpawned) do if r.model and r.model.Parent then table.insert(defs,{name=r.name,mutation=r.mutation,traits=r.traits}) end end
+    local data={autoRestore=State.RubyAutoRestore,baseSkin=State.RubyBaseSkin,sign=State.RubySignMessage,spawns=defs}
+    local ok,err=pcall(function() writefile(RUBY_SAVE_FILE,HttpService:JSONEncode(data)) end)
+    return ok,ok and "Ruby state saved" or tostring(err)
+end
+function H.restoreRubyState()
+    if typeof(isfile)~="function" or typeof(readfile)~="function" or not isfile(RUBY_SAVE_FILE) then return false,"No saved state" end
+    local ok,data=pcall(function() return HttpService:JSONDecode(readfile(RUBY_SAVE_FILE)) end); if not ok or type(data)~="table" then return false,"Saved state invalid" end
+    if data.baseSkin then pcall(H.applyBaseSkin,data.baseSkin) end
+    if data.sign and data.sign~="" then pcall(H.applySignMessage,data.sign) end
+    if type(data.spawns)=="table" then for _,r in ipairs(data.spawns) do pcall(H.rubySpawn,r.name,r.mutation,r.traits,1) end end
+    return true,"Ruby state restored"
+end
+
+-- ============================================================
+-- REMAINING SHARED ACTIONS / SETTINGS
+-- ============================================================
+State.ShowTracker = false
+State.NoCamCollision = false
+State.AutoResetBalloon = false
+State.AutoTPPriority = true
+State.MinGenForTP = ""
+State.TPVersion = "V2"
+State.TeleportDelay = 0.08
+State.AdminTarget = ""
+State.AdminCommand = "ragdoll"
+State.MenuKey = "RightShift"
+State.RejoinKey = ""
+
+function H.saveLocation()
+    local r=H.rootPart(); if not r then return false,"Character unavailable" end
+    State.SavedLocation=r.CFrame; return true,"Location saved"
+end
+function H.returnLocation()
+    if not State.SavedLocation then return false,"No saved location" end
+    return H.safePivot(State.SavedLocation),"Returned to saved location"
+end
+function H.teleportBestBrainrot()
+    local target=H.chooseBrainrot(State.AutoTPPriority and "Priority" or State.StealMode)
+    if not target then return false,"No brainrot found" end
+    local min=H.parseCompactNumber(State.MinGenForTP)
+    if min>0 and (tonumber(target.generation) or 0)<min then return false,"Best target is below minimum generation" end
+    local p=target.root or target.spawn; local r=H.rootPart(); if not p or not r then return false,"Target unavailable" end
+    if State.TPVersion=="V1" then
+        return H.safePivot(CFrame.new(p.Position+Vector3.new(0,2.5,0))),"TP V1 complete"
+    end
+    local dir=(r.Position-p.Position); dir=Vector3.new(dir.X,0,dir.Z)
+    if dir.Magnitude<.1 then dir=Vector3.new(0,0,-1) else dir=dir.Unit end
+    local behind=p.Position+dir*6
+    local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances={H.character()}
+    local cast=Workspace:Raycast(behind+Vector3.new(0,25,0),Vector3.new(0,-80,0),params)
+    local y=cast and cast.Position.Y+3.5 or p.Position.Y+2.5
+    local cf=CFrame.lookAt(Vector3.new(behind.X,y,behind.Z),Vector3.new(p.Position.X,y,p.Position.Z))
+    local ok=H.safePivot(cf)
+    if ok and tonumber(State.TeleportDelay)>0 then task.wait(math.clamp(tonumber(State.TeleportDelay),0,2)) end
+    return ok,"TP V2 complete"
+end
+
+function H.setShowTracker(on)
+    State.ShowTracker=on==true
+    if State.ShowTracker then State.BestBrainrotTracer=true; State.BrainrotESP=true
+    else State.BestBrainrotTracer=false end
+    H.refreshVisualRuntime()
+end
+function H.setNoCamCollision(on)
+    State.NoCamCollision=on==true
+    pcall(function() LP.DevCameraOcclusionMode=State.NoCamCollision and Enum.DevCameraOcclusionMode.Invisicam or Enum.DevCameraOcclusionMode.Zoom end)
+end
+
+-- fix invisibility restoration around steal: preserve the user's previous state
+function H.attemptStealSafe(target)
+    if stealBusy or not target then return false,"No target" end
+    local r=H.rootPart(); if not r then return false,"Character unavailable" end
+    local radius = State.StealMode=="Semi" and State.SemiStealRadius or State.StealRadius
+    if target.distance>radius then return false,"Target out of radius" end
+    if not target.prompt then return false,"Prompt not found" end
+    stealBusy=true; stealLastTarget=target; stealOrigin=r.CFrame
+    local wasInvisible=State.Invisible
+    if State.AutoUnlock then H.unlockPlot(target.plot) end
+    if State.AutoInvisSteal and not wasInvisible then H.setInvisible(true) end
+    local ok=H.safeFirePrompt(target.prompt,State.StealDuration)
+    task.wait(math.max(.03,State.StealDuration))
+    if State.AutoInvisSteal and not wasInvisible then H.setInvisible(false) end
+    stealBusy=false
+    return ok,ok and "Steal triggered" or "Prompt failed"
+end
+-- Replace calls used by the merged auto-steal loop/action with the corrected implementation.
+H.attemptSteal = H.attemptStealSafe
+
+function H.setPriorityList(text)
+    State.PriorityList={}
+    for token in tostring(text or ""):gmatch("[^,\n]+") do local v=H.trim(token); if v~="" then table.insert(State.PriorityList,v) end end
+end
+function H.getPriorityList() return table.concat(State.PriorityList,", ") end
+function H.setRubyTraits(text)
+    State.RubyTraits={}
+    for token in tostring(text or ""):gmatch("[^,\n]+") do local v=H.trim(token); if v~="" then table.insert(State.RubyTraits,v) end end
+end
+function H.getRubyTraits() return table.concat(State.RubyTraits,", ") end
+function H.adminAction()
+    local p=H.resolvePlayer(State.AdminTarget); return H.runAdminCommand(p,State.AdminCommand)
+end
+function H.adminAllAction()
+    return H.runAllAdminCommands(H.resolvePlayer(State.AdminTarget))
+end
+
+-- ============================================================
+-- FEATURE CATALOG: one canonical entry per duplicated behavior
+-- ============================================================
+-- HOME
+H.addAction("save_location","HOME","Save Location","Lacazette: save current position",H.saveLocation)
+H.addAction("return_location","HOME","Return to Location","Lacazette: return to the saved position",H.returnLocation)
+H.addAction("reset","HOME","Force / Instant Reset","Merged reset action",function() H.forceReset(); return true,"Reset" end)
+H.addAction("rejoin","HOME","Rejoin","Ruby misc rejoin",function() local ok=H.rubyRejoin(); return ok,"Rejoining" end)
+H.addAction("kick","HOME","Kick","Notz utility",function() LP:Kick("H4SK manual kick"); return true,"Kicked" end)
+H.addAction("home_kick","HOME","Home Kick","Notz home kick",function() H.homeKick(); return true,"Returning to Roblox" end)
+
+-- MOVEMENT
+H.addToggle("infinite_jump","MOVEMENT","Infinite Jump","Best merged infinite-jump implementation",function() return State.InfiniteJump end,H.setInfiniteJump)
+H.addToggle("fly","MOVEMENT","Fly","Lacazette fly",function() return State.Fly end,H.setFly)
+H.addInput("fly_speed","MOVEMENT","Fly Speed","Fly velocity",function() return State.FlySpeed end,function(v) State.FlySpeed=math.clamp(tonumber(v) or 28,5,250) end,true)
+H.addToggle("float","MOVEMENT","Float","NineHub float",function() return State.Float end,H.setFloat)
+H.addToggle("god","MOVEMENT","God Mode","Lacazette local health protection",function() return State.God end,H.setGod)
+H.addToggle("chase","MOVEMENT","Chase Nearest","Lacazette chase nearest player",function() return State.Chase end,H.setChase)
+H.addInput("chase_speed","MOVEMENT","Chase Speed","Velocity while chasing",function() return State.ChaseSpeed end,function(v) State.ChaseSpeed=math.clamp(tonumber(v) or 32,5,250) end,true)
+H.addToggle("noclip","MOVEMENT","NoClip","Lacazette collision bypass",function() return State.NoClip end,H.setNoClip)
+H.addToggle("no_player_collision","MOVEMENT","No Player Collision","Dream player-only collision bypass",function() return State.NoPlayerCollision end,H.setNoPlayerCollision)
+H.addToggle("invisible","MOVEMENT","Become Invisible","Local visual invisibility",function() return State.Invisible end,H.setInvisible)
+H.addToggle("hitbox_visual","MOVEMENT","Hitbox Visual","Lacazette hitbox viewer",function() return State.HitboxVisual end,H.setHitboxVisual)
+H.addToggle("spin_bot","MOVEMENT","Spin Bot","NineHub spin",function() return State.SpinBot end,H.setSpinBot)
+H.addInput("spin_speed","MOVEMENT","Spin Speed","Spin angular speed",function() return State.SpinSpeed end,function(v) State.SpinSpeed=math.clamp(tonumber(v) or 20,1,100) end,true)
+H.addToggle("unwalk","MOVEMENT","Unwalk","NineHub movement lock",function() return State.Unwalk end,H.setUnwalk)
+H.addToggle("speed","MOVEMENT","Speed","Dream speed engine",function() return State.SpeedEnabled end,H.setSpeedEnabled)
+H.addChoice("speed_mode","MOVEMENT","Speed Mode","Normal / Carry / Lagger / Lagger Carry",function() return State.SpeedMode end,{"Normal","Carry","Lagger","Lagger Carry"},function(v) State.SpeedMode=v end)
+H.addInput("normal_speed","MOVEMENT","Normal Speed","Dream normal speed",function() return State.NormalSpeed end,function(v) State.NormalSpeed=math.clamp(tonumber(v) or 48,5,250) end,true)
+H.addInput("carry_speed","MOVEMENT","Carry Speed","Dream carry speed",function() return State.CarrySpeed end,function(v) State.CarrySpeed=math.clamp(tonumber(v) or 58,5,250) end,true)
+H.addInput("lagger_speed","MOVEMENT","Lagger Speed","Dream lagger speed",function() return State.LaggerSpeed end,function(v) State.LaggerSpeed=math.clamp(tonumber(v) or 65,5,300) end,true)
+H.addInput("lagger_carry_speed","MOVEMENT","Lagger Carry Speed","Dream lagger carry speed",function() return State.LaggerCarrySpeed end,function(v) State.LaggerCarrySpeed=math.clamp(tonumber(v) or 72,5,300) end,true)
+H.addToggle("auto_carry_speed","MOVEMENT","Auto Carry Speed","Automatically uses carry/normal mode",function() return State.AutoCarrySpeed end,H.setAutoCarrySpeed)
+H.addToggle("carpet_speed","MOVEMENT","Carpet Speed","Notz flying-carpet speed",function() return State.CarpetSpeed end,H.setCarpetSpeed)
+H.addInput("carpet_speed_value","MOVEMENT","Carpet Speed Value","Horizontal carpet speed",function() return State.CarpetSpeedValue end,function(v) State.CarpetSpeedValue=math.clamp(tonumber(v) or 140,10,400) end,true)
+H.addAction("tp_down","MOVEMENT","TP Down","Dream manual TP down",function() H.tpDown(true); return true,"TP Down" end)
+H.addToggle("auto_tp_down","MOVEMENT","Auto TP Down","Dream automatic TP down",function() return State.AutoTPDown end,H.setAutoTPDown)
+H.addInput("auto_tp_height","MOVEMENT","Auto TP Height","Height threshold",function() return State.AutoTPHeight end,function(v) State.AutoTPHeight=math.clamp(tonumber(v) or 20,1,100) end,true)
+H.addAction("ragdoll_self","MOVEMENT","Ragdoll Self","Notz ragdoll-self action",function() H.ragdollSelf(); return true,"Ragdoll triggered" end)
+H.addToggle("anti_ragdoll","MOVEMENT","Anti Ragdoll","Notz V2 selected over duplicate V1/Dream",function() return State.AntiRagdoll end,H.setAntiRagdoll)
+H.addToggle("ragdoll_countdown","MOVEMENT","Ragdoll Countdown","Dream HUD",function() return State.RagdollCountdown end,H.setRagdollCountdown)
+H.addToggle("reset_on_death","MOVEMENT","Reset on Death","Dream reset behavior",function() return State.ResetOnDeath end,H.setResetOnDeath)
+H.addChoice("anim_pack","MOVEMENT","Animation Pack","Dream animation pack",function() return State.AnimationPack or "Off" end,{"Off","Zombie","Ninja","Robot","Stylish","Mage"},function(v) State.AnimationPack=v; H.applyAnimationPack(v) end)
+H.addAction("drop_brainrot","MOVEMENT","Drop Brainrot","Dream drop action",H.dropBrainrot)
+
+-- COMBAT / DUELS
+H.addToggle("bat_aimbot","COMBAT","Bat Aimbot","Dream aimbot selected over duplicate NineHub/Mwvane",function() return State.BatAimbot end,H.setBatAimbot)
+H.addChoice("aimbot_mode","COMBAT","Aimbot Mode","Normal or Anti Bypass",function() return State.AimbotMode end,{"Normal","Anti Bypass"},function(v) State.AimbotMode=v end)
+H.addInput("aimbot_radius","COMBAT","Aimbot Radius","Target radius",function() return State.AimbotRadius end,function(v) State.AimbotRadius=math.clamp(tonumber(v) or 100,5,500) end,true)
+H.addInput("aimbot_speed","COMBAT","Normal Aimbot Speed","Dream normal aimbot speed",function() return State.AimbotSpeed end,function(v) State.AimbotSpeed=math.clamp(tonumber(v) or 55,5,300) end,true)
+H.addInput("lagger_aimbot_speed","COMBAT","Lagger Aimbot Speed","Dream lagger aimbot speed",function() return State.LaggerAimbotSpeed end,function(v) State.LaggerAimbotSpeed=math.clamp(tonumber(v) or 40,5,300) end,true)
+H.addToggle("auto_swing","COMBAT","Auto Swing","Dream bat auto swing",function() return State.AutoSwing end,function(v) State.AutoSwing=v end)
+H.addToggle("anti_desync","COMBAT","Anti Desync Bat","Dream anti desync",function() return State.AntiDesync end,H.setAntiDesync)
+H.addToggle("mirror_tp_down","COMBAT","Mirror TP Down","Dream aimbot mirror TP behavior",function() return State.MirrorTPDown end,function(v) State.MirrorTPDown=v end)
+H.addToggle("bat_counter","COMBAT","Bat Counter","Dream counter",function() return State.BatCounter end,H.setBatCounter)
+H.addToggle("med_counter","COMBAT","Medusa Counter","Dream med counter",function() return State.MedusaCounter end,H.setMedusaCounter)
+H.addToggle("safe_mode","COMBAT","Safe Mode","Dream safe mode",function() return State.SafeMode end,function(v) State.SafeMode=v end)
+H.addToggle("auto_reset_med","COMBAT","Auto Reset On Med Fling","Dream auto reset",function() return State.AutoResetOnMed end,H.setAutoResetOnMed)
+H.addToggle("auto_left","COMBAT","Auto Left","Dream/NineHub path; Dream behavior selected",function() return State.AutoLeft end,H.setAutoLeft)
+H.addToggle("auto_right","COMBAT","Auto Right","Dream/NineHub path; Dream behavior selected",function() return State.AutoRight end,H.setAutoRight)
+H.addAction("tp_left","COMBAT","TP Left","NineHub direct TP left",function() H.doTPSide("left"); return true,"TP Left" end)
+H.addAction("tp_right","COMBAT","TP Right","NineHub direct TP right",function() H.doTPSide("right"); return true,"TP Right" end)
+H.addToggle("taunt","COMBAT","Taunt","NineHub chat taunt",function() return State.Taunt end,H.setTaunt)
+
+-- STEAL / TELEPORT / ECONOMY
+H.addToggle("auto_steal","STEAL","Auto Steal","Notz implementation selected over Dream/NineHub duplicates",function() return State.AutoSteal end,H.setAutoSteal)
+H.addChoice("steal_mode","STEAL","Steal Mode","Nearest / Highest / Priority / Semi",function() return State.StealMode end,{"Nearest","Highest","Priority","Semi"},function(v) State.StealMode=v end)
+H.addInput("steal_radius","STEAL","Steal Radius","Auto steal scan radius",function() return State.StealRadius end,function(v) State.StealRadius=math.clamp(tonumber(v) or 62,3,300) end,true)
+H.addInput("semi_radius","STEAL","Semi Steal Radius","Semi mode radius",function() return State.SemiStealRadius end,function(v) State.SemiStealRadius=math.clamp(tonumber(v) or 9,2,50) end,true)
+H.addInput("steal_duration","STEAL","Steal Duration","Prompt hold duration",function() return State.StealDuration end,function(v) State.StealDuration=math.clamp(tonumber(v) or .08,0,3) end,true)
+H.addInput("priority_list","STEAL","Priority List","Comma-separated brainrot names",H.getPriorityList,H.setPriorityList,false)
+H.addAction("instant_grab","STEAL","Instant Grab","Grab best selected target",H.instantGrab)
+H.addToggle("steal_speed","STEAL","Auto Steal Speed","Notz steal movement speed",function() return State.AutoStealSpeed end,H.setStealSpeed)
+H.addInput("steal_speed_value","STEAL","Steal Speed","Notz steal speed value",function() return State.StealSpeed end,function(v) State.StealSpeed=math.clamp(tonumber(v) or 29,5,200) end,true)
+H.addToggle("auto_unlock","STEAL","Auto Unlock on Steal","Notz unlock prompts",function() return State.AutoUnlock end,H.setAutoUnlock)
+H.addToggle("auto_invis_steal","STEAL","Auto Invis During Steal","Notz invis behavior",function() return State.AutoInvisSteal end,H.setAutoInvisSteal)
+H.addToggle("auto_tp_failed","STEAL","Auto TP on Failed Steal","Notz retry TP",function() return State.AutoTPFailedSteal end,function(v) State.AutoTPFailedSteal=v end)
+H.addToggle("auto_tp_back","STEAL","Auto TP Back to Brainrot","Notz retry position",function() return State.AutoTPBack end,H.setAutoTPBack)
+H.addToggle("auto_kick_steal","STEAL","Auto-Kick on Steal","Notz auto kick",function() return State.AutoKickOnSteal end,H.setAutoKickOnSteal)
+H.addAction("tp_best","STEAL","TP Best Brainrot","Notz TP logic merged into one action",H.teleportBestBrainrot)
+H.addChoice("tp_version","STEAL","TP Version","Notz V1/V2",function() return State.TPVersion end,{"V1","V2"},function(v) State.TPVersion=v end)
+H.addInput("min_gen_tp","STEAL","Min Gen for Auto TP","Accepts 10k / 2m / 1b",function() return State.MinGenForTP end,function(v) State.MinGenForTP=tostring(v) end,false)
+H.addInput("tp_delay","STEAL","Teleport Delay","Post-TP delay",function() return State.TeleportDelay end,function(v) State.TeleportDelay=math.clamp(tonumber(v) or .08,0,2) end,true)
+H.addToggle("tp_priority","STEAL","Auto TP Priority Mode","Use priority list for TP",function() return State.AutoTPPriority end,function(v) State.AutoTPPriority=v end)
+H.addAction("zaha_delivery","TELEPORT","TP to Delivery Box","ZAHA corrected implementation",H.zahaTeleportDelivery)
+H.addAction("zaha_base","TELEPORT","TP Inside Nearest Base","ZAHA corrected implementation",H.zahaNearestBase)
+H.addAction("zaha_tween","TELEPORT","Tween Steal","ZAHA corrected tween steal",H.zahaTweenSteal)
+H.addToggle("auto_buy","AUTOMATION","Auto Buy","Notz purchase-prompt scanner",function() return State.AutoBuy end,H.setAutoBuy)
+H.addInput("auto_buy_range","AUTOMATION","Auto Buy Range","Purchase radius",function() return State.AutoBuyRange end,function(v) State.AutoBuyRange=math.clamp(tonumber(v) or 17,4,80) end,true)
+H.addAction("remote_sell","AUTOMATION","Remote Sell Panel / Sell All","Notz merged sell action",H.remoteSellAll)
+H.addToggle("rainbow_base","AUTOMATION","Rainbow Base","Notz quick-panel visual",function() return State.RainbowBase end,H.setRainbowBase)
+
+-- VISUALS
+H.addToggle("fps_boost","VISUALS","FPS Boost / Anti Lag","One reversible implementation for duplicate FPS/Anti Lag",function() return State.FPSBoost end,H.setFPSBoost)
+H.addToggle("base_xray","VISUALS","Base X-Ray","Notz base X-Ray",function() return State.BaseXray end,H.setBaseXray)
+for _,def in ipairs({
+    {"player_esp","Player ESP","PlayerESP"},{"box_esp","Box ESP","BoxESP"},{"tracer_esp","Tracer ESP","TracerESP"},
+    {"brainrot_esp","Brainrot ESP","BrainrotESP"},{"subspace_esp","Subspace Mine ESP","SubspaceESP"},{"duel_base_esp","Duel Base ESP","DuelBaseESP"},
+    {"best_tracer","Tracer Best Brainrot","BestBrainrotTracer"},{"line_base","Line to Base","LineToBase"},{"server_pos","Show Server Position","ServerPositionHUD"},{"steal_hud","Show Steal Speed Panel","StealSpeedHUD"}
+}) do
+    local field=def[3]
+    H.addToggle(def[1],"VISUALS",def[2],"Notz visual",function() return State[field] end,function(v) H.setVisualFlag(field,v) end)
+end
+H.addToggle("show_tracker","VISUALS","Show Tracker","Dream tracker merged with best-brainrot tracer",function() return State.ShowTracker end,H.setShowTracker)
+H.addToggle("stretch","VISUALS","Stretch Rez","Dream stretch view",function() return State.StretchRez end,H.setStretchRez)
+H.addInput("fov","VISUALS","FOV","Notz/Dream camera FOV",function() return State.FOV end,H.setFOV,true)
+H.addChoice("sky","VISUALS","Sky Theme","Dream sky themes",function() return State.SkyTheme end,{"Off","Night","Purple","Red","Blue"},H.setSkyTheme)
+H.addToggle("no_cam_collision","VISUALS","No Cam Collision","Dream camera setting",function() return State.NoCamCollision end,H.setNoCamCollision)
+
+-- PROTECTION / ADMIN
+H.addToggle("anti_bee_disco","PROTECTION","Anti-Bee & Anti-Disco","Notz protection",function() return State.AntiBeeDisco end,H.setAntiBeeDisco)
+H.addToggle("destroy_turrets","PROTECTION","Auto-Destroy Turrets","Notz protection",function() return State.AutoDestroyTurrets end,H.setAutoDestroyTurrets)
+H.addToggle("clean_errors","PROTECTION","Clean Error GUIs","Notz cleanup",function() return State.CleanErrorGuis end,H.setCleanErrorGuis)
+H.addToggle("auto_reset_balloon","PROTECTION","Auto Reset on Balloon","Notz auto reset",function() return State.AutoResetBalloon end,H.setAutoResetBalloon)
+H.addToggle("alerts","PROTECTION","Enable Alerts","Notz alerts",function() return State.Alerts end,H.setAlerts)
+H.addInput("alert_sound","PROTECTION","Alert Sound ID","Roblox sound asset id",function() return State.AlertSoundId end,function(v) State.AlertSoundId=tostring(v) end,false)
+H.addInput("admin_target","ADMIN","Admin Target","Player name/display name",function() return State.AdminTarget end,function(v) State.AdminTarget=tostring(v) end,false)
+H.addChoice("admin_cmd","ADMIN","Admin Command","Uses game's real AdminPanel buttons",function() return State.AdminCommand end,ADMIN_COMMANDS,function(v) State.AdminCommand=v end)
+H.addAction("admin_run","ADMIN","Run Admin Command","Notz admin-panel bridge",H.adminAction)
+H.addAction("admin_all","ADMIN","Run All Available Commands","Notz admin-panel multi-command",H.adminAllAction)
+H.addInput("job_id","ADMIN","Job ID Joiner","Enter server JobId",function() return State.JobId or "" end,function(v) State.JobId=tostring(v) end,false)
+H.addAction("join_job","ADMIN","Join Job ID","Notz Job Joiner",function() return H.joinJob(State.JobId) end)
+
+-- RUBY: VISUAL SPAWNER / BASE / TRADE / MISC
+H.addInput("ruby_animal","SPAWNER","Animal","Exact brainrot name; models are resolved from the game",function() return State.RubySelectedAnimal or "" end,function(v) State.RubySelectedAnimal=tostring(v) end,false)
+H.addInput("ruby_mutation","SPAWNER","Mutation","Normal / Gold / Diamond / etc.",function() return State.RubyMutation end,function(v) State.RubyMutation=tostring(v) end,false)
+H.addInput("ruby_traits","SPAWNER","Traits","Comma-separated traits",H.getRubyTraits,H.setRubyTraits,false)
+H.addInput("ruby_count","SPAWNER","Spawn Count","1-20",function() return State.RubySpawnCount end,function(v) State.RubySpawnCount=math.clamp(math.floor(tonumber(v) or 1),1,20) end,true)
+H.addAction("ruby_spawn","SPAWNER","Spawn onto Podium","Ruby visual spawner rebuilt directly",function() return H.rubySpawn(State.RubySelectedAnimal,State.RubyMutation,State.RubyTraits,State.RubySpawnCount) end)
+H.addAction("ruby_clear","SPAWNER","Clear Spawned","Ruby clear visuals",H.rubyClearSpawned)
+H.addAction("ruby_dupe","SPAWNER","Dupe Last Visual","Ruby visual dupe behavior",H.rubyDuplicateLastVisual)
+H.addAction("ruby_oneofone","SPAWNER","Apply 1OF1 Visual","Ruby 1OF1 visual behavior",H.rubyApplyOneOfOne)
+H.addChoice("ruby_skin","BASE","Base Skin","Self-contained base visual skins",function() return State.RubyBaseSkin or "Default" end,{"Default","Galaxy","Rainbow","Christmas","Halloween","Valentine","Gold","Ice"},function(v) State.RubyBaseSkin=v end)
+H.addAction("ruby_apply_skin","BASE","Apply Skin","Ruby base skin changer integrated",function() return H.applyBaseSkin(State.RubyBaseSkin or "Default") end)
+H.addAction("ruby_reset_base","BASE","Reset Base","Restore original plot look",H.resetBaseSkin)
+H.addInput("ruby_sign","BASE","Sign Message","Ruby sign editor",function() return State.RubySignMessage end,function(v) State.RubySignMessage=tostring(v) end,false)
+H.addAction("ruby_sign_apply","BASE","Apply Sign","Set plot sign text",function() return H.applySignMessage(State.RubySignMessage) end)
+H.addToggle("ruby_sign_cycle","BASE","Cycle Sign Messages","Ruby sign cycle",function() return State.RubySignCycle end,H.setSignCycle)
+H.addInput("ruby_sign_seconds","BASE","Sign Cycle Seconds","Cycle interval",function() return State.RubySignCycleSeconds end,function(v) State.RubySignCycleSeconds=math.clamp(tonumber(v) or 3,.5,30) end,true)
+H.addAction("ruby_sign_reset","BASE","Reset Sign","Restore sign text",H.resetSignMessage)
+H.addInput("ruby_trade_target","TRADE","Target Username","Ruby fake-trade target",function() return State.RubyFakeTradeTarget end,function(v) State.RubyFakeTradeTarget=tostring(v) end,false)
+H.addToggle("ruby_stream","TRADE","Stream Mode","Ruby trade privacy setting",function() return State.RubyStreamMode end,function(v) State.RubyStreamMode=v end)
+H.addInput("ruby_trade_delay","TRADE","Launch Delay","Fake-trade visual delay",function() return State.RubyFakeTradeDelay end,function(v) State.RubyFakeTradeDelay=math.clamp(tonumber(v) or 0,0,10) end,true)
+H.addAction("ruby_trade","TRADE","Launch Visual Trade","Ruby visual-only fake trade",function() local d=State.RubyFakeTradeDelay; if d and d>0 then task.wait(d) end; return H.launchFakeTrade(State.RubyFakeTradeTarget) end)
+H.addAction("ruby_trade_notif","TRADE","Trade Notification","Ruby trade notification",H.tradeNotification)
+H.addToggle("ruby_auto_restore","RUBY MISC","Auto-Restore Spawns on Rejoin","Persist Ruby visual state when file APIs are supported",function() return State.RubyAutoRestore end,function(v) State.RubyAutoRestore=v; if v then H.saveRubyState() end end)
+H.addToggle("ruby_auto_save","RUBY MISC","Auto-Save Base Changes","Ruby persistence switch",function() return State.RubyAutoSaveBase end,function(v) State.RubyAutoSaveBase=v; if v then H.saveRubyState() end end)
+H.addAction("ruby_save","RUBY MISC","Save Ruby Visual State","Manual local persistence",H.saveRubyState)
+H.addAction("ruby_restore","RUBY MISC","Restore Ruby Visual State","Manual restore",H.restoreRubyState)
+H.addAction("animal_list","RUBY MISC","Print Available Animals","Prints locally available animal names",function() local a=H.availableAnimals(); print("[H4SK] Animals ("..#a.."): "..table.concat(a,", ")); return true,"Printed "..#a.." animal names to console" end)
+
+
+-- ============================================================
+-- NINEHUB / NOTZ REMAINING UNIQUE PROTECTION + NEW-UI SETTINGS
+-- ============================================================
+State.AntiFling=false
+State.ClickToAP=false
+State.ProximityAP=false
+State.UIScale=1
+
+function H.setAntiFling(on)
+    State.AntiFling=on==true
+    H.clearConnection("AntiFling")
+    if not State.AntiFling then return end
+    local lastSafe=nil
+    H.setConnection("AntiFling",H.heartbeat(30,18,function()
+        local r=H.rootPart(); if not r then return end
+        local ownSpeed=r.AssemblyLinearVelocity.Magnitude
+        if ownSpeed<55 then lastSafe=r.CFrame end
+        local threat=false
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LP and p.Character then
+                local pr=p.Character:FindFirstChild("HumanoidRootPart")
+                if pr and (pr.Position-r.Position).Magnitude<16 and (pr.AssemblyLinearVelocity.Magnitude>85 or pr.AssemblyAngularVelocity.Magnitude>35) then threat=true; break end
+            end
+        end
+        if threat or ownSpeed>170 then
+            r.AssemblyLinearVelocity=Vector3.zero; r.AssemblyAngularVelocity=Vector3.zero
+            if lastSafe then r.CFrame=lastSafe end
+        end
+    end))
+end
+
+function H.playerFromScreenPoint(pos)
+    local cam=Workspace.CurrentCamera; if not cam then return nil end
+    local ray=cam:ViewportPointToRay(pos.X,pos.Y)
+    local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances={H.character()}
+    local hit=Workspace:Raycast(ray.Origin,ray.Direction*1500,params)
+    local inst=hit and hit.Instance
+    local model=inst and inst:FindFirstAncestorOfClass("Model")
+    return model and Players:GetPlayerFromCharacter(model) or nil
+end
+function H.setClickToAP(on)
+    State.ClickToAP=on==true; H.clearConnection("ClickToAP")
+    if not State.ClickToAP then return end
+    H.setConnection("ClickToAP",UIS.InputBegan:Connect(function(input,processed)
+        if processed or not State.ClickToAP then return end
+        if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+            local p=H.playerFromScreenPoint(input.Position)
+            if p and p~=LP then local ok,msg=H.runAdminCommand(p,State.AdminCommand); H.notify("CLICK TO AP",msg or (ok and "Done" or "Unavailable"),ok and "info" or "error") end
+        end
+    end))
+end
+function H.setProximityAP(on)
+    State.ProximityAP=on==true; H.clearConnection("ProximityAP")
+    if not State.ProximityAP then return end
+    local last=0
+    H.setConnection("ProximityAP",H.heartbeat(2,1,function()
+        if os.clock()-last<2 then return end
+        local p=H.nearestEnemy(15); if p then last=os.clock(); H.runAdminCommand(p,State.AdminCommand) end
+    end))
+end
+function H.setUIScale(v)
+    State.UIScale=math.clamp(tonumber(v) or 1,.55,1.25)
+    if MainGui then
+        local main=MainGui:FindFirstChild("Main"); local sc=main and main:FindFirstChildOfClass("UIScale")
+        if sc then sc.Scale=State.UIScale end
+    end
+end
+function H.resetUIPosition()
+    if not MainGui then return false,"UI unavailable" end
+    local main=MainGui:FindFirstChild("Main"); if main then main.Position=UDim2.fromScale(.5,.5); return true,"UI position reset" end
+    return false,"Main frame unavailable"
+end
+function H.unlockCurrentTarget()
+    local target=H.chooseBrainrot(State.StealMode); if not target then return false,"No target" end
+    local n=H.unlockPlot(target.plot); return true,"Unlock prompts triggered: "..tostring(n)
+end
+
+H.addToggle("anti_fling","PROTECTION","Anti Fling","Functional replacement for NineHub's visual-only Anti Fling control",function() return State.AntiFling end,H.setAntiFling)
+H.addAction("unlock_target","STEAL","Unlock Current Target","Manual version of Notz unlock function",H.unlockCurrentTarget)
+H.addToggle("click_ap","ADMIN","Click To Admin Panel","Click/tap a player to run the selected admin command",function() return State.ClickToAP end,H.setClickToAP)
+H.addToggle("proximity_ap","ADMIN","Proximity AP","Runs selected admin command on nearby player",function() return State.ProximityAP end,H.setProximityAP)
+H.addToggle("low_consumption","SETTINGS","Low Consumption Runtime","Reduces loop frequency, shares one Heartbeat dispatcher, caches character references and isolates callback errors",function() return State.LowConsumption end,H.setLowConsumption)
+H.addToggle("lock_ui","SETTINGS","Lock UI Dragging","Notz UI-lock behavior adapted to the merged UI",function() return State.MenuLocked end,function(v) State.MenuLocked=v end)
+H.addInput("menu_key","SETTINGS","Menu Toggle Key","KeyCode name, default RightShift",function() return State.MenuKey end,function(v) State.MenuKey=H.trim(v) end,false)
+H.addInput("rejoin_key","SETTINGS","Rejoin Key","Optional KeyCode name",function() return State.RejoinKey end,function(v) State.RejoinKey=H.trim(v) end,false)
+H.addInput("ui_scale","SETTINGS","UI Scale","0.55 - 1.25",function() return State.UIScale end,H.setUIScale,true)
+H.addAction("reset_ui_pos","SETTINGS","Reset UI Position","Notz Reset UI Positions adapted to this interface",H.resetUIPosition)
+
+-- ============================================================
+-- ONE NEW INTERFACE (not a wrapper around any source GUI)
+-- ============================================================
+function H.buildUI()
+    local sg=Instance.new("ScreenGui")
+    sg.Name="H4SK_SAB_TRUE_MERGE"
+    sg.ResetOnSpawn=false
+    sg.IgnoreGuiInset=true
+    sg.DisplayOrder=9999
+    sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    sg.Parent=UI_ROOT
+    MainGui=sg
+
+    local accent=Color3.fromRGB(95,255,168)
+    local accent2=Color3.fromRGB(72,180,255)
+    local bg=Color3.fromRGB(8,11,16)
+    local panel=Color3.fromRGB(13,17,24)
+    local card=Color3.fromRGB(18,23,32)
+    local muted=Color3.fromRGB(139,151,169)
+    local white=Color3.fromRGB(240,244,249)
+
+    local main=Instance.new("Frame")
+    main.Name="Main"
+    main.AnchorPoint=Vector2.new(.5,.5)
+    main.Position=UDim2.fromScale(.5,.5)
+    main.Size=UDim2.fromOffset(790,510)
+    main.BackgroundColor3=bg
+    main.BorderSizePixel=0
+    main.Parent=sg
+    local corner=Instance.new("UICorner"); corner.CornerRadius=UDim.new(0,18); corner.Parent=main
+    local stroke=Instance.new("UIStroke"); stroke.Color=Color3.fromRGB(48,60,78); stroke.Transparency=.25; stroke.Thickness=1; stroke.Parent=main
+
+    local scale=Instance.new("UIScale"); scale.Parent=main
+    local function fit()
+        local cam=Workspace.CurrentCamera; local vs=cam and cam.ViewportSize or Vector2.new(900,600)
+        scale.Scale=math.clamp(math.min((vs.X-24)/790,(vs.Y-24)/510),.62,1) * (State.UIScale or 1)
+    end
+    fit()
+    H.setConnection("UIViewport",Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(fit))
+    if Workspace.CurrentCamera then H.setConnection("UIViewportSize",Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(fit)) end
+
+    local side=Instance.new("Frame"); side.Name="Sidebar"; side.Size=UDim2.new(0,172,1,0); side.BackgroundColor3=panel; side.BorderSizePixel=0; side.Parent=main
+    local sideCorner=corner:Clone(); sideCorner.Parent=side
+    local mask=Instance.new("Frame"); mask.Position=UDim2.new(1,-18,0,0); mask.Size=UDim2.new(0,18,1,0); mask.BackgroundColor3=panel; mask.BorderSizePixel=0; mask.Parent=side
+
+    local brand=Instance.new("TextLabel"); brand.BackgroundTransparency=1; brand.Position=UDim2.fromOffset(18,16); brand.Size=UDim2.fromOffset(135,28); brand.Text="H4SK // SAB"; brand.Font=Enum.Font.GothamBold; brand.TextSize=18; brand.TextColor3=white; brand.TextXAlignment=Enum.TextXAlignment.Left; brand.Parent=side
+    local sub=Instance.new("TextLabel"); sub.BackgroundTransparency=1; sub.Position=UDim2.fromOffset(18,42); sub.Size=UDim2.fromOffset(135,18); sub.Text="TRUE MERGE"; sub.Font=Enum.Font.GothamBold; sub.TextSize=10; sub.TextColor3=accent; sub.TextXAlignment=Enum.TextXAlignment.Left; sub.Parent=side
+
+    local categories={"HOME","MOVEMENT","COMBAT","STEAL","TELEPORT","VISUALS","AUTOMATION","PROTECTION","ADMIN","SPAWNER","BASE","TRADE","RUBY MISC","SETTINGS"}
+    local catScroll=Instance.new("ScrollingFrame"); catScroll.Position=UDim2.fromOffset(10,76); catScroll.Size=UDim2.new(1,-20,1,-130); catScroll.BackgroundTransparency=1; catScroll.BorderSizePixel=0; catScroll.ScrollBarThickness=2; catScroll.ScrollBarImageColor3=Color3.fromRGB(70,85,105); catScroll.CanvasSize=UDim2.new(); catScroll.AutomaticCanvasSize=Enum.AutomaticSize.Y; catScroll.Parent=side
+    local catLayout=Instance.new("UIListLayout"); catLayout.Padding=UDim.new(0,6); catLayout.Parent=catScroll
+
+    local version=Instance.new("TextLabel"); version.BackgroundTransparency=1; version.Position=UDim2.new(0,18,1,-40); version.Size=UDim2.fromOffset(135,24); version.Text="ONE FILE • SHARED RUNTIME • NO BACKENDS"; version.TextWrapped=true; version.Font=Enum.Font.GothamMedium; version.TextSize=8; version.TextColor3=muted; version.TextXAlignment=Enum.TextXAlignment.Left; version.Parent=side
+
+    local top=Instance.new("Frame"); top.Position=UDim2.fromOffset(172,0); top.Size=UDim2.new(1,-172,0,76); top.BackgroundTransparency=1; top.Parent=main
+    local pageTitle=Instance.new("TextLabel"); pageTitle.BackgroundTransparency=1; pageTitle.Position=UDim2.fromOffset(20,12); pageTitle.Size=UDim2.fromOffset(230,28); pageTitle.Font=Enum.Font.GothamBold; pageTitle.TextSize=19; pageTitle.TextColor3=white; pageTitle.TextXAlignment=Enum.TextXAlignment.Left; pageTitle.Text="HOME"; pageTitle.Parent=top
+    local pageSub=Instance.new("TextLabel"); pageSub.BackgroundTransparency=1; pageSub.Position=UDim2.fromOffset(20,38); pageSub.Size=UDim2.fromOffset(270,20); pageSub.Font=Enum.Font.Gotham; pageSub.TextSize=10; pageSub.TextColor3=muted; pageSub.TextXAlignment=Enum.TextXAlignment.Left; pageSub.Text="Every gameplay function starts disabled"; pageSub.Parent=top
+
+    local search=Instance.new("TextBox"); search.Name="Search"; search.AnchorPoint=Vector2.new(1,0); search.Position=UDim2.new(1,-105,0,18); search.Size=UDim2.fromOffset(205,38); search.BackgroundColor3=card; search.BorderSizePixel=0; search.PlaceholderText="Search all functions..."; search.PlaceholderColor3=Color3.fromRGB(100,112,130); search.Text=""; search.ClearTextOnFocus=false; search.Font=Enum.Font.Gotham; search.TextSize=12; search.TextColor3=white; search.TextXAlignment=Enum.TextXAlignment.Left; search.Parent=top
+    local searchCorner=Instance.new("UICorner"); searchCorner.CornerRadius=UDim.new(0,10); searchCorner.Parent=search
+    local searchPad=Instance.new("UIPadding"); searchPad.PaddingLeft=UDim.new(0,12); searchPad.PaddingRight=UDim.new(0,12); searchPad.Parent=search
+
+    local minimize=Instance.new("TextButton"); minimize.AnchorPoint=Vector2.new(1,0); minimize.Position=UDim2.new(1,-58,0,18); minimize.Size=UDim2.fromOffset(38,38); minimize.BackgroundColor3=card; minimize.BorderSizePixel=0; minimize.Text="—"; minimize.Font=Enum.Font.GothamBold; minimize.TextSize=18; minimize.TextColor3=white; minimize.Parent=top; searchCorner:Clone().Parent=minimize
+    local close=Instance.new("TextButton"); close.AnchorPoint=Vector2.new(1,0); close.Position=UDim2.new(1,-14,0,18); close.Size=UDim2.fromOffset(38,38); close.BackgroundColor3=Color3.fromRGB(54,25,31); close.BorderSizePixel=0; close.Text="×"; close.Font=Enum.Font.GothamBold; close.TextSize=20; close.TextColor3=Color3.fromRGB(255,145,160); close.Parent=top; searchCorner:Clone().Parent=close
+
+    local content=Instance.new("ScrollingFrame"); content.Name="Content"; content.Position=UDim2.fromOffset(190,76); content.Size=UDim2.new(1,-208,1,-118); content.BackgroundTransparency=1; content.BorderSizePixel=0; content.ScrollBarThickness=3; content.ScrollBarImageColor3=Color3.fromRGB(70,85,105); content.CanvasSize=UDim2.new(); content.AutomaticCanvasSize=Enum.AutomaticSize.Y; content.Parent=main
+    local layout=Instance.new("UIListLayout"); layout.Padding=UDim.new(0,8); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Parent=content
+    local contentPad=Instance.new("UIPadding"); contentPad.PaddingBottom=UDim.new(0,10); contentPad.Parent=content
+
+    local status=Instance.new("TextLabel"); status.Position=UDim2.new(0,190,1,-34); status.Size=UDim2.new(1,-210,0,24); status.BackgroundTransparency=1; status.Font=Enum.Font.GothamMedium; status.TextSize=10; status.TextColor3=muted; status.TextXAlignment=Enum.TextXAlignment.Left; status.Text="Ready • low-consumption runtime ON • gameplay features start OFF"; status.Parent=main
+
+    local bubble=Instance.new("TextButton"); bubble.Name="Bubble"; bubble.AnchorPoint=Vector2.new(1,1); bubble.Position=UDim2.new(1,-18,1,-18); bubble.Size=UDim2.fromOffset(52,52); bubble.BackgroundColor3=Color3.fromRGB(12,18,26); bubble.BorderSizePixel=0; bubble.Text="H4"; bubble.Font=Enum.Font.GothamBold; bubble.TextSize=16; bubble.TextColor3=accent; bubble.Visible=false; bubble.Parent=sg; local bc=Instance.new("UICorner"); bc.CornerRadius=UDim.new(1,0); bc.Parent=bubble; local bs=Instance.new("UIStroke"); bs.Color=accent; bs.Transparency=.2; bs.Parent=bubble
+
+    local activeCategory="HOME"
+    local categoryButtons={}
+    local controls={}
+
+    local function setStatus(text,good)
+        status.Text=tostring(text or "")
+        status.TextColor3=good==false and Color3.fromRGB(255,120,135) or (good==true and accent or muted)
+    end
+
+    local function invokeFeature(feature,value)
+        if feature.kind=="toggle" then
+            local ok,err=H.protected(feature.name,feature.set,value)
+            if not ok then setStatus(feature.name.." failed: "..tostring(err):match("^[^\n]+"),false); return false end
+            setStatus(feature.name..": "..((feature.get and feature.get()) and "ON" or "OFF"),true); return true
+        elseif feature.kind=="input" or feature.kind=="choice" then
+            local ok,err=H.protected(feature.name,feature.set,value)
+            if not ok then setStatus(feature.name.." failed: "..tostring(err):match("^[^\n]+"),false); return false end
+            setStatus(feature.name.." updated",true); return true
+        elseif feature.kind=="action" then
+            local ran,a,b=H.protected(feature.name,feature.action)
+            if not ran then setStatus(feature.name.." failed",false); return false end
+            local success,msg
+            if type(a)=="boolean" then success=a; msg=b else success=true; msg=a end
+            setStatus(msg or feature.name,success~=false); return success~=false
+        end
+    end
+
+    local function clearRows()
+        for _,child in ipairs(content:GetChildren()) do if child~=layout and child~=contentPad then child:Destroy() end end
+        controls={}
+    end
+
+    local function makeControl(feature,row)
+        if feature.kind=="toggle" then
+            local btn=Instance.new("TextButton"); btn.AnchorPoint=Vector2.new(1,.5); btn.Position=UDim2.new(1,-14,.5,0); btn.Size=UDim2.fromOffset(56,28); btn.BorderSizePixel=0; btn.AutoButtonColor=false; btn.Font=Enum.Font.GothamBold; btn.TextSize=10; btn.Parent=row
+            local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(1,0); c.Parent=btn
+            local function refresh()
+                local on=feature.get and feature.get() or false
+                btn.Text=on and "ON" or "OFF"; btn.BackgroundColor3=on and Color3.fromRGB(32,115,76) or Color3.fromRGB(38,44,56); btn.TextColor3=on and Color3.fromRGB(190,255,218) or muted
+            end
+            refresh(); btn.Activated:Connect(function() invokeFeature(feature,not feature.get()); refresh() end)
+            controls[feature.id]=refresh
+        elseif feature.kind=="action" then
+            local btn=Instance.new("TextButton"); btn.AnchorPoint=Vector2.new(1,.5); btn.Position=UDim2.new(1,-14,.5,0); btn.Size=UDim2.fromOffset(92,30); btn.BackgroundColor3=Color3.fromRGB(26,61,55); btn.BorderSizePixel=0; btn.Text="RUN"; btn.TextColor3=accent; btn.Font=Enum.Font.GothamBold; btn.TextSize=10; btn.Parent=row; local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,9); c.Parent=btn
+            btn.Activated:Connect(function() btn.Text="..."; invokeFeature(feature); task.delay(.25,function() if btn.Parent then btn.Text="RUN" end end) end)
+        elseif feature.kind=="input" then
+            local box=Instance.new("TextBox"); box.AnchorPoint=Vector2.new(1,.5); box.Position=UDim2.new(1,-14,.5,0); box.Size=UDim2.fromOffset(150,31); box.BackgroundColor3=Color3.fromRGB(11,15,22); box.BorderSizePixel=0; box.ClearTextOnFocus=false; box.Font=Enum.Font.GothamMedium; box.TextSize=10; box.TextColor3=white; box.PlaceholderText="value"; box.Text=tostring(feature.get and feature.get() or ""); box.Parent=row; local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,8); c.Parent=box; local p=Instance.new("UIPadding"); p.PaddingLeft=UDim.new(0,9); p.PaddingRight=UDim.new(0,9); p.Parent=box
+            box.FocusLost:Connect(function() invokeFeature(feature,box.Text); box.Text=tostring(feature.get and feature.get() or box.Text) end)
+        elseif feature.kind=="choice" then
+            local btn=Instance.new("TextButton"); btn.AnchorPoint=Vector2.new(1,.5); btn.Position=UDim2.new(1,-14,.5,0); btn.Size=UDim2.fromOffset(150,31); btn.BackgroundColor3=Color3.fromRGB(11,15,22); btn.BorderSizePixel=0; btn.Font=Enum.Font.GothamBold; btn.TextSize=10; btn.TextColor3=accent2; btn.Parent=row; local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,8); c.Parent=btn
+            local function refresh() btn.Text=tostring(feature.get and feature.get() or feature.options[1]).."  ›" end
+            refresh(); btn.Activated:Connect(function()
+                local cur=feature.get and feature.get() or feature.options[1]; local idx=1
+                for i,v in ipairs(feature.options) do if v==cur then idx=i; break end end
+                idx=idx%#feature.options+1; invokeFeature(feature,feature.options[idx]); refresh()
+            end)
+            controls[feature.id]=refresh
+        end
+    end
+
+    local function render()
+        clearRows()
+        local q=H.lower(H.trim(search.Text)); local count=0
+        for _,feature in ipairs(FeatureList) do
+            local hay=H.lower(feature.name.." "..feature.description.." "..feature.category)
+            local match=(q~="" and hay:find(q,1,true)~=nil) or (q=="" and feature.category==activeCategory)
+            if match then
+                count=count+1
+                local row=Instance.new("Frame"); row.Name=feature.id; row.Size=UDim2.new(1,-4,0,64); row.BackgroundColor3=card; row.BorderSizePixel=0; row.LayoutOrder=count; row.Parent=content
+                local rc=Instance.new("UICorner"); rc.CornerRadius=UDim.new(0,12); rc.Parent=row
+                local name=Instance.new("TextLabel"); name.BackgroundTransparency=1; name.Position=UDim2.fromOffset(14,8); name.Size=UDim2.new(1,-190,0,22); name.Text=feature.name; name.Font=Enum.Font.GothamBold; name.TextSize=12; name.TextColor3=white; name.TextXAlignment=Enum.TextXAlignment.Left; name.Parent=row
+                local desc=Instance.new("TextLabel"); desc.BackgroundTransparency=1; desc.Position=UDim2.fromOffset(14,31); desc.Size=UDim2.new(1,-190,0,24); desc.Text=feature.description or ""; desc.TextTruncate=Enum.TextTruncate.AtEnd; desc.Font=Enum.Font.Gotham; desc.TextSize=9; desc.TextColor3=muted; desc.TextXAlignment=Enum.TextXAlignment.Left; desc.Parent=row
+                makeControl(feature,row)
+            end
+        end
+        if count==0 then
+            local empty=Instance.new("TextLabel"); empty.Size=UDim2.new(1,-4,0,90); empty.BackgroundTransparency=1; empty.Text="No matching functions"; empty.Font=Enum.Font.GothamBold; empty.TextSize=13; empty.TextColor3=muted; empty.Parent=content
+        end
+        pageTitle.Text=q~="" and "SEARCH" or activeCategory
+        pageSub.Text=q~="" and ("Results for “"..search.Text.."”") or (tostring(count).." integrated controls")
+    end
+
+    for _,cat in ipairs(categories) do
+        local btn=Instance.new("TextButton"); btn.Name=cat; btn.Size=UDim2.new(1,0,0,34); btn.BackgroundColor3=Color3.fromRGB(18,23,31); btn.BackgroundTransparency=.45; btn.BorderSizePixel=0; btn.Text=cat; btn.TextXAlignment=Enum.TextXAlignment.Left; btn.Font=Enum.Font.GothamBold; btn.TextSize=10; btn.TextColor3=muted; btn.Parent=catScroll
+        local cc=Instance.new("UICorner"); cc.CornerRadius=UDim.new(0,9); cc.Parent=btn
+        local pad=Instance.new("UIPadding"); pad.PaddingLeft=UDim.new(0,12); pad.Parent=btn
+        categoryButtons[cat]=btn
+        btn.Activated:Connect(function()
+            activeCategory=cat; search.Text=""
+            for n,b in pairs(categoryButtons) do b.BackgroundTransparency=n==cat and 0 or .45; b.BackgroundColor3=n==cat and Color3.fromRGB(27,48,45) or Color3.fromRGB(18,23,31); b.TextColor3=n==cat and accent or muted end
+            render()
+        end)
+    end
+    categoryButtons.HOME.BackgroundTransparency=0; categoryButtons.HOME.BackgroundColor3=Color3.fromRGB(27,48,45); categoryButtons.HOME.TextColor3=accent
+
+    search:GetPropertyChangedSignal("Text"):Connect(render)
+
+    -- Dragging works with mouse and touch.
+    do
+        local dragging=false; local dragStart; local startPos; local dragInput
+        top.InputBegan:Connect(function(input)
+            if State.MenuLocked then return end
+            if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then dragging=true; dragStart=input.Position; startPos=main.Position; dragInput=input; input.Changed:Connect(function() if input.UserInputState==Enum.UserInputState.End then dragging=false end end) end
+        end)
+        H.setConnection("UIDragInput", UIS.InputChanged:Connect(function(input)
+            if dragging and (input==dragInput or input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
+                local delta=input.Position-dragStart; main.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+            end
+        end))
+    end
+
+    local function setVisible(on)
+        State.MenuVisible=on; main.Visible=on; bubble.Visible=not on
+    end
+    minimize.Activated:Connect(function() setVisible(false) end)
+    bubble.Activated:Connect(function() setVisible(true) end)
+
+    close.Activated:Connect(function()
+        H.shutdown()
+        sg:Destroy()
+    end)
+
+    H.setConnection("MenuKey",UIS.InputBegan:Connect(function(input,processed)
+        if processed then return end
+        if input.KeyCode and input.KeyCode.Name==State.MenuKey then setVisible(not State.MenuVisible)
+        elseif State.RejoinKey~="" and input.KeyCode and input.KeyCode.Name==State.RejoinKey then H.rubyRejoin() end
+    end))
+
+    H.setConnection("NotifyUI", NotifyEvent.Event:Connect(function(title,msg,kind)
+        if status and status.Parent then
+            setStatus(tostring(title)..(msg~="" and (" • "..msg) or ""),kind~="error")
+        end
+    end))
+
+    render()
+    return sg
+end
+
+function H.shutdown()
+    -- Toggle setters restore reversible state; no legacy hub/backend exists to stop.
+    local toggles={
+        {"AutoSteal",H.setAutoSteal},{"InfiniteJump",H.setInfiniteJump},{"Fly",H.setFly},{"God",H.setGod},{"Chase",H.setChase},
+        {"NoClip",H.setNoClip},{"HitboxVisual",H.setHitboxVisual},{"Float",H.setFloat},{"SpinBot",H.setSpinBot},{"Unwalk",H.setUnwalk},
+        {"NoPlayerCollision",H.setNoPlayerCollision},{"SpeedEnabled",H.setSpeedEnabled},{"AutoCarrySpeed",H.setAutoCarrySpeed},{"CarpetSpeed",H.setCarpetSpeed},
+        {"AutoTPDown",H.setAutoTPDown},{"AntiRagdoll",H.setAntiRagdoll},{"RagdollCountdown",H.setRagdollCountdown},{"ResetOnDeath",H.setResetOnDeath},
+        {"BatAimbot",H.setBatAimbot},{"AntiDesync",H.setAntiDesync},{"BatCounter",H.setBatCounter},{"MedusaCounter",H.setMedusaCounter},{"AutoResetOnMed",H.setAutoResetOnMed},
+        {"AutoLeft",H.setAutoLeft},{"AutoRight",H.setAutoRight},{"Taunt",H.setTaunt},{"AutoStealSpeed",H.setStealSpeed},{"AutoUnlock",H.setAutoUnlock},
+        {"AutoTPBack",H.setAutoTPBack},{"AutoKickOnSteal",H.setAutoKickOnSteal},{"AutoBuy",H.setAutoBuy},{"RainbowBase",H.setRainbowBase},
+        {"BaseXray",H.setBaseXray},{"FPSBoost",H.setFPSBoost},{"StretchRez",H.setStretchRez},{"AntiBeeDisco",H.setAntiBeeDisco},{"AutoDestroyTurrets",H.setAutoDestroyTurrets},
+        {"CleanErrorGuis",H.setCleanErrorGuis},{"Alerts",H.setAlerts},{"AutoResetBalloon",H.setAutoResetBalloon},{"AntiFling",H.setAntiFling},{"ClickToAP",H.setClickToAP},{"ProximityAP",H.setProximityAP},{"RubySignCycle",H.setSignCycle}
+    }
+    for _,pair in ipairs(toggles) do if State[pair[1]] then pcall(pair[2],false) end end
+    State.PlayerESP=false; State.BoxESP=false; State.TracerESP=false; State.BrainrotESP=false; State.SubspaceESP=false; State.DuelBaseESP=false; State.BestBrainrotTracer=false; State.LineToBase=false; State.ServerPositionHUD=false; State.StealSpeedHUD=false
+    pcall(H.refreshVisualRuntime)
+    -- Direct connections used by a few legacy-compatible mechanics are also released here.
+    if godHealthConn then pcall(function() godHealthConn:Disconnect() end); godHealthConn=nil end
+    if godCharConn then pcall(function() godCharConn:Disconnect() end); godCharConn=nil end
+    if fpsDescConn then pcall(function() fpsDescConn:Disconnect() end); fpsDescConn=nil end
+    if antiRagCharConns then
+        for _,c in ipairs(antiRagCharConns) do pcall(function() c:Disconnect() end) end
+        antiRagCharConns={}
+    end
+    for k,c in pairs(Connections) do pcall(function() c:Disconnect() end); Connections[k]=nil end
+    H.clearHeartbeatJobs()
+    for key,_ in pairs(Objects) do pcall(H.clearObject,key) end
+    pcall(H.clearHitboxVisual)
+    if alertSound then pcall(function() alertSound:Destroy() end); alertSound=nil end
+    H.closeFakeTrade()
+end
+
+-- IMPORTANT: execution reaches only this UI construction. No gameplay toggle is invoked here.
+H.buildUI()
