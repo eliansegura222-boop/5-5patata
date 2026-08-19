@@ -6861,12 +6861,29 @@ task.defer(function()
 	refreshCategoryView()
 end)
 
--- Todos los usuarios, incluidos los VIP, pasan primero por la key de inicio.
--- La selección PC/CELULAR aparece únicamente después de validarla.
-KeyFrame.Visible = true
+-- Flujo de acceso:
+--   VIP  -> selector PC/CELULAR directamente (sin pedir key).
+--   FREE -> key de inicio -> selector PC/CELULAR.
+-- Si la primera consulta remota no marcó VIP, hacemos un reintento antes de
+-- mostrar la key para evitar falsos FREE por un fallo temporal de red.
+local startupIsVip = HEXA_IS_VIP
+if not startupIsVip then
+	local refreshed = RemoteVipState:Refresh()
+	if refreshed then
+		syncVipAccessFromGithub()
+		startupIsVip = HEXA_IS_VIP
+	end
+end
+
 MainFrame.Visible = false
 DeviceSelector.Frame.Visible = false
-animateOpen(KeyFrame, KEY_SIZE, "BACK")
+if startupIsVip then
+	KeyFrame.Visible = false
+	task.defer(openDeviceSelector)
+else
+	KeyFrame.Visible = true
+	animateOpen(KeyFrame, KEY_SIZE, "BACK")
+end
 
 local minimized = false
 MinButton.MouseButton1Click:Connect(function()
