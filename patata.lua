@@ -689,6 +689,79 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	return btn, stroke
 end
 
+local function decorateDeviceSelectorButton(button: TextButton, deviceKind: string)
+	button.TextXAlignment = Enum.TextXAlignment.Left
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 42)
+	padding.Parent = button
+
+	local iconHolder = Instance.new("Frame")
+	iconHolder.Name = "DeviceIcon"
+	iconHolder.BackgroundTransparency = 1
+	iconHolder.Size = UDim2.fromOffset(20, 20)
+	iconHolder.Position = UDim2.new(0, 12, 0.5, -10)
+	iconHolder.ZIndex = (button.ZIndex or 2) + 1
+	iconHolder.Parent = button
+
+	if deviceKind == "PC" then
+		local screen = Instance.new("Frame")
+		screen.BackgroundTransparency = 1
+		screen.Size = UDim2.new(1, 0, 0.62, 0)
+		screen.Position = UDim2.new(0, 0, 0.04, 0)
+		screen.BorderSizePixel = 0
+		screen.ZIndex = iconHolder.ZIndex
+		screen.Parent = iconHolder
+		mkCorner(screen, 4)
+		mkStroke(screen, BUTTON_TEXT_COLOR, 0, 2)
+
+		local stem = Instance.new("Frame")
+		stem.BackgroundColor3 = BUTTON_TEXT_COLOR
+		stem.BorderSizePixel = 0
+		stem.Size = UDim2.fromOffset(3, 5)
+		stem.Position = UDim2.new(0.5, -1, 0.66, 0)
+		stem.ZIndex = iconHolder.ZIndex
+		stem.Parent = iconHolder
+		mkCorner(stem, 1)
+
+		local base = Instance.new("Frame")
+		base.BackgroundColor3 = BUTTON_TEXT_COLOR
+		base.BorderSizePixel = 0
+		base.Size = UDim2.fromOffset(12, 2)
+		base.Position = UDim2.new(0.5, -6, 0.9, -2)
+		base.ZIndex = iconHolder.ZIndex
+		base.Parent = iconHolder
+		mkCorner(base, 1)
+	else
+		local phone = Instance.new("Frame")
+		phone.BackgroundTransparency = 1
+		phone.Size = UDim2.fromOffset(12, 18)
+		phone.Position = UDim2.new(0.5, -6, 0.5, -9)
+		phone.BorderSizePixel = 0
+		phone.ZIndex = iconHolder.ZIndex
+		phone.Parent = iconHolder
+		mkCorner(phone, 4)
+		mkStroke(phone, BUTTON_TEXT_COLOR, 0, 2)
+
+		local speaker = Instance.new("Frame")
+		speaker.BackgroundColor3 = BUTTON_TEXT_COLOR
+		speaker.BorderSizePixel = 0
+		speaker.Size = UDim2.fromOffset(4, 1)
+		speaker.Position = UDim2.new(0.5, -2, 0, 3)
+		speaker.ZIndex = iconHolder.ZIndex
+		speaker.Parent = phone
+		mkCorner(speaker, 1)
+
+		local homeBar = Instance.new("Frame")
+		homeBar.BackgroundColor3 = BUTTON_TEXT_COLOR
+		homeBar.BorderSizePixel = 0
+		homeBar.Size = UDim2.fromOffset(5, 1)
+		homeBar.Position = UDim2.new(0.5, -2, 1, -4)
+		homeBar.ZIndex = iconHolder.ZIndex
+		homeBar.Parent = phone
+		mkCorner(homeBar, 1)
+	end
+end
+
 local function createToggleButton(parent: Instance, text: string, size: UDim2, pos: UDim2)
 	local btn = Instance.new("TextButton")
 	btn.Size = size
@@ -1782,6 +1855,7 @@ local function refreshDeviceSpecificTexts()
 			end
 		end
 	end
+	if FloatingButtonManager then FloatingButtonManager:RefreshAll() end
 end
 
 function Lang.Set(language)
@@ -1945,6 +2019,8 @@ DeviceSelector.Subtitle.Parent = DeviceSelector.Frame
 
 DeviceSelector.PCButton = neonButton(DeviceSelector.Frame, "COMPUTADORA", UDim2.new(0.5, -25, 0, 44), UDim2.new(0, 20, 0, 111))
 DeviceSelector.MobileButton = neonButton(DeviceSelector.Frame, "CELULAR", UDim2.new(0.5, -25, 0, 44), UDim2.new(0.5, 5, 0, 111))
+decorateDeviceSelectorButton(DeviceSelector.PCButton, "PC")
+decorateDeviceSelectorButton(DeviceSelector.MobileButton, "MOBILE")
 
 DeviceSelector.Hint = Instance.new("TextLabel")
 DeviceSelector.Hint.BackgroundTransparency = 1
@@ -3243,14 +3319,34 @@ function FloatingButtonManager:CreateSpecialOption(label)
 	option:SetAttribute("HexaNoKeybind", true)
 	option:SetAttribute("HexaNoFloating", true)
 	option:SetAttribute("HexaNoFavorite", true)
+	-- Se actualiza manualmente desde RefreshEntry para respetar dispositivo + idioma.
+	option:SetAttribute("HexaNoTranslate", true)
 	return option
 end
 
 function FloatingButtonManager:GetTargetLabel(target)
-	return tostring(target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
+	-- Usa primero el texto específico del dispositivo. Esto evita que los
+	-- controles flotantes de móvil conserven nombres creados para PC.
+	local devicePrefix = MOBILE_DEVICE and "HexaDeviceMobile" or "HexaDeviceDesktop"
+	local languageSuffix = Lang.Current == "EN" and "EN" or "ES"
+	local deviceText = target:GetAttribute(devicePrefix .. languageSuffix)
+	if typeof(deviceText) == "string" and deviceText ~= "" then
+		return deviceText
+	end
+
+	local spanish = target:GetAttribute("HexaSpanishBaseText")
+		or target:GetAttribute("BaseText")
+		or target.Text
+		or "FUNCIÓN"
+	spanish = tostring(spanish)
+	return Lang.Current == "EN" and Lang.ToEnglish(spanish) or spanish
 end
 
 function FloatingButtonManager:GetSpanishTargetLabel(target)
+	local deviceText = target:GetAttribute(MOBILE_DEVICE and "HexaDeviceMobileES" or "HexaDeviceDesktopES")
+	if typeof(deviceText) == "string" and deviceText ~= "" then
+		return deviceText
+	end
 	return tostring(target:GetAttribute("HexaSpanishBaseText") or target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
 end
 
@@ -3272,7 +3368,21 @@ function FloatingButtonManager:RefreshEntry(id)
 	local active = target:GetAttribute("IsActive") == true
 	local allowed = target:GetAttribute("HexaVipOnly") ~= true or HEXA_IS_VIP
 	button.Visible = MOBILE_DEVICE and entry.Enabled == true and allowed
-	button.Text = self:GetTargetLabel(target)
+	local currentLabel = self:GetTargetLabel(target)
+	button.Text = currentLabel
+
+	-- El nombre de la opción dentro de BOTONES FLOTANTES también debe seguir
+	-- el perfil/idioma actual (p. ej. Ratón -> Toque al elegir celular).
+	if entry.Option and entry.Option.Parent then
+		local prefix = Lang.Current == "EN" and "FLOATING BUTTON: " or "BOTÓN FLOTANTE: "
+		local optionText = prefix .. currentLabel
+		Lang.Updating[entry.Option] = true
+		entry.Option.Text = optionText
+		entry.Option:SetAttribute("BaseText", optionText)
+		entry.Option:SetAttribute("HexaSpanishBaseText", "BOTÓN FLOTANTE: " .. self:GetSpanishTargetLabel(target))
+		Lang.Updating[entry.Option] = nil
+	end
+
 	button.BackgroundColor3 = active and Color3.fromRGB(42, 42, 42) or Color3.fromRGB(12, 12, 12)
 	if entry.Stroke then entry.Stroke.Transparency = active and 0 or 0.18 end
 end
