@@ -175,6 +175,7 @@ local VipControls = {}
 local VipStateListeners = {}
 local notifyVipLocked = function() end
 local BUTTON_TEXT_COLOR = Color3.fromRGB(255, 255, 255)
+local MOBILE_DEVICE = false
 
 -- Configuración persistente por usuario. Nada se carga automáticamente: el
 -- usuario debe pulsar el botón CARGAR CONFIGURACIÓN de forma explícita.
@@ -526,7 +527,7 @@ local GUI_VIEWPORT_SIZE = workspace.CurrentCamera and workspace.CurrentCamera.Vi
 local DEVICE_HINT_MOBILE = UserInputService.TouchEnabled and (not UserInputService.KeyboardEnabled or GUI_VIEWPORT_SIZE.X < 900)
 -- La detección automática se usa únicamente como sugerencia. Hasta que el usuario
 -- elija PC/CELULAR después de la key, no se activa ningún perfil de dispositivo.
-local MOBILE_DEVICE = false
+MOBILE_DEVICE = false
 local function calculateMainSize()
 	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or GUI_VIEWPORT_SIZE
 	return UDim2.fromOffset(
@@ -1493,8 +1494,6 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"PERSONALIZACIÓN", "CUSTOMIZATION"},
 	{"SUBIR", "UP"},
 	{"BAJAR", "DOWN"},
-	{"MARCA DE AGUA: ARRIBA DERECHA", "WATERMARK: TOP RIGHT"},
-	{"MARCA DE AGUA:", "WATERMARK:"},
 	{"ARRIBA DERECHA", "TOP RIGHT"},
 	{"ARRIBA IZQUIERDA", "TOP LEFT"},
 	{"ABAJO DERECHA", "BOTTOM RIGHT"},
@@ -1524,7 +1523,6 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"¡Clave incorrecta!", "Incorrect key!"},
 	{"¡COPIADO!", "COPIED!"},
 	{"Por Nony", "By Nony"},
-	{"H3X4 X  •  POR NONY", "H3X4 X  •  BY NONY"},
 	{"H3X4 X - TUTORIAL", "H3X4 X - TUTORIAL"},
 	{"ENTENDIDO", "GOT IT"},
 	{"¿CERRAR H3X4 X?", "CLOSE H3X4 X?"},
@@ -1546,7 +1544,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"Distancia de seguimiento", "Follow distance"},
 	{"ANTI VOID", "ANTI VOID"},
 	{"ESPECTAR JUGADOR", "SPECTATE PLAYER"},
-	{"BOTÓN AIM FLOTANTE (MÓVIL)", "FLOATING AIM BUTTON (MOBILE)"},
+	{"BOTÓN AIM FLOTANTE", "FLOATING AIM BUTTON"},
 	{"PERSISTENCIA DE OBJETIVO", "TARGET PERSISTENCE"},
 	{"ELIGE TU DISPOSITIVO", "CHOOSE YOUR DEVICE"},
 	{"Selecciona el dispositivo que estás usando. El panel y los controles se adaptarán a esa elección.", "Select the device you are using. The panel and controls will adapt to that choice."},
@@ -2806,9 +2804,13 @@ refreshCategoryView = function()
 			local units = getCardUnits(card)
 			restoreCardLayout(card, units)
 			if not searching and CategoryUI.Active ~= "VIP" then fitContentCard(card, units) end
+			local cardCategory = CategoryUI:GetCardCategory(card)
+			local desktopOnly = card:GetAttribute("HexaDesktopOnly") == true or cardCategory == "KEYBINDS"
 			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
 			local visible
-			if searching then
+			if MOBILE_DEVICE and desktopOnly then
+				visible = false
+			elseif searching then
 				-- El buscador es global: muestra únicamente funciones coincidentes,
 				-- independientemente de la categoría que estuviera seleccionada.
 				visible = card ~= FavoritesCard and showSearchUnits(card, units, searchQuery) > 0
@@ -2903,9 +2905,11 @@ KeybindManager = {
 }
 KeybindManager.Card.LayoutOrder = 95
 KeybindManager.Card:SetAttribute("HexaCategoryOverride", "KEYBINDS")
+KeybindManager.Card:SetAttribute("HexaDesktopOnly", true)
 sectionTitle(KeybindManager.Card, "KEYBINDS", UDim2.new(0, 16, 0, 14))
 
 function KeybindManager:IsEligible(targetButton)
+	if MOBILE_DEVICE then return false end
 	if not targetButton or not targetButton.Parent then return false end
 	if targetButton:GetAttribute("IsToggle") ~= true then return false end
 	if targetButton:GetAttribute("HexaNoKeybind") == true then return false end
@@ -2937,8 +2941,13 @@ function KeybindManager:RefreshButton(id)
 end
 
 function KeybindManager:SetBinding(id, binding)
+	local target = self.Targets[id]
+	if target and target:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
+		return false
+	end
 	self.Bindings[id] = binding
 	self:RefreshButton(id)
+	return true
 end
 
 function KeybindManager:DecodeBinding(kind, name)
@@ -2967,10 +2976,15 @@ function KeybindManager:RegisterToggleButton(targetButton)
 	self.Buttons[id] = keyButton
 	self.Card.Size = UDim2.new(1, 0, 0, math.max(96, y + 50))
 	self.Card:SetAttribute("HexaMobileBaseHeight", self.Card.Size.Y.Offset)
+	if targetButton:GetAttribute("HexaVipOnly") == true then
+		keyButton:SetAttribute("HexaVipKeybind", true)
+		markVipControl(keyButton)
+	end
 	self:RefreshButton(id)
 
 	keyButton.MouseButton1Click:Connect(function()
-		if self.Capturing then return end
+		if MOBILE_DEVICE or self.Capturing then return end
+		if targetButton:GetAttribute("HexaVipOnly") == true and not requireVip() then return end
 		self.Capturing = id
 		self.ReadyAt = os.clock() + 0.12
 		local label = tostring(targetButton:GetAttribute("BaseText") or targetButton.Text or "FUNCIÓN")
@@ -2991,7 +3005,9 @@ end
 function KeybindManager:Serialize()
 	local result = {}
 	for id, binding in pairs(self.Bindings) do
-		if typeof(binding) == "EnumItem" then
+		local target = self.Targets[id]
+		local allowed = not target or target:GetAttribute("HexaVipOnly") ~= true or HEXA_IS_VIP
+		if allowed and typeof(binding) == "EnumItem" then
 			result[id] = {kind = binding.EnumType == Enum.KeyCode and "KeyCode" or "UserInputType", name = binding.Name}
 		end
 	end
@@ -3008,7 +3024,22 @@ function KeybindManager:LoadSerialized(data)
 	end
 end
 
+addVipStateListener(function(isVip)
+	if isVip then return end
+	if KeybindManager.Capturing then
+		local target = KeybindManager.Targets[KeybindManager.Capturing]
+		if target and target:GetAttribute("HexaVipOnly") == true then KeybindManager.Capturing = nil end
+	end
+	for id, target in pairs(KeybindManager.Targets) do
+		if target and target:GetAttribute("HexaVipOnly") == true then
+			KeybindManager.Bindings[id] = nil
+			KeybindManager:RefreshButton(id)
+		end
+	end
+end)
+
 AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, processed)
+	if MOBILE_DEVICE then KeybindManager.Capturing = nil; return end
 	if UserInputService:GetFocusedTextBox() then return end
 	if KeybindManager.Capturing then
 		if os.clock() < KeybindManager.ReadyAt then return end
@@ -3048,7 +3079,9 @@ AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, p
 		end
 		if matched then
 			local target = KeybindManager.Targets[id]
-			if target and target.Parent then ConfigManager:ActivateToggle(target) end
+			if target and target.Parent and not (target:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP) then
+				ConfigManager:ActivateToggle(target)
+			end
 		end
 	end
 end))
@@ -3197,7 +3230,7 @@ local MobileAim = {
 	DragPosition = nil,
 	DragMoved = false,
 }
-MobileAim.OptionButton = createToggleButton(CombatCard, "BOTÓN AIM FLOTANTE (MÓVIL)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 386))
+MobileAim.OptionButton = createToggleButton(CombatCard, "BOTÓN AIM FLOTANTE", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 386))
 MobileAim.OptionButton:SetAttribute("HexaNoKeybind", true)
 MobileAim.OptionButton.Visible = MOBILE_DEVICE
 
@@ -3472,7 +3505,7 @@ Tutorial.Text.Position = UDim2.new(0, 12, 0, 12)
 Tutorial.Text.Size = UDim2.new(1, -24, 0, 0)
 Tutorial.Text.AutomaticSize = Enum.AutomaticSize.Y
 Tutorial.Text.Text = [[PUNTERÍA AUTOMÁTICA
-Activa la puntería a la cabeza o al cuerpo. En computadora puedes asignar una tecla o botón del ratón. En celular puedes elegir activación automática, al apuntar o al disparar.
+Activa la puntería a la cabeza o al cuerpo. En computadora puedes configurar atajos desde KEYBINDS. En celular usa el Botón aim flotante y los controles táctiles.
 
 CÍRCULO FOV
 Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
@@ -5663,6 +5696,11 @@ task.spawn(function()
 
 		local function bindToggle(button, settingName, callback)
 			local handler = function()
+				if MOBILE_DEVICE and button:GetAttribute("HexaDesktopOnly") == true then
+					Settings[settingName] = false
+					setActive(button, false)
+					return
+				end
 				if button:GetAttribute("HexaVipOnly") == true and not requireVip() then return end
 				Settings[settingName] = not Settings[settingName]
 				setActive(button, Settings[settingName])
@@ -6460,6 +6498,7 @@ local function applyDeviceProfile(mode)
 	for _, definition in ipairs(CategoryUI.Definitions) do
 		local button = CategoryUI.Buttons[definition.Key]
 		if button then
+			button.Visible = not (MOBILE_DEVICE and definition.Key == "KEYBINDS")
 			button.Size = MOBILE_DEVICE
 				and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 46), 33)
 				or UDim2.new(1, -8, 0, 27)
@@ -6467,6 +6506,9 @@ local function applyDeviceProfile(mode)
 			if corner then corner.CornerRadius = UDim.new(0, MOBILE_DEVICE and 15 or 13) end
 		end
 	end
+	if MOBILE_DEVICE and CategoryUI.Active == "KEYBINDS" then CategoryUI.Active = "ALL" end
+	CategoryUI:RefreshButtons()
+	if KeybindManager and KeybindManager.Card then KeybindManager.Card.Visible = not MOBILE_DEVICE end
 
 	CombatCard.Size = UDim2.new(1, 0, 0, MOBILE_DEVICE and 440 or 394)
 	CombatCard:SetAttribute("HexaMobileBaseHeight", MOBILE_DEVICE and 440 or 394)
@@ -6951,7 +6993,6 @@ task.spawn(function()
 			ShadowBackup = Lighting.GlobalShadows,
 			AtmosphereBackup = {},
 			BlurBackup = {},
-			WatermarkIndex = 1,
 			AnimationIndex = 1,
 			FontIndex = 1,
 			LastInfoUpdate = 0,
@@ -7846,11 +7887,10 @@ task.spawn(function()
 			PlayerName.Text = self.Streamer and "MODO TRANSMISIÓN" or (LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
 			ByNonyLabel.Visible = not self.Streamer
 			VipProfileBadge.Visible = not self.Streamer
-			if self.Watermark then self.Watermark.Text = self.Streamer and "H3X4 X" or "H3X4 X  •  POR NONY" end
 		end
 
 		function X:setupPersonalization()
-			self.PersonalCard, self.PersonalTitle = self:makeCard(204, "PERSONALIZACIÓN")
+			self.PersonalCard, self.PersonalTitle = self:makeCard(158, "PERSONALIZACIÓN")
 			self.PersonalCard.LayoutOrder = 80
 			local categoryVipBadge = Instance.new("TextLabel")
 			categoryVipBadge.Name = "HexaVipBadge"
@@ -7874,7 +7914,6 @@ task.spawn(function()
 			end
 			addVipStateListener(refreshPersonalCardVip)
 			refreshPersonalCardVip()
-			self.WatermarkPositions = {"ARRIBA DERECHA", "ARRIBA IZQUIERDA", "ABAJO DERECHA", "ABAJO IZQUIERDA"}
 			self.AnimationStyles = {"BACK", "QUAD", "ELASTIC", "BOUNCE", "SLIDE_LEFT", "SLIDE_RIGHT", "SLIDE_UP", "SLIDE_DOWN", "ZOOM", "SPIN", "PULSE", "GLITCH", "DROP", "BURST"}
 			self.FontOptions = {
 				{name = "GOTHAM", font = Enum.Font.Gotham},
@@ -7882,32 +7921,10 @@ task.spawn(function()
 				{name = "CÓDIGO", font = Enum.Font.Code},
 				{name = "GOTHAM NEGRITA", font = Enum.Font.GothamBold},
 			}
-			self.Watermark = Instance.new("TextLabel")
-			self.Watermark.Name = "HexaWatermark"
-			self.Watermark.Size = UDim2.new(0, 185, 0, 28)
-			self.Watermark.BackgroundColor3 = Theme.Panel2
-			self.Watermark.BackgroundTransparency = 0.2
-			self.Watermark.BorderSizePixel = 0
-			self.Watermark.Text = "H3X4 X  •  POR NONY"
-			self.Watermark.TextColor3 = Theme.TextOff
-			self.Watermark.TextSize = 11
-			self.Watermark.Font = Enum.Font.GothamBold
-			self.Watermark.ZIndex = 92
-			self.Watermark.Parent = ScreenGui
-			mkCorner(self.Watermark, 10)
-			mkStroke(self.Watermark, Theme.Accent, 0.5, 1)
-			self.WatermarkButton = neonButton(self.PersonalCard, "MARCA DE AGUA: ARRIBA DERECHA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
-			self.AnimationButton = neonButton(self.PersonalCard, "ANIMACIÓN DE APERTURA: RETROCESO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
-			self.FontButton = neonButton(self.PersonalCard, "FUENTE: GOTHAM", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
-			markVipControl(self.WatermarkButton)
+			self.AnimationButton = neonButton(self.PersonalCard, "ANIMACIÓN DE APERTURA: RETROCESO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
+			self.FontButton = neonButton(self.PersonalCard, "FUENTE: GOTHAM", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 			markVipControl(self.AnimationButton)
 			markVipControl(self.FontButton)
-			self:connect(self.WatermarkButton.MouseButton1Click, function()
-				if not requireVip() then return end
-				self.WatermarkIndex = self.WatermarkIndex % #self.WatermarkPositions + 1
-				self.WatermarkButton.Text = "MARCA DE AGUA: " .. self.WatermarkPositions[self.WatermarkIndex]
-				self:applyWatermarkPosition()
-			end)
 			self:connect(self.AnimationButton.MouseButton1Click, function()
 				if not requireVip() then return end
 				self.AnimationIndex = self.AnimationIndex % #self.AnimationStyles + 1
@@ -7927,17 +7944,6 @@ task.spawn(function()
 				self.FontButton.Text = "FUENTE: " .. self.FontOptions[self.FontIndex].name
 				self:applyFont()
 			end)
-			self:applyWatermarkPosition()
-		end
-
-		function X:applyWatermarkPosition()
-			local positions = {
-				UDim2.new(1, -197, 0, 12),
-				UDim2.new(0, 12, 0, 12),
-				UDim2.new(1, -197, 1, -40),
-				UDim2.new(0, 12, 1, -40),
-			}
-			self.Watermark.Position = positions[self.WatermarkIndex]
 		end
 
 		function X:applyAnimation(preview)
@@ -8041,7 +8047,7 @@ task.spawn(function()
 					and point.Y >= absolutePosition.Y and point.Y <= absolutePosition.Y + absoluteSize.Y
 			end
 			return contains(MainFrame) or contains(KeyFrame) or contains(ConfirmFrame) or contains(Tutorial.Frame)
-				or contains(RestoreOrb) or contains(self.InfoHud) or contains(self.Watermark) or contains(self.InspectorFrame)
+				or contains(RestoreOrb) or contains(self.InfoHud) or contains(self.InspectorFrame)
 				or contains(VipNotification) or contains(MobileFlyControls)
 		end
 
@@ -8136,7 +8142,6 @@ task.spawn(function()
 			X.CrosshairSize = 14
 			X.CrosshairThickness = 2
 			X.CrosshairGap = 5
-			X.WatermarkIndex = 1
 			X.AnimationIndex = 1
 			X.FontIndex = 1
 			pcall(function() X:toggle(X.NoFallButton, false) end)
@@ -8148,12 +8153,10 @@ task.spawn(function()
 			pcall(function() X.CrosshairSizeSlider.Set(14) end)
 			pcall(function() X.CrosshairThicknessSlider.Set(2) end)
 			pcall(function() X.CrosshairGapSlider.Set(5) end)
-			pcall(function() X.WatermarkButton.Text = "MARCA DE AGUA: ARRIBA DERECHA" end)
 			pcall(function() X.AnimationButton.Text = "ANIMACIÓN DE APERTURA: RETROCESO" end)
 			pcall(function() X.FontButton.Text = "FUENTE: GOTHAM" end)
 			pcall(function() X:updateCrosshair() end)
 			pcall(function() X:restoreCameraSubject() end)
-			pcall(function() X:applyWatermarkPosition() end)
 			-- Resetear el estilo sin reproducir la animación durante un refresh VIP.
 			-- Así no existe una "reapertura fantasma" mientras MainFrame ya está abierto.
 			openingStyle = "BACK"
