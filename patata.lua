@@ -523,7 +523,10 @@ local Theme = {
 local DEFAULT_WALK_SPEED = 16
 local DEFAULT_JUMP_POWER = 50
 local GUI_VIEWPORT_SIZE = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
-local MOBILE_DEVICE = UserInputService.TouchEnabled and (not UserInputService.KeyboardEnabled or GUI_VIEWPORT_SIZE.X < 900)
+local DEVICE_HINT_MOBILE = UserInputService.TouchEnabled and (not UserInputService.KeyboardEnabled or GUI_VIEWPORT_SIZE.X < 900)
+-- La detección automática se usa únicamente como sugerencia. Hasta que el usuario
+-- elija PC/CELULAR después de la key, no se activa ningún perfil de dispositivo.
+local MOBILE_DEVICE = false
 local function calculateMainSize()
 	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or GUI_VIEWPORT_SIZE
 	return UDim2.fromOffset(
@@ -1151,28 +1154,14 @@ ScreenGui.Destroying:Connect(function()
 end)
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local parentedScreenGui = false
-if MOBILE_DEVICE then
-	parentedScreenGui = pcall(function()
-		ScreenGui.Parent = PlayerGui
-	end)
-else
-	if type(gethui) == "function" then
-		local ok, hiddenUi = pcall(gethui)
-		if ok and hiddenUi then
-			parentedScreenGui = pcall(function()
-				ScreenGui.Parent = hiddenUi
-			end)
-		end
-	end
-	if (not parentedScreenGui or not ScreenGui.Parent) and CoreGui then
-		parentedScreenGui = pcall(function()
-			ScreenGui.Parent = CoreGui
-		end)
-	end
-end
-if not parentedScreenGui or not ScreenGui.Parent then
+-- Antes de elegir dispositivo mantenemos la GUI en PlayerGui, que es el
+-- contenedor más neutral para mostrar key + selector. El perfil PC puede moverla
+-- después a gethui/CoreGui si el executor lo admite.
+local parentedScreenGui = pcall(function()
 	ScreenGui.Parent = PlayerGui
+end)
+if not parentedScreenGui or not ScreenGui.Parent then
+	if CoreGui then ScreenGui.Parent = CoreGui else ScreenGui.Parent = PlayerGui end
 end
 TargetParent = ScreenGui.Parent
 
@@ -1181,7 +1170,7 @@ local mobileFlyVertical = 0
 local mobileFlyVerticalInput = nil
 local MobileFlyControls = nil
 
-if MOBILE_DEVICE then
+do
 	pcall(function()
 		local playerModule = require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
 		MobileMovementControls = playerModule:GetControls()
@@ -1557,6 +1546,14 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"Distancia de seguimiento", "Follow distance"},
 	{"ANTI VOID", "ANTI VOID"},
 	{"ESPECTAR JUGADOR", "SPECTATE PLAYER"},
+	{"BOTÓN AIM FLOTANTE (MÓVIL)", "FLOATING AIM BUTTON (MOBILE)"},
+	{"PERSISTENCIA DE OBJETIVO", "TARGET PERSISTENCE"},
+	{"ELIGE TU DISPOSITIVO", "CHOOSE YOUR DEVICE"},
+	{"Selecciona el dispositivo que estás usando. El panel y los controles se adaptarán a esa elección.", "Select the device you are using. The panel and controls will adapt to that choice."},
+	{"COMPUTADORA", "COMPUTER"},
+	{"CELULAR", "MOBILE"},
+	{"SUGERENCIA DETECTADA: CELULAR", "DETECTED SUGGESTION: MOBILE"},
+	{"SUGERENCIA DETECTADA: PC", "DETECTED SUGGESTION: PC"},
 	{"INSPECTOR DE JUGADOR", "PLAYER INSPECTOR"},
 	{"SELECCIONA UN JUGADOR", "SELECT A PLAYER"},
 }
@@ -1841,13 +1838,77 @@ ByNonyLabel.TextXAlignment = Enum.TextXAlignment.Right
 ByNonyLabel.ZIndex = 2
 ByNonyLabel.Parent = KeyFrame
 
-Lang.Set("ES")
+-- Selector manual de dispositivo. La detección automática NO decide el modo:
+-- únicamente muestra una sugerencia. PC/CELULAR se aplica después de la key.
+local DeviceSelector = {}
+DeviceSelector.Frame = Instance.new("Frame")
+DeviceSelector.Frame.Name = "DeviceFrame"
+DeviceSelector.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+DeviceSelector.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+DeviceSelector.Frame.Size = UDim2.new(0, 0, 0, 0)
+DeviceSelector.Frame.BackgroundColor3 = Theme.BG
+DeviceSelector.Frame.BackgroundTransparency = 0.05
+DeviceSelector.Frame.BorderSizePixel = 0
+DeviceSelector.Frame.ClipsDescendants = true
+DeviceSelector.Frame.Visible = false
+DeviceSelector.Frame.Parent = ScreenGui
+mkCorner(DeviceSelector.Frame, 16)
+mkStroke(DeviceSelector.Frame, Theme.Purple, 0.10, 2)
+makeDraggable(DeviceSelector.Frame, DeviceSelector.Frame)
 
-if MOBILE_DEVICE and not HEXA_IS_VIP then
-	KeyFrame.Size = KEY_SIZE
-	KeyFrame.Visible = true
-	task.wait()
+DeviceSelector.Logo = Instance.new("ImageLabel")
+DeviceSelector.Logo.BackgroundTransparency = 1
+DeviceSelector.Logo.Size = UDim2.fromOffset(30, 30)
+DeviceSelector.Logo.Position = UDim2.new(0, 18, 0, 15)
+DeviceSelector.Logo.Image = "rbxassetid://72742584610344"
+DeviceSelector.Logo.ScaleType = Enum.ScaleType.Fit
+DeviceSelector.Logo.Parent = DeviceSelector.Frame
+
+DeviceSelector.Title = Instance.new("TextLabel")
+DeviceSelector.Title.BackgroundTransparency = 1
+DeviceSelector.Title.Position = UDim2.new(0, 58, 0, 10)
+DeviceSelector.Title.Size = UDim2.new(1, -76, 0, 36)
+DeviceSelector.Title.Text = "ELIGE TU DISPOSITIVO"
+DeviceSelector.Title.TextColor3 = Theme.TextMain
+DeviceSelector.Title.TextSize = 16
+DeviceSelector.Title.Font = Enum.Font.GothamBold
+DeviceSelector.Title.TextXAlignment = Enum.TextXAlignment.Left
+DeviceSelector.Title.Parent = DeviceSelector.Frame
+
+DeviceSelector.Subtitle = Instance.new("TextLabel")
+DeviceSelector.Subtitle.BackgroundTransparency = 1
+DeviceSelector.Subtitle.Position = UDim2.new(0, 20, 0, 55)
+DeviceSelector.Subtitle.Size = UDim2.new(1, -40, 0, 44)
+DeviceSelector.Subtitle.Text = "Selecciona el dispositivo que estás usando. El panel y los controles se adaptarán a esa elección."
+DeviceSelector.Subtitle.TextColor3 = Color3.fromRGB(180, 180, 180)
+DeviceSelector.Subtitle.TextSize = 11
+DeviceSelector.Subtitle.Font = Enum.Font.GothamMedium
+DeviceSelector.Subtitle.TextWrapped = true
+DeviceSelector.Subtitle.TextXAlignment = Enum.TextXAlignment.Left
+DeviceSelector.Subtitle.TextYAlignment = Enum.TextYAlignment.Top
+DeviceSelector.Subtitle.Parent = DeviceSelector.Frame
+
+DeviceSelector.PCButton = neonButton(DeviceSelector.Frame, "COMPUTADORA", UDim2.new(0.5, -25, 0, 44), UDim2.new(0, 20, 0, 111))
+DeviceSelector.MobileButton = neonButton(DeviceSelector.Frame, "CELULAR", UDim2.new(0.5, -25, 0, 44), UDim2.new(0.5, 5, 0, 111))
+
+DeviceSelector.Hint = Instance.new("TextLabel")
+DeviceSelector.Hint.BackgroundTransparency = 1
+DeviceSelector.Hint.Position = UDim2.new(0, 20, 0, 168)
+DeviceSelector.Hint.Size = UDim2.new(1, -40, 0, 26)
+DeviceSelector.Hint.Text = DEVICE_HINT_MOBILE and "SUGERENCIA DETECTADA: CELULAR" or "SUGERENCIA DETECTADA: PC"
+DeviceSelector.Hint.TextColor3 = Color3.fromRGB(140, 140, 140)
+DeviceSelector.Hint.TextSize = 10
+DeviceSelector.Hint.Font = Enum.Font.GothamBold
+DeviceSelector.Hint.TextXAlignment = Enum.TextXAlignment.Center
+DeviceSelector.Hint.Parent = DeviceSelector.Frame
+
+function DeviceSelector:GetSize()
+	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or GUI_VIEWPORT_SIZE
+	return UDim2.fromOffset(math.min(350, math.max(280, viewport.X - 16)), math.min(214, math.max(200, viewport.Y - 16)))
 end
+DeviceSelector.Size = DeviceSelector:GetSize()
+
+Lang.Set("ES")
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
@@ -2803,11 +2864,9 @@ Content.DescendantRemoving:Connect(function()
 	-- Si una función se elimina dinámicamente, restaurar también el layout/canvas.
 	scheduleCategoryRefresh()
 end)
-if MOBILE_DEVICE then
-	Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		task.defer(refreshMobileCanvas)
-	end)
-end
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	if MOBILE_DEVICE then task.defer(refreshMobileCanvas) end
+end)
 addVipStateListener(function()
 	refreshFavoritesCard()
 	refreshCategoryView()
@@ -3091,7 +3150,7 @@ local jumpSlider = createSlider(MoveCard, "Potencia de salto", 50, 2500, current
 local infiniteJumpButton = createToggleButton(MoveCard, "SALTO INFINITO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 346))
 local noclipButton = createToggleButton(MoveCard, "SIN COLISIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 393))
 
-local CombatCard = sectionCard(394)
+local CombatCard = sectionCard(MOBILE_DEVICE and 440 or 394)
 CombatCard.LayoutOrder = 20
 sectionTitle(CombatCard, "COMBATE Y PUNTERÍA", UDim2.new(0, 16, 0, 14))
 
@@ -3127,6 +3186,95 @@ local fovSlider = createSlider(CombatCard, "Radio del FOV", 30, 800, fovRadius, 
 	fovRadius = v
 	FovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
 end)
+
+-- Opción exclusiva del perfil CELULAR. El botón flotante se puede arrastrar y
+-- funciona como un interruptor rápido del aim usando el último modo cabeza/cuerpo.
+local MobileAim = {
+	Enabled = false,
+	PreferredHead = true,
+	DragInput = nil,
+	DragStart = nil,
+	DragPosition = nil,
+	DragMoved = false,
+}
+MobileAim.OptionButton = createToggleButton(CombatCard, "BOTÓN AIM FLOTANTE (MÓVIL)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 386))
+MobileAim.OptionButton:SetAttribute("HexaNoKeybind", true)
+MobileAim.OptionButton.Visible = MOBILE_DEVICE
+
+MobileAim.Button = Instance.new("TextButton")
+MobileAim.Button.Name = "HexaMobileAimButton"
+MobileAim.Button.AnchorPoint = Vector2.new(0.5, 0.5)
+MobileAim.Button.Position = UDim2.new(1, -82, 0.62, 0)
+MobileAim.Button.Size = UDim2.fromOffset(68, 68)
+MobileAim.Button.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+MobileAim.Button.BackgroundTransparency = 0.08
+MobileAim.Button.BorderSizePixel = 0
+MobileAim.Button.Text = "AIM"
+MobileAim.Button.TextColor3 = Color3.fromRGB(245, 245, 245)
+MobileAim.Button.TextSize = 15
+MobileAim.Button.Font = Enum.Font.GothamBold
+MobileAim.Button.AutoButtonColor = false
+MobileAim.Button.Visible = false
+MobileAim.Button.Active = true
+MobileAim.Button.ZIndex = 180
+MobileAim.Button.Parent = ScreenGui
+MobileAim.Button:SetAttribute("HexaNoTranslate", true)
+mkCorner(MobileAim.Button, 34)
+MobileAim.Stroke = mkStroke(MobileAim.Button, Theme.Purple, 0.15, 2)
+
+function MobileAim:Refresh()
+	local shouldShow = MOBILE_DEVICE and self.Enabled
+	local aimActive = autoAimHeadActive or autoAimBodyActive
+	self.Button.Visible = shouldShow
+	self.Button.Text = aimActive and "AIM • ON" or "AIM"
+	self.Button.BackgroundColor3 = aimActive and Color3.fromRGB(42, 42, 42) or Color3.fromRGB(12, 12, 12)
+	self.Stroke.Transparency = aimActive and 0 or 0.15
+end
+
+MobileAim.Button.InputBegan:Connect(function(input)
+	if not MOBILE_DEVICE or not MobileAim.Enabled then return end
+	if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+	MobileAim.DragInput = input
+	MobileAim.DragStart = Vector2.new(input.Position.X, input.Position.Y)
+	MobileAim.DragPosition = MobileAim.Button.Position
+	MobileAim.DragMoved = false
+end)
+
+AllSliders.TrackConnection(UserInputService.InputChanged:Connect(function(input)
+	if not MobileAim.DragInput or not MobileAim.DragStart or not MobileAim.DragPosition then return end
+	local validMove = (MobileAim.DragInput.UserInputType == Enum.UserInputType.Touch and input == MobileAim.DragInput)
+		or (MobileAim.DragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
+	if not validMove then return end
+	local current = Vector2.new(input.Position.X, input.Position.Y)
+	local delta = current - MobileAim.DragStart
+	if delta.Magnitude >= 7 then MobileAim.DragMoved = true end
+	local camera = workspace.CurrentCamera
+	local viewport = camera and camera.ViewportSize or GUI_VIEWPORT_SIZE
+	local half = 34
+	local desiredX = math.clamp(MobileAim.DragPosition.X.Scale * viewport.X + MobileAim.DragPosition.X.Offset + delta.X, half + 4, viewport.X - half - 4)
+	local desiredY = math.clamp(MobileAim.DragPosition.Y.Scale * viewport.Y + MobileAim.DragPosition.Y.Offset + delta.Y, half + 4, viewport.Y - half - 4)
+	MobileAim.Button.Position = UDim2.fromOffset(desiredX, desiredY)
+end))
+
+AllSliders.TrackConnection(UserInputService.InputEnded:Connect(function(input)
+	if input ~= MobileAim.DragInput then return end
+	if MOBILE_DEVICE and MobileAim.Enabled and not MobileAim.DragMoved then
+		if autoAimHeadActive then
+			ConfigManager:ActivateToggle(autoAimHeadButton)
+		elseif autoAimBodyActive then
+			ConfigManager:ActivateToggle(autoAimBodyButton)
+		elseif MobileAim.PreferredHead then
+			ConfigManager:ActivateToggle(autoAimHeadButton)
+		else
+			ConfigManager:ActivateToggle(autoAimBodyButton)
+		end
+		task.defer(function() MobileAim:Refresh() end)
+	end
+	MobileAim.DragInput = nil
+	MobileAim.DragStart = nil
+	MobileAim.DragPosition = nil
+	MobileAim.DragMoved = false
+end))
 
 local EspCard = sectionCard(204)
 EspCard.LayoutOrder = 30
@@ -3468,9 +3616,9 @@ end
 
 
 local function bindMobileShotTool(tool)
-	if not MOBILE_DEVICE or not tool:IsA("Tool") or Runtime.MobileToolConnections[tool] then return end
+	if not tool:IsA("Tool") or Runtime.MobileToolConnections[tool] then return end
 	Runtime.MobileToolConnections[tool] = AllSliders.TrackConnection(tool.Activated:Connect(function()
-		if not Runtime.syntheticRapidActivation then
+		if MOBILE_DEVICE and not Runtime.syntheticRapidActivation then
 			Runtime.mobileShotUntil = os.clock() + 0.24
 		end
 	end))
@@ -3482,9 +3630,9 @@ local function scanMobileTools(container)
 	AllSliders.TrackConnection(container.ChildAdded:Connect(bindMobileShotTool))
 end
 
-if MOBILE_DEVICE then
+do
 	AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, processed)
-		if processed or input.UserInputType ~= Enum.UserInputType.Touch then return end
+		if not MOBILE_DEVICE or processed or input.UserInputType ~= Enum.UserInputType.Touch then return end
 		local camera = workspace.CurrentCamera
 		if camera and input.Position.X >= camera.ViewportSize.X * 0.45 then
 			Runtime.mobileAimTouchInput = input
@@ -3508,6 +3656,7 @@ local HexaSharedTargetFilters = {
 	AimSmoothing = false,
 	TargetPrediction = false,
 	TargetSwitchDelay = false,
+	TargetPersistence = false,
 	TargetSwitchDelaySeconds = 0.35,
 	SmoothingFactor = 5,
 	PredictionFactor = 0.12,
@@ -3740,6 +3889,22 @@ function Runtime.isAimbotTargetEligible(player, aimAtHead)
 end
 
 function Runtime.resolveAimbotTarget(candidate, aimAtHead)
+	-- Target Persistence mantiene el objetivo actual mientras siga siendo válido.
+	-- Solo permite adquirir otro cuando el anterior muere, sale del rango/FOV,
+	-- deja de cumplir filtros o queda bloqueado por Wall Check.
+	if HexaSharedTargetFilters.TargetPersistence then
+		local current = Runtime.aimSwitchTarget
+		if current ~= nil and Runtime.isAimbotTargetEligible(current, aimAtHead) then
+			Runtime.aimSwitchCandidate = nil
+			Runtime.aimSwitchCandidateSince = 0
+			return current
+		end
+		Runtime.aimSwitchTarget = candidate
+		Runtime.aimSwitchCandidate = nil
+		Runtime.aimSwitchCandidateSince = 0
+		return candidate
+	end
+
 	if not HexaSharedTargetFilters.TargetSwitchDelay then
 		Runtime.aimSwitchTarget = candidate
 		Runtime.aimSwitchCandidate = nil
@@ -3942,8 +4107,33 @@ ConfigManager:BindToggle(noclipButton, function()
 	if noclipActive then Runtime.lastNoclipScan = 0 else restoreNoclip() end
 end)
 
-ConfigManager:BindToggle(autoAimHeadButton, function() autoAimHeadActive = not autoAimHeadActive; setActive(autoAimHeadButton, autoAimHeadActive); if autoAimHeadActive and autoAimBodyActive then autoAimBodyActive=false; setActive(autoAimBodyButton,false) end; if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee=nil end end)
-ConfigManager:BindToggle(autoAimBodyButton, function() autoAimBodyActive = not autoAimBodyActive; setActive(autoAimBodyButton, autoAimBodyActive); if autoAimBodyActive and autoAimHeadActive then autoAimHeadActive=false; setActive(autoAimHeadButton,false) end; if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee=nil end end)
+ConfigManager:BindToggle(autoAimHeadButton, function()
+	autoAimHeadActive = not autoAimHeadActive
+	if autoAimHeadActive then MobileAim.PreferredHead = true end
+	setActive(autoAimHeadButton, autoAimHeadActive)
+	if autoAimHeadActive and autoAimBodyActive then autoAimBodyActive = false; setActive(autoAimBodyButton, false) end
+	if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee = nil end
+	MobileAim:Refresh()
+end)
+ConfigManager:BindToggle(autoAimBodyButton, function()
+	autoAimBodyActive = not autoAimBodyActive
+	if autoAimBodyActive then MobileAim.PreferredHead = false end
+	setActive(autoAimBodyButton, autoAimBodyActive)
+	if autoAimBodyActive and autoAimHeadActive then autoAimHeadActive = false; setActive(autoAimHeadButton, false) end
+	if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee = nil end
+	MobileAim:Refresh()
+end)
+ConfigManager:BindToggle(MobileAim.OptionButton, function()
+	if not MOBILE_DEVICE then
+		MobileAim.Enabled = false
+		setActive(MobileAim.OptionButton, false)
+		MobileAim:Refresh()
+		return
+	end
+	MobileAim.Enabled = not MobileAim.Enabled
+	setActive(MobileAim.OptionButton, MobileAim.Enabled)
+	MobileAim:Refresh()
+end)
 ConfigManager:BindToggle(ignoreFriendsButton, function() ignoreFriendsActive = not ignoreFriendsActive; setActive(ignoreFriendsButton, ignoreFriendsActive) end)
 ConfigManager:BindToggle(fovButton, function() fovActive = not fovActive; setActive(fovButton, fovActive); FovCircle.Visible = fovActive end)
 
@@ -3965,6 +4155,7 @@ task.spawn(function()
 			WeaponLock = false,
 			TargetPrediction = false,
 			TargetSwitchDelay = false,
+			TargetPersistence = false,
 			TargetSwitchDelayMs = 350,
 			NoRecoil = false,
 			RapidFire = false,
@@ -4122,7 +4313,7 @@ task.spawn(function()
 		}
 		local HitboxColorNames = {"BLANCO", "ROJO", "VERDE", "AZUL", "AMARILLO", "MORADO"}
 
-		local CombatAdvancedCard = sectionCard(632)
+		local CombatAdvancedCard = sectionCard(678)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
 		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
@@ -4148,6 +4339,7 @@ task.spawn(function()
 		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 532))
 		markVipControl(InfiniteAmmoButton)
 		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
+		local TargetPersistenceButton = createToggleButton(CombatAdvancedCard, "PERSISTENCIA DE OBJETIVO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 624))
 
 		local WeaponLockCard = sectionCard(96)
 		WeaponLockCard.LayoutOrder = 22
@@ -4238,6 +4430,7 @@ task.spawn(function()
 			WeaponLock = WeaponLockButton,
 			TargetPrediction = PredictionButton,
 			TargetSwitchDelay = TargetSwitchDelayButton,
+			TargetPersistence = TargetPersistenceButton,
 			NoRecoil = NoRecoilButton,
 			RapidFire = RapidButton,
 			FullAutoConversion = FullAutoConversionButton,
@@ -4275,7 +4468,7 @@ task.spawn(function()
 		EspLayer.Parent = ScreenGui
 
 		local MobileDroneControls = nil
-		if MOBILE_DEVICE then
+		do
 			MobileDroneControls = Instance.new("Frame")
 			MobileDroneControls.Name = "HexaAdvancedDroneControls"
 			MobileDroneControls.AnchorPoint = Vector2.new(1, 0.5)
@@ -5443,6 +5636,7 @@ task.spawn(function()
 			HexaSharedTargetFilters.AimSmoothing = false
 			HexaSharedTargetFilters.TargetPrediction = false
 			HexaSharedTargetFilters.TargetSwitchDelay = false
+			HexaSharedTargetFilters.TargetPersistence = false
 			Runtime.resetAimbotTargetSwitching()
 			HexaSharedTargetFilters:SetTeamCheck(false)
 			suspend()
@@ -5516,6 +5710,10 @@ task.spawn(function()
 		end)
 		bindToggle(TargetSwitchDelayButton, "TargetSwitchDelay", function(enabled)
 			HexaSharedTargetFilters.TargetSwitchDelay = enabled
+			Runtime.resetAimbotTargetSwitching()
+		end)
+		bindToggle(TargetPersistenceButton, "TargetPersistence", function(enabled)
+			HexaSharedTargetFilters.TargetPersistence = enabled == true
 			Runtime.resetAimbotTargetSwitching()
 		end)
 		bindToggle(NoRecoilButton, "NoRecoil", function(enabled)
@@ -5623,11 +5821,13 @@ task.spawn(function()
 		-- Wall Check y Team Check deben iniciar apagados.
 		HexaSharedTargetFilters.WallCheck = false
 		HexaSharedTargetFilters.TargetSwitchDelay = false
+		HexaSharedTargetFilters.TargetPersistence = false
 		Runtime.resetAimbotTargetSwitching()
 		HexaSharedTargetFilters:SetTeamCheck(false)
 		setActive(WallButton, false)
 		setActive(TeamButton, false)
 		setActive(TargetSwitchDelayButton, false)
+		setActive(TargetPersistenceButton, false)
 
 		addVipStateListener(function(isVip)
 			if State.Dead then return end
@@ -6188,17 +6388,142 @@ local function animateOpen(gui: GuiObject, targetSize: UDim2, forcedStyle: strin
 	return tween(gui, tweenIn, {Size = targetSize})
 end
 
+local function applyDeviceProfile(mode)
+	MOBILE_DEVICE = mode == "MOBILE"
+	MAIN_SIZE = calculateMainSize()
+
+	-- Reubicar la GUI según el modo elegido. La selección manual prevalece sobre
+	-- TouchEnabled/KeyboardEnabled para evitar perfiles híbridos incorrectos.
+	pcall(function()
+		if MOBILE_DEVICE then
+			ScreenGui.Parent = PlayerGui
+		else
+			local target = nil
+			if type(gethui) == "function" then
+				local ok, hiddenUi = pcall(gethui)
+				if ok then target = hiddenUi end
+			end
+			if not target then target = CoreGui or PlayerGui end
+			ScreenGui.Parent = target
+		end
+		TargetParent = ScreenGui.Parent
+	end)
+
+	-- Cabecera más compacta en móvil y más espaciosa en PC.
+	MainFrame.BackgroundTransparency = MOBILE_DEVICE and 0.10 or 0.18
+	HeaderLogo.Size = MOBILE_DEVICE and UDim2.fromOffset(30, 30) or UDim2.fromOffset(36, 36)
+	HeaderLogo.Position = MOBILE_DEVICE and UDim2.new(0, 12, 0, 14) or UDim2.new(0, 15, 0, 11)
+	Title.Position = MOBILE_DEVICE and UDim2.new(0, 49, 0, 6) or UDim2.new(0, 59, 0, 5)
+	Title.TextSize = MOBILE_DEVICE and 16 or 18
+	local universalSubtitle = Header:FindFirstChild("HexaUniversalSubtitle")
+	if universalSubtitle then
+		universalSubtitle.Position = MOBILE_DEVICE and UDim2.new(0, 49, 0, 32) or UDim2.new(0, 59, 0, 32)
+		universalSubtitle.TextSize = MOBILE_DEVICE and 9 or 10
+	end
+
+	if MOBILE_DEVICE then
+		CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
+		CategoryUI.Frame.Size = UDim2.new(1, -12, 0, 104)
+		CategoryUI.Title.Visible = false
+		FunctionSearchBox.Position = UDim2.new(0, 8, 0, 7)
+		CategoryUI.Scroll.Position = UDim2.new(0, 8, 0, 43)
+		CategoryUI.Scroll.Size = UDim2.new(1, -16, 1, -49)
+		CategoryUI.Scroll.ScrollingDirection = Enum.ScrollingDirection.X
+		CategoryUI.Scroll.ScrollBarThickness = 0
+		CategoryUI.Layout.FillDirection = Enum.FillDirection.Horizontal
+		CategoryUI.Layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+		CategoryUI.Layout.VerticalAlignment = Enum.VerticalAlignment.Center
+		CategoryUI.Layout.Padding = UDim.new(0, 6)
+		Content.Position = UDim2.new(0, 2, 0, 172)
+		Content.Size = UDim2.new(1, -4, 1, -174)
+		Content.ScrollBarThickness = 6
+		Content.AutomaticCanvasSize = Enum.AutomaticSize.None
+	else
+		CategoryUI.Frame.Position = UDim2.new(0, 6, 0, 64)
+		CategoryUI.Frame.Size = UDim2.new(0, 158, 1, -70)
+		CategoryUI.Title.Visible = true
+		FunctionSearchBox.Position = UDim2.new(0, 8, 0, 29)
+		CategoryUI.Scroll.Position = UDim2.new(0, 8, 0, 65)
+		CategoryUI.Scroll.Size = UDim2.new(1, -16, 1, -71)
+		CategoryUI.Scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+		CategoryUI.Scroll.ScrollBarThickness = 3
+		CategoryUI.Layout.FillDirection = Enum.FillDirection.Vertical
+		CategoryUI.Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		CategoryUI.Layout.VerticalAlignment = Enum.VerticalAlignment.Top
+		CategoryUI.Layout.Padding = UDim.new(0, 2)
+		Content.Position = UDim2.new(0, 168, 0, 62)
+		Content.Size = UDim2.new(1, -170, 1, -64)
+		Content.ScrollBarThickness = 4
+		Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	end
+
+	for _, definition in ipairs(CategoryUI.Definitions) do
+		local button = CategoryUI.Buttons[definition.Key]
+		if button then
+			button.Size = MOBILE_DEVICE
+				and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 46), 33)
+				or UDim2.new(1, -8, 0, 27)
+			local corner = button:FindFirstChildOfClass("UICorner")
+			if corner then corner.CornerRadius = UDim.new(0, MOBILE_DEVICE and 15 or 13) end
+		end
+	end
+
+	CombatCard.Size = UDim2.new(1, 0, 0, MOBILE_DEVICE and 440 or 394)
+	CombatCard:SetAttribute("HexaMobileBaseHeight", MOBILE_DEVICE and 440 or 394)
+	MobileAim.OptionButton.Visible = MOBILE_DEVICE
+	if not MOBILE_DEVICE then
+		MobileAim.Enabled = false
+		setActive(MobileAim.OptionButton, false)
+		Runtime.mobileAimTouchActive = false
+		Runtime.mobileAimTouchInput = nil
+	end
+	MobileAim:Refresh()
+	setMobileFlyControlsVisible(MOBILE_DEVICE and flyActive)
+
+	if Tutorial and Tutorial.Scroll then Tutorial.Scroll.ScrollBarThickness = MOBILE_DEVICE and 6 or 4 end
+	if Tutorial and Tutorial.Text then Tutorial.Text.TextSize = MOBILE_DEVICE and 12 or 13 end
+
+	CategoryUI.Scroll.CanvasPosition = Vector2.new(0, 0)
+	Content.CanvasPosition = Vector2.new(0, 0)
+	task.defer(function()
+		refreshCategoryCanvas()
+		refreshCategoryView()
+		if MOBILE_DEVICE then refreshMobileCanvas() end
+	end)
+end
+
+local function openDeviceSelector()
+	KeyFrame.Visible = false
+	MainFrame.Visible = false
+	DeviceSelector.Frame.Visible = true
+	DeviceSelector.Size = DeviceSelector:GetSize()
+	DeviceSelector.Frame.Size = UDim2.new(0, 0, 0, 0)
+	animateOpen(DeviceSelector.Frame, DeviceSelector.Size, "BACK")
+end
+
 local function openMainInterface()
 	KeyFrame.Visible = false
+	DeviceSelector.Frame.Visible = false
 	MainFrame.Visible = true
 	animateOpen(MainFrame, MAIN_SIZE)
 end
+
+local function chooseDevice(mode)
+	local t = tween(DeviceSelector.Frame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
+	t.Completed:Connect(function()
+		applyDeviceProfile(mode)
+		openMainInterface()
+	end)
+end
+
+DeviceSelector.PCButton.MouseButton1Click:Connect(function() chooseDevice("PC") end)
+DeviceSelector.MobileButton.MouseButton1Click:Connect(function() chooseDevice("MOBILE") end)
 
 CheckKeyBtn.MouseButton1Click:Connect(function()
 	local entered = tostring(KeyBox.Text or "")
 	if entered == "ikaH" then
 		local t = tween(KeyFrame, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
-		t.Completed:Connect(openMainInterface)
+		t.Completed:Connect(openDeviceSelector)
 	else
 		KeyBox.Text = ""
 		KeyBox.PlaceholderText = "¡Clave incorrecta!"
@@ -6352,8 +6677,8 @@ Runtime.espConn = RunService.RenderStepped:Connect(function()
 end)
 
 Runtime.renderConn = RunService.RenderStepped:Connect(function()
-	-- El suavizado funciona como una puntería independiente a la cabeza cuando
-	-- ambos Aimbot están apagados y usa su propia tecla o modo de activación.
+	-- El botón flotante móvil acciona los mismos toggles del Aimbot normal, por
+	-- lo que el estado queda incluido en Guardar/Cargar configuración.
 	local smoothingOnlyActive = HexaSharedTargetFilters.AimSmoothing
 		and not autoAimHeadActive
 		and not autoAimBodyActive
@@ -6494,13 +6819,12 @@ task.defer(function()
 	refreshCategoryView()
 end)
 
-if HEXA_IS_VIP then
-	KeyFrame.Visible = false
-	MainFrame.Visible = true
-	task.defer(function() animateOpen(MainFrame, MAIN_SIZE, "BACK") end)
-else
-	animateOpen(KeyFrame, KEY_SIZE, "BACK")
-end
+-- Todos los usuarios, incluidos los VIP, pasan primero por la key de inicio.
+-- La selección PC/CELULAR aparece únicamente después de validarla.
+KeyFrame.Visible = true
+MainFrame.Visible = false
+DeviceSelector.Frame.Visible = false
+animateOpen(KeyFrame, KEY_SIZE, "BACK")
 
 local minimized = false
 MinButton.MouseButton1Click:Connect(function()
