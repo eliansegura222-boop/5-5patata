@@ -180,6 +180,7 @@ local MOBILE_DEVICE = false
 -- Configuración persistente por usuario. Nada se carga automáticamente: el
 -- usuario debe pulsar el botón CARGAR CONFIGURACIÓN de forma explícita.
 local KeybindManager = nil
+local FloatingButtonManager = nil
 local ConfigManager = {
 	FileName = ("H3X4_X_Config_%d.json"):format(LocalPlayer.UserId),
 	ToggleButtons = {},
@@ -304,7 +305,7 @@ end
 function ConfigManager:Save()
 	if type(writefile) ~= "function" then return false, "TU EJECUTOR NO PERMITE GUARDAR ARCHIVOS" end
 	local payload = {
-		version = 2,
+		version = 3,
 		userId = LocalPlayer.UserId,
 		toggles = {},
 		sliders = {},
@@ -737,6 +738,9 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	ConfigManager:RegisterToggle(btn, parent, text)
 	if KeybindManager then task.defer(function()
 		if btn and btn.Parent then KeybindManager:RegisterToggleButton(btn) end
+	end) end
+	if FloatingButtonManager then task.defer(function()
+		if btn and btn.Parent then FloatingButtonManager:RegisterToggleButton(btn) end
 	end) end
 	
 	addHover(btn, Theme.PurpleDeep, Theme.PurpleDark, Theme.Active)
@@ -1300,6 +1304,25 @@ notifyVipLocked = function(customTextEs, customTextEn)
 	end)
 end
 
+-- Notificación compacta reutilizable para avisos del sistema (por ejemplo,
+-- conflictos de keybind). Comparte el contenedor para no apilar paneles.
+local function showSystemNotification(titleEs, textEs, titleEn, textEn)
+	vipNotificationGeneration += 1
+	local generation = vipNotificationGeneration
+	VipNotificationTitle.Text = Lang.Current == "EN" and (titleEn or titleEs) or titleEs
+	VipNotificationTitle.TextColor3 = Theme.PurpleText
+	VipNotificationText.Text = Lang.Current == "EN" and (textEn or textEs) or textEs
+	tween(VipNotification, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 18)
+	})
+	task.delay(3.2, function()
+		if generation ~= vipNotificationGeneration or not VipNotification.Parent then return end
+		tween(VipNotification, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 0, -100)
+		})
+	end)
+end
+
 Lang.Pairs = {
 	{[[PUNTERÍA AUTOMÁTICA
 Activa la puntería a la cabeza o al cuerpo. Los atajos ya no aparecen dentro de las funciones: configúralos desde la categoría KEYBINDS.
@@ -1545,6 +1568,9 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"ANTI VOID", "ANTI VOID"},
 	{"ESPECTAR JUGADOR", "SPECTATE PLAYER"},
 	{"BOTÓN AIM FLOTANTE", "FLOATING AIM BUTTON"},
+	{"BOTONES FLOTANTES", "FLOATING BUTTONS"},
+	{"BOTÓN FLOTANTE:", "FLOATING BUTTON:"},
+	{"PRESIONA OTRA TECLA...", "PRESS ANOTHER KEY..."},
 	{"PERSISTENCIA DE OBJETIVO", "TARGET PERSISTENCE"},
 	{"ELIGE TU DISPOSITIVO", "CHOOSE YOUR DEVICE"},
 	{"Selecciona el dispositivo que estás usando. El panel y los controles se adaptarán a esa elección.", "Select the device you are using. The panel and controls will adapt to that choice."},
@@ -1728,6 +1754,36 @@ function Lang.Bind(object)
 	Lang.ApplyObject(object)
 end
 
+-- Textos que dependen del dispositivo elegido. La GUI principal se construye
+-- antes de que el usuario pulse PC/CELULAR, por eso estos textos no deben
+-- decidirse durante la creación del botón: se actualizan al aplicar el perfil.
+local function registerDeviceText(object, desktopEs, mobileEs, desktopEn, mobileEn)
+	if not object then return object end
+	object:SetAttribute("HexaDeviceDesktopES", desktopEs)
+	object:SetAttribute("HexaDeviceMobileES", mobileEs)
+	object:SetAttribute("HexaDeviceDesktopEN", desktopEn or Lang.ToEnglish(desktopEs))
+	object:SetAttribute("HexaDeviceMobileEN", mobileEn or Lang.ToEnglish(mobileEs))
+	-- La traducción normal no debe sobrescribir el texto específico del perfil.
+	object:SetAttribute("HexaNoTranslate", true)
+	return object
+end
+
+local function refreshDeviceSpecificTexts()
+	local prefix = MOBILE_DEVICE and "HexaDeviceMobile" or "HexaDeviceDesktop"
+	local suffix = Lang.Current == "EN" and "EN" or "ES"
+	for _, object in ipairs(ScreenGui:GetDescendants()) do
+		if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+			local value = object:GetAttribute(prefix .. suffix)
+			if typeof(value) == "string" then
+				Lang.WriteProperty(object, "Text", value)
+				if typeof(object:GetAttribute("BaseText")) == "string" then
+					Lang.WriteAttribute(object, "BaseText", value)
+				end
+			end
+		end
+	end
+end
+
 function Lang.Set(language)
 	Lang.Current = language == "EN" and "EN" or "ES"
 	for _, object in ipairs(ScreenGui:GetDescendants()) do
@@ -1749,6 +1805,7 @@ function Lang.Set(language)
 	if FunctionSearchBox and FunctionSearchBox.Parent then
 		FunctionSearchBox.PlaceholderText = Lang.Current == "EN" and "SEARCH FUNCTIONS..." or "BUSCAR FUNCIONES..."
 	end
+	refreshDeviceSpecificTexts()
 	task.defer(function()
 		refreshFavoritesCard()
 		refreshCategoryView()
@@ -2054,6 +2111,7 @@ local CategoryUI = {
 		{Key = "INFO", Label = "INFORMACIÓN"},
 		{Key = "SYSTEM", Label = "SISTEMA"},
 		{Key = "KEYBINDS", Label = "KEYBINDS"},
+		{Key = "FLOATING", Label = "BOTONES FLOTANTES"},
 		{Key = "CUSTOMIZE", Label = "PERSONALIZAR"},
 	},
 }
@@ -2246,6 +2304,10 @@ local function createCategoryIcon(parent, categoryKey)
 		part("KeyMid", 6, 4, 4, 4, 0, 2, true)
 		part("KeyRight", 11, 4, 4, 4, 0, 2, true)
 		part("Space", 3, 10, 10, 4, 0, 2, true)
+	elseif categoryKey == "FLOATING" then
+		part("FloatOne", 1, 2, 6, 5, 0, 2, true)
+		part("FloatTwo", 9, 2, 6, 5, 0, 2, true)
+		part("FloatThree", 5, 9, 6, 5, 0, 2, true)
 	elseif categoryKey == "CUSTOMIZE" then
 		line("SliderTop", 1, 3, 14, 2, 0)
 		line("SliderMiddle", 1, 7, 14, 2, 0)
@@ -2806,9 +2868,10 @@ refreshCategoryView = function()
 			if not searching and CategoryUI.Active ~= "VIP" then fitContentCard(card, units) end
 			local cardCategory = CategoryUI:GetCardCategory(card)
 			local desktopOnly = card:GetAttribute("HexaDesktopOnly") == true or cardCategory == "KEYBINDS"
+			local mobileOnly = card:GetAttribute("HexaMobileOnly") == true or cardCategory == "FLOATING"
 			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
 			local visible
-			if MOBILE_DEVICE and desktopOnly then
+			if (MOBILE_DEVICE and desktopOnly) or ((not MOBILE_DEVICE) and mobileOnly) then
 				visible = false
 			elseif searching then
 				-- El buscador es global: muestra únicamente funciones coincidentes,
@@ -2940,11 +3003,38 @@ function KeybindManager:RefreshButton(id)
 	keyButton:SetAttribute("BaseText", keyButton.Text)
 end
 
-function KeybindManager:SetBinding(id, binding)
+function KeybindManager:FindBindingOwner(id, binding)
+	if typeof(binding) ~= "EnumItem" then return nil end
+	for otherId, otherBinding in pairs(self.Bindings) do
+		if otherId ~= id and typeof(otherBinding) == "EnumItem" and otherBinding == binding then
+			return otherId
+		end
+	end
+	return nil
+end
+
+function KeybindManager:SetBinding(id, binding, silentDuplicate)
 	local target = self.Targets[id]
 	if target and target:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
-		return false
+		return false, "vip"
 	end
+
+	local ownerId = self:FindBindingOwner(id, binding)
+	if ownerId then
+		if not silentDuplicate then
+			local owner = self.Targets[ownerId]
+			local ownerLabel = tostring(owner and (owner:GetAttribute("BaseText") or owner.Text) or "OTRA FUNCIÓN")
+			local keyLabel = self:FormatBinding(binding)
+			showSystemNotification(
+				"KEYBIND REPETIDO",
+				keyLabel .. " ya está asignada a " .. ownerLabel .. ". Elige otra tecla.",
+				"DUPLICATE KEYBIND",
+				keyLabel .. " is already assigned to " .. ownerLabel .. ". Choose another key."
+			)
+		end
+		return false, "duplicate"
+	end
+
 	self.Bindings[id] = binding
 	self:RefreshButton(id)
 	return true
@@ -2996,7 +3086,7 @@ function KeybindManager:RegisterToggleButton(targetButton)
 		task.defer(function()
 			if packed and packed.kind and packed.name then
 				local binding = self:DecodeBinding(packed.kind, packed.name)
-				if binding then self:SetBinding(id, binding) end
+				if binding then self:SetBinding(id, binding, true) end
 			end
 		end)
 	end
@@ -3019,7 +3109,7 @@ function KeybindManager:LoadSerialized(data)
 	for id, packed in pairs(data) do
 		if type(packed) == "table" and type(packed.kind) == "string" and type(packed.name) == "string" then
 			local binding = self:DecodeBinding(packed.kind, packed.name)
-			if binding then self:SetBinding(id, binding) end
+			if binding then self:SetBinding(id, binding, true) end
 		end
 	end
 end
@@ -3047,16 +3137,37 @@ AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, p
 		if input.UserInputType == Enum.UserInputType.Keyboard then
 			if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace then
 				KeybindManager:SetBinding(id, nil)
+				KeybindManager.Capturing = nil
 			else
-				KeybindManager:SetBinding(id, input.KeyCode)
+				local accepted, reason = KeybindManager:SetBinding(id, input.KeyCode)
+				if accepted then
+					KeybindManager.Capturing = nil
+				elseif reason == "duplicate" then
+					KeybindManager.ReadyAt = os.clock() + 0.18
+					local target = KeybindManager.Targets[id]
+					local label = tostring(target and (target:GetAttribute("BaseText") or target.Text) or "FUNCIÓN")
+					local button = KeybindManager.Buttons[id]
+					if button then button.Text = label .. "  •  " .. (Lang.Current == "EN" and "PRESS ANOTHER KEY..." or "PRESIONA OTRA TECLA...") end
+				else
+					KeybindManager.Capturing = nil
+				end
 			end
-			KeybindManager.Capturing = nil
 			return
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.MouseButton2
 			or input.UserInputType == Enum.UserInputType.MouseButton3 then
-			KeybindManager:SetBinding(id, input.UserInputType)
-			KeybindManager.Capturing = nil
+			local accepted, reason = KeybindManager:SetBinding(id, input.UserInputType)
+			if accepted then
+				KeybindManager.Capturing = nil
+			elseif reason == "duplicate" then
+				KeybindManager.ReadyAt = os.clock() + 0.18
+				local target = KeybindManager.Targets[id]
+				local label = tostring(target and (target:GetAttribute("BaseText") or target.Text) or "FUNCIÓN")
+				local button = KeybindManager.Buttons[id]
+				if button then button.Text = label .. "  •  " .. (Lang.Current == "EN" and "PRESS ANOTHER KEY..." or "PRESIONA OTRA TECLA...") end
+			else
+				KeybindManager.Capturing = nil
+			end
 			return
 		end
 		return
@@ -3085,6 +3196,241 @@ AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, p
 		end
 	end
 end))
+
+-- Categoría exclusiva de CELULAR para construir un HUD flotante a gusto del
+-- usuario. Cada opción solo controla la visibilidad del botón flotante; el botón
+-- flotante ejecuta exactamente el toggle original mediante ConfigManager.
+FloatingButtonManager = {
+	Card = sectionCard(96),
+	Rows = 0,
+	Targets = {},
+	Entries = {},
+	FloatingCount = 0,
+	DragEntry = nil,
+	DragInput = nil,
+	DragStart = nil,
+	DragPosition = nil,
+	DragMoved = false,
+}
+FloatingButtonManager.Card.LayoutOrder = 96
+FloatingButtonManager.Card:SetAttribute("HexaCategoryOverride", "FLOATING")
+FloatingButtonManager.Card:SetAttribute("HexaMobileOnly", true)
+sectionTitle(FloatingButtonManager.Card, "BOTONES FLOTANTES", UDim2.new(0, 16, 0, 14))
+
+function FloatingButtonManager:IsEligible(targetButton)
+	if not targetButton or not targetButton.Parent then return false end
+	if targetButton:GetAttribute("IsToggle") ~= true then return false end
+	if targetButton:GetAttribute("HexaNoFloating") == true then return false end
+	if targetButton:GetAttribute("HexaDesktopOnly") == true then return false end
+	local card = targetButton.Parent
+	while card and card.Parent and card:GetAttribute("HexaContentCard") ~= true do card = card.Parent end
+	if not card or card:GetAttribute("HexaDesktopOnly") == true then return false end
+	local category = CategoryUI:GetCardCategory(card)
+	return category == "MOVEMENT" or category == "COMBAT" or category == "VISUALS"
+		or category == "TELEPORT" or category == "PLAYER"
+end
+
+function FloatingButtonManager:AllocateRow()
+	self.Rows += 1
+	local y = 44 + (self.Rows - 1) * 46
+	self.Card.Size = UDim2.new(1, 0, 0, math.max(96, y + 50))
+	self.Card:SetAttribute("HexaMobileBaseHeight", self.Card.Size.Y.Offset)
+	return y
+end
+
+function FloatingButtonManager:CreateSpecialOption(label)
+	local option = createToggleButton(self.Card, label, UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, self:AllocateRow()))
+	option:SetAttribute("HexaNoKeybind", true)
+	option:SetAttribute("HexaNoFloating", true)
+	option:SetAttribute("HexaNoFavorite", true)
+	return option
+end
+
+function FloatingButtonManager:GetTargetLabel(target)
+	return tostring(target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
+end
+
+function FloatingButtonManager:GetSpanishTargetLabel(target)
+	return tostring(target:GetAttribute("HexaSpanishBaseText") or target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
+end
+
+function FloatingButtonManager:DefaultPosition(index)
+	local slot = (index - 1) % 7
+	local column = math.floor((index - 1) / 7)
+	local rightSide = column % 2 == 0
+	local xOffset = 74 + math.floor(column / 2) * 132
+	local yScale = 0.28 + slot * 0.085
+	return UDim2.new(rightSide and 1 or 0, rightSide and -xOffset or xOffset, yScale, 0)
+end
+
+function FloatingButtonManager:RefreshEntry(id)
+	local entry = self.Entries[id]
+	if not entry then return end
+	local target = entry.Target
+	local button = entry.Button
+	if not target or not target.Parent or not button or not button.Parent then return end
+	local active = target:GetAttribute("IsActive") == true
+	local allowed = target:GetAttribute("HexaVipOnly") ~= true or HEXA_IS_VIP
+	button.Visible = MOBILE_DEVICE and entry.Enabled == true and allowed
+	button.Text = self:GetTargetLabel(target)
+	button.BackgroundColor3 = active and Color3.fromRGB(42, 42, 42) or Color3.fromRGB(12, 12, 12)
+	if entry.Stroke then entry.Stroke.Transparency = active and 0 or 0.18 end
+end
+
+function FloatingButtonManager:RefreshAll()
+	for id in pairs(self.Entries) do self:RefreshEntry(id) end
+end
+
+function FloatingButtonManager:IsPointerOverAny(position)
+	local point = Vector2.new(position.X, position.Y)
+	for _, entry in pairs(self.Entries) do
+		local button = entry.Button
+		if button and button.Parent and button.Visible then
+			local p, size = button.AbsolutePosition, button.AbsoluteSize
+			if point.X >= p.X and point.X <= p.X + size.X and point.Y >= p.Y and point.Y <= p.Y + size.Y then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function FloatingButtonManager:RegisterToggleButton(targetButton)
+	if not self:IsEligible(targetButton) then return end
+	local id = targetButton:GetAttribute("HexaConfigId")
+	if type(id) ~= "string" or self.Targets[id] then return end
+	self.Targets[id] = targetButton
+	self.FloatingCount += 1
+
+	local spanishLabel = self:GetSpanishTargetLabel(targetButton)
+	local option = createToggleButton(
+		self.Card,
+		"BOTÓN FLOTANTE: " .. spanishLabel,
+		UDim2.new(1, -32, 0, 38),
+		UDim2.new(0, 16, 0, self:AllocateRow())
+	)
+	option:SetAttribute("HexaNoKeybind", true)
+	option:SetAttribute("HexaNoFloating", true)
+	option:SetAttribute("HexaNoFavorite", true)
+
+	local floatButton = Instance.new("TextButton")
+	floatButton.Name = "HexaFloatingAction_" .. tostring(self.FloatingCount)
+	floatButton.AnchorPoint = Vector2.new(0.5, 0.5)
+	floatButton.Position = self:DefaultPosition(self.FloatingCount)
+	floatButton.Size = UDim2.fromOffset(118, 46)
+	floatButton.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+	floatButton.BackgroundTransparency = 0.08
+	floatButton.BorderSizePixel = 0
+	floatButton.Text = self:GetTargetLabel(targetButton)
+	floatButton.TextColor3 = Color3.fromRGB(245, 245, 245)
+	floatButton.TextSize = 10
+	floatButton.TextWrapped = true
+	floatButton.Font = Enum.Font.GothamBold
+	floatButton.AutoButtonColor = false
+	floatButton.Visible = false
+	floatButton.Active = true
+	floatButton.ZIndex = 175
+	floatButton:SetAttribute("HexaNoTranslate", true)
+	floatButton.Parent = ScreenGui
+	mkCorner(floatButton, 13)
+	local stroke = mkStroke(floatButton, Theme.Purple, 0.18, 2)
+
+	local entry = {
+		Target = targetButton,
+		Option = option,
+		Button = floatButton,
+		Stroke = stroke,
+		Enabled = false,
+	}
+	self.Entries[id] = entry
+
+	local function applyVipState()
+		if targetButton:GetAttribute("HexaVipOnly") == true and option:GetAttribute("HexaVipOnly") ~= true then
+			markVipControl(option)
+		end
+		self:RefreshEntry(id)
+	end
+	applyVipState()
+	targetButton:GetAttributeChangedSignal("HexaVipOnly"):Connect(applyVipState)
+	targetButton:GetAttributeChangedSignal("BaseText"):Connect(function() self:RefreshEntry(id) end)
+	targetButton:GetAttributeChangedSignal("IsActive"):Connect(function() self:RefreshEntry(id) end)
+
+	ConfigManager:BindToggle(option, function()
+		if targetButton:GetAttribute("HexaVipOnly") == true and not requireVip() then
+			entry.Enabled = false
+			setActive(option, false)
+			self:RefreshEntry(id)
+			return
+		end
+		entry.Enabled = not entry.Enabled
+		setActive(option, entry.Enabled)
+		self:RefreshEntry(id)
+	end)
+
+	floatButton.InputBegan:Connect(function(input)
+		if not MOBILE_DEVICE or not entry.Enabled then return end
+		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		self.DragEntry = entry
+		self.DragInput = input
+		self.DragStart = Vector2.new(input.Position.X, input.Position.Y)
+		self.DragPosition = floatButton.Position
+		self.DragMoved = false
+	end)
+
+	self:RefreshEntry(id)
+end
+
+AllSliders.TrackConnection(UserInputService.InputChanged:Connect(function(input)
+	local manager = FloatingButtonManager
+	local entry = manager and manager.DragEntry
+	if not entry or not manager.DragInput or not manager.DragStart or not manager.DragPosition then return end
+	local validMove = (manager.DragInput.UserInputType == Enum.UserInputType.Touch and input == manager.DragInput)
+		or (manager.DragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
+	if not validMove then return end
+	local current = Vector2.new(input.Position.X, input.Position.Y)
+	local delta = current - manager.DragStart
+	if delta.Magnitude >= 7 then manager.DragMoved = true end
+	local camera = workspace.CurrentCamera
+	local viewport = camera and camera.ViewportSize or GUI_VIEWPORT_SIZE
+	local halfW, halfH = 59, 23
+	local desiredX = math.clamp(manager.DragPosition.X.Scale * viewport.X + manager.DragPosition.X.Offset + delta.X, halfW + 4, viewport.X - halfW - 4)
+	local desiredY = math.clamp(manager.DragPosition.Y.Scale * viewport.Y + manager.DragPosition.Y.Offset + delta.Y, halfH + 4, viewport.Y - halfH - 4)
+	entry.Button.Position = UDim2.fromOffset(desiredX, desiredY)
+end))
+
+AllSliders.TrackConnection(UserInputService.InputEnded:Connect(function(input)
+	local manager = FloatingButtonManager
+	if not manager or input ~= manager.DragInput then return end
+	local entry = manager.DragEntry
+	if entry and MOBILE_DEVICE and entry.Enabled and not manager.DragMoved then
+		local target = entry.Target
+		if target and target.Parent then
+			if target:GetAttribute("HexaVipOnly") == true and not requireVip() then
+				manager:RefreshAll()
+			else
+				ConfigManager:ActivateToggle(target)
+				task.defer(function() manager:RefreshAll() end)
+			end
+		end
+	end
+	manager.DragEntry = nil
+	manager.DragInput = nil
+	manager.DragStart = nil
+	manager.DragPosition = nil
+	manager.DragMoved = false
+end))
+
+addVipStateListener(function(isVip)
+	if not isVip then
+		for _, entry in pairs(FloatingButtonManager.Entries) do
+			if entry.Target and entry.Target:GetAttribute("HexaVipOnly") == true then
+				entry.Enabled = false
+				setActive(entry.Option, false)
+			end
+		end
+	end
+	FloatingButtonManager:RefreshAll()
+end)
 
 ConfigManager.Card = sectionCard(140)
 ConfigManager.Card.LayoutOrder = 72
@@ -3183,7 +3529,7 @@ local jumpSlider = createSlider(MoveCard, "Potencia de salto", 50, 2500, current
 local infiniteJumpButton = createToggleButton(MoveCard, "SALTO INFINITO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 346))
 local noclipButton = createToggleButton(MoveCard, "SIN COLISIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 393))
 
-local CombatCard = sectionCard(MOBILE_DEVICE and 440 or 394)
+local CombatCard = sectionCard(394)
 CombatCard.LayoutOrder = 20
 sectionTitle(CombatCard, "COMBATE Y PUNTERÍA", UDim2.new(0, 16, 0, 14))
 
@@ -3213,6 +3559,9 @@ local FovStroke = mkStroke(FovCircle, Color3.fromRGB(255, 255, 255), 0.2, 1.5)
 local aimDistanceSlider = createSlider(CombatCard, "Distancia máxima de puntería (3D)", 50, 2000, maxAimDistance, 38, function(v) maxAimDistance = v end)
 local autoAimHeadButton = createToggleButton(CombatCard, "AIMBOT (CABEZA)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 96))
 local autoAimBodyButton = createToggleButton(CombatCard, "AIMBOT (CUERPO)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 142))
+-- En móvil ambos modos comparten el BOTÓN AIM FLOTANTE especial.
+autoAimHeadButton:SetAttribute("HexaNoFloating", true)
+autoAimBodyButton:SetAttribute("HexaNoFloating", true)
 local ignoreFriendsButton = createToggleButton(CombatCard, "IGNORAR AMIGOS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 234))
 local fovButton = createToggleButton(CombatCard, "USAR CÍRCULO FOV", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 280))
 local fovSlider = createSlider(CombatCard, "Radio del FOV", 30, 800, fovRadius, 326, function(v)
@@ -3230,9 +3579,8 @@ local MobileAim = {
 	DragPosition = nil,
 	DragMoved = false,
 }
-MobileAim.OptionButton = createToggleButton(CombatCard, "BOTÓN AIM FLOTANTE", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 386))
-MobileAim.OptionButton:SetAttribute("HexaNoKeybind", true)
-MobileAim.OptionButton.Visible = MOBILE_DEVICE
+MobileAim.OptionButton = FloatingButtonManager:CreateSpecialOption("BOTÓN AIM FLOTANTE")
+MobileAim.OptionButton.Visible = true
 
 MobileAim.Button = Instance.new("TextButton")
 MobileAim.Button.Name = "HexaMobileAimButton"
@@ -3505,22 +3853,112 @@ Tutorial.Text.Position = UDim2.new(0, 12, 0, 12)
 Tutorial.Text.Size = UDim2.new(1, -24, 0, 0)
 Tutorial.Text.AutomaticSize = Enum.AutomaticSize.Y
 Tutorial.Text.Text = [[PUNTERÍA AUTOMÁTICA
-Activa la puntería a la cabeza o al cuerpo. En computadora puedes configurar atajos desde KEYBINDS. En celular usa el Botón aim flotante y los controles táctiles.
+Activa la puntería a la cabeza o al cuerpo. Configura los atajos desde KEYBINDS y asígnales una tecla o un botón del ratón.
+
+PERSISTENCIA DE OBJETIVO
+Mantiene el objetivo actual mientras siga siendo válido para evitar cambios de enemigo innecesarios.
 
 CÍRCULO FOV
 Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
 
 MOVIMIENTO Y FÍSICA
-Controla el vuelo, la velocidad, el salto, la gravedad, la caminata aérea y la colisión. En celular, el vuelo incluye botones para subir y bajar.
+Controla vuelo, velocidad, salto, gravedad, caminata aérea y colisión. Durante el vuelo usa W/A/S/D, Espacio para subir y Ctrl izquierdo para bajar.
 
-VISUALES ESP
-Muestra esqueletos o líneas hacia otros jugadores y permite limitar la distancia.
+CÁMARA LIBRE
+Mantén el botón derecho del ratón para mirar. Usa W/A/S/D para moverte; Espacio/E para subir y Ctrl/Q para bajar.
 
 TELETRANSPORTE
-Selecciona un jugador y pulsa IR AL JUGADOR. En computadora puedes usar TP AL RATÓN; en celular se adapta como TP AL TOQUE.
+Selecciona un jugador y pulsa IR AL JUGADOR. TELETRANSPORTARSE AL RATÓN permite elegir el destino haciendo clic fuera de la interfaz.
 
 FUNCIONES VIP
-Las opciones que muestran la etiqueta VIP requieren una clave VIP activa.]]
+Las opciones que muestran la etiqueta VIP requieren acceso VIP activo.]]
+registerDeviceText(Tutorial.Text,
+[[PUNTERÍA AUTOMÁTICA
+Activa la puntería a la cabeza o al cuerpo. Configura los atajos desde KEYBINDS y asígnales una tecla o un botón del ratón.
+
+PERSISTENCIA DE OBJETIVO
+Mantiene el objetivo actual mientras siga siendo válido para evitar cambios de enemigo innecesarios.
+
+CÍRCULO FOV
+Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
+
+MOVIMIENTO Y FÍSICA
+Controla vuelo, velocidad, salto, gravedad, caminata aérea y colisión. Durante el vuelo usa W/A/S/D, Espacio para subir y Ctrl izquierdo para bajar.
+
+CÁMARA LIBRE
+Mantén el botón derecho del ratón para mirar. Usa W/A/S/D para moverte; Espacio/E para subir y Ctrl/Q para bajar.
+
+TELETRANSPORTE
+Selecciona un jugador y pulsa IR AL JUGADOR. TELETRANSPORTARSE AL RATÓN permite elegir el destino haciendo clic fuera de la interfaz.
+
+FUNCIONES VIP
+Las opciones que muestran la etiqueta VIP requieren acceso VIP activo.]],
+[[PUNTERÍA AUTOMÁTICA
+Activa la puntería a la cabeza o al cuerpo. Puedes usar BOTÓN AIM FLOTANTE como acceso táctil rápido; no necesitas configurar teclas.
+
+BOTONES FLOTANTES
+Activa desde esta categoría únicamente los accesos que quieras tener sobre la pantalla. Puedes arrastrar cada botón sin activar la función accidentalmente.
+
+PERSISTENCIA DE OBJETIVO
+Mantiene el objetivo actual mientras siga siendo válido para evitar cambios de enemigo innecesarios.
+
+CÍRCULO FOV
+Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
+
+MOVIMIENTO Y FÍSICA
+Controla vuelo, velocidad, salto, gravedad, caminata aérea y colisión. Durante el vuelo usa el joystick normal y los botones SUBIR/BAJAR.
+
+CÁMARA LIBRE
+Arrastra el dedo por el lado derecho de la pantalla para mirar, usa el joystick para moverte y los botones SUBIR/BAJAR para cambiar de altura.
+
+TELETRANSPORTE
+Selecciona un jugador y pulsa IR AL JUGADOR. TELETRANSPORTARSE AL TOQUE permite elegir el destino tocando la pantalla fuera de la interfaz.
+
+FUNCIONES VIP
+Las opciones que muestran la etiqueta VIP requieren acceso VIP activo.]],
+[[AUTO AIM
+Aim at the head or body. Configure shortcuts from KEYBINDS and assign a keyboard key or mouse button.
+
+TARGET PERSISTENCE
+Keeps the current target while it remains valid to prevent unnecessary target switching.
+
+FOV CIRCLE
+Limits the area where targets are selected. Enable USE FOV CIRCLE and adjust its radius.
+
+MOVEMENT AND PHYSICS
+Controls flight, speed, jumping, gravity, air walk and collision. While flying use W/A/S/D, Space to go up and Left Ctrl to go down.
+
+FREE CAMERA
+Hold the right mouse button to look around. Use W/A/S/D to move; Space/E to go up and Ctrl/Q to go down.
+
+TELEPORT
+Select a player and press GO TO PLAYER. TELEPORT TO MOUSE lets you choose the destination by clicking outside the interface.
+
+VIP FEATURES
+Options displaying the VIP label require active VIP access.]],
+[[AUTO AIM
+Aim at the head or body. You can use FLOATING AIM BUTTON as a quick touch control; no keyboard binds are needed.
+
+FLOATING BUTTONS
+Enable only the shortcuts you want on screen from this category. You can drag each button without accidentally activating the feature.
+
+TARGET PERSISTENCE
+Keeps the current target while it remains valid to prevent unnecessary target switching.
+
+FOV CIRCLE
+Limits the area where targets are selected. Enable USE FOV CIRCLE and adjust its radius.
+
+MOVEMENT AND PHYSICS
+Controls flight, speed, jumping, gravity, air walk and collision. While flying use the normal joystick and the UP/DOWN buttons.
+
+FREE CAMERA
+Drag your finger on the right side of the screen to look around, use the joystick to move and the UP/DOWN buttons to change height.
+
+TELEPORT
+Select a player and press GO TO PLAYER. TELEPORT TO TOUCH lets you choose the destination by touching the screen outside the interface.
+
+VIP FEATURES
+Options displaying the VIP label require active VIP access.]])
 Tutorial.Text.TextColor3 = Theme.TextMain
 Tutorial.Text.TextSize = MOBILE_DEVICE and 12 or 13
 Tutorial.Text.TextWrapped = true
@@ -6498,7 +6936,9 @@ local function applyDeviceProfile(mode)
 	for _, definition in ipairs(CategoryUI.Definitions) do
 		local button = CategoryUI.Buttons[definition.Key]
 		if button then
-			button.Visible = not (MOBILE_DEVICE and definition.Key == "KEYBINDS")
+			local hiddenForDevice = (MOBILE_DEVICE and definition.Key == "KEYBINDS")
+				or ((not MOBILE_DEVICE) and definition.Key == "FLOATING")
+			button.Visible = not hiddenForDevice
 			button.Size = MOBILE_DEVICE
 				and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 46), 33)
 				or UDim2.new(1, -8, 0, 27)
@@ -6507,12 +6947,15 @@ local function applyDeviceProfile(mode)
 		end
 	end
 	if MOBILE_DEVICE and CategoryUI.Active == "KEYBINDS" then CategoryUI.Active = "ALL" end
+	if (not MOBILE_DEVICE) and CategoryUI.Active == "FLOATING" then CategoryUI.Active = "ALL" end
 	CategoryUI:RefreshButtons()
 	if KeybindManager and KeybindManager.Card then KeybindManager.Card.Visible = not MOBILE_DEVICE end
+	if FloatingButtonManager and FloatingButtonManager.Card then FloatingButtonManager.Card.Visible = MOBILE_DEVICE end
+	if FloatingButtonManager then FloatingButtonManager:RefreshAll() end
 
-	CombatCard.Size = UDim2.new(1, 0, 0, MOBILE_DEVICE and 440 or 394)
-	CombatCard:SetAttribute("HexaMobileBaseHeight", MOBILE_DEVICE and 440 or 394)
-	MobileAim.OptionButton.Visible = MOBILE_DEVICE
+	CombatCard.Size = UDim2.new(1, 0, 0, 394)
+	CombatCard:SetAttribute("HexaMobileBaseHeight", 394)
+	MobileAim.OptionButton.Visible = true
 	if not MOBILE_DEVICE then
 		MobileAim.Enabled = false
 		setActive(MobileAim.OptionButton, false)
@@ -6521,6 +6964,8 @@ local function applyDeviceProfile(mode)
 	end
 	MobileAim:Refresh()
 	setMobileFlyControlsVisible(MOBILE_DEVICE and flyActive)
+	refreshDeviceSpecificTexts()
+	refreshFavoritesCard()
 
 	if Tutorial and Tutorial.Scroll then Tutorial.Scroll.ScrollBarThickness = MOBILE_DEVICE and 6 or 4 end
 	if Tutorial and Tutorial.Text then Tutorial.Text.TextSize = MOBILE_DEVICE and 12 or 13 end
@@ -7605,7 +8050,12 @@ task.spawn(function()
 			self.SavePositionButton = neonButton(self.TeleportCard, "GUARDAR POSICIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 			self.ReturnPositionButton = neonButton(self.TeleportCard, "VOLVER A LA POSICIÓN GUARDADA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 			self.HistoryButton = neonButton(self.TeleportCard, "HISTORIAL: VOLVER (0)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
-			self.MouseTeleportButton = createToggleButton(self.TeleportCard, MOBILE_DEVICE and "TELETRANSPORTARSE AL TOQUE" or "TELETRANSPORTARSE AL RATÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
+			self.MouseTeleportButton = createToggleButton(self.TeleportCard, "TELETRANSPORTARSE AL RATÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
+			registerDeviceText(self.MouseTeleportButton,
+				"TELETRANSPORTARSE AL RATÓN",
+				"TELETRANSPORTARSE AL TOQUE",
+				"TELEPORT TO MOUSE",
+				"TELEPORT TO TOUCH")
 			markVipControl(self.MouseTeleportButton)
 			self:connect(self.SavePositionButton.MouseButton1Click, function()
 				local _, _, root = self:getCharacter()
@@ -8063,9 +8513,12 @@ task.spawn(function()
 				return point.X >= absolutePosition.X and point.X <= absolutePosition.X + absoluteSize.X
 					and point.Y >= absolutePosition.Y and point.Y <= absolutePosition.Y + absoluteSize.Y
 			end
-			return contains(MainFrame) or contains(KeyFrame) or contains(ConfirmFrame) or contains(Tutorial.Frame)
+			if contains(MainFrame) or contains(KeyFrame) or contains(ConfirmFrame) or contains(Tutorial.Frame)
 				or contains(RestoreOrb) or contains(self.InfoHud) or contains(self.InspectorFrame)
-				or contains(VipNotification) or contains(MobileFlyControls)
+				or contains(VipNotification) or contains(MobileFlyControls) or contains(MobileAim and MobileAim.Button) then
+				return true
+			end
+			return FloatingButtonManager and FloatingButtonManager:IsPointerOverAny(point) or false
 		end
 
 		function X:setupGlobalConnections()
