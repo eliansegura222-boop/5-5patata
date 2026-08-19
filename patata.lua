@@ -176,6 +176,190 @@ local VipStateListeners = {}
 local notifyVipLocked = function() end
 local BUTTON_TEXT_COLOR = Color3.fromRGB(255, 255, 255)
 
+-- Configuración persistente por usuario. Nada se carga automáticamente: el
+-- usuario debe pulsar el botón CARGAR CONFIGURACIÓN de forma explícita.
+local KeybindManager = nil
+local ConfigManager = {
+	FileName = ("H3X4_X_Config_%d.json"):format(LocalPlayer.UserId),
+	ToggleButtons = {},
+	ToggleCallbacks = {},
+	Sliders = {},
+	PendingToggles = nil,
+	PendingSliders = nil,
+	PendingKeybinds = nil,
+	Loading = false,
+}
+
+function ConfigManager:NormalizeLabel(value)
+	local text = string.lower(tostring(value or ""))
+	text = text:gsub("á", "a"):gsub("é", "e"):gsub("í", "i"):gsub("ó", "o"):gsub("ú", "u"):gsub("ü", "u"):gsub("ñ", "n")
+	text = text:gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", "")
+	return text ~= "" and text or "control"
+end
+
+function ConfigManager:GetCardOrder(parent)
+	local object = parent
+	while object do
+		if object:GetAttribute("HexaContentCard") == true then
+			return tonumber(object.LayoutOrder) or 0
+		end
+		object = object.Parent
+	end
+	return 0
+end
+
+function ConfigManager:MakeId(kind, parent, label)
+	return tostring(kind) .. ":" .. tostring(self:GetCardOrder(parent)) .. ":" .. self:NormalizeLabel(label)
+end
+
+function ConfigManager:RegisterToggle(button, parent, label)
+	local id = self:MakeId("toggle", parent, label)
+	button:SetAttribute("HexaConfigId", id)
+	self.ToggleButtons[id] = button
+	return id
+end
+
+function ConfigManager:RegisterSlider(controller, parent, label)
+	local id = self:MakeId("slider", parent, label)
+	controller.ConfigId = id
+	self.Sliders[id] = controller
+	if self.PendingSliders and self.PendingSliders[id] ~= nil then
+		local value = tonumber(self.PendingSliders[id])
+		if value then pcall(function() controller.Set(value) end) end
+	end
+	return id
+end
+
+function ConfigManager:SetToggleCallback(button, callback)
+	if not button or type(callback) ~= "function" then return end
+	local id = button:GetAttribute("HexaConfigId")
+	if type(id) ~= "string" then return end
+	self.ToggleCallbacks[id] = callback
+	if self.PendingToggles and self.PendingToggles[id] ~= nil then
+		local desired = self.PendingToggles[id] == true
+		task.defer(function()
+			if not button or not button.Parent then return end
+			if button:GetAttribute("IsActive") ~= desired then
+				pcall(callback)
+			end
+		end)
+	end
+end
+
+function ConfigManager:AttachSignalCallback(signal, callback)
+	if not signal or type(callback) ~= "function" then return end
+	for _, button in pairs(self.ToggleButtons) do
+		local ok, same = pcall(function() return button.MouseButton1Click == signal end)
+		if ok and same then
+			self:SetToggleCallback(button, callback)
+			return
+		end
+	end
+end
+
+function ConfigManager:BindToggle(button, callback)
+	self:SetToggleCallback(button, callback)
+	return button.MouseButton1Click:Connect(callback)
+end
+
+function ConfigManager:ActivateToggle(button)
+	if not button or not button.Parent then return false end
+	local id = button:GetAttribute("HexaConfigId")
+	local callback = type(id) == "string" and self.ToggleCallbacks[id] or nil
+	if type(callback) == "function" then
+		local ok = pcall(callback)
+		return ok
+	end
+
+	-- Respaldo para ejecutores que exponen firesignal/getconnections.
+	if type(firesignal) == "function" then
+		local ok = pcall(firesignal, button.MouseButton1Click)
+		if ok then return true end
+	end
+	if type(getconnections) == "function" then
+		local ok, connections = pcall(getconnections, button.MouseButton1Click)
+		if ok and type(connections) == "table" then
+			local fired = false
+			for _, connection in ipairs(connections) do
+				local fn = connection and connection.Function
+				if type(fn) == "function" then
+					pcall(fn)
+					fired = true
+				end
+			end
+			if fired then return true end
+		end
+	end
+	return false
+end
+
+function ConfigManager:SetToggleState(button, desired)
+	if not button or not button.Parent then return false end
+	desired = desired == true
+	if button:GetAttribute("IsActive") == desired then return true end
+	return self:ActivateToggle(button)
+end
+
+function ConfigManager:Save()
+	if type(writefile) ~= "function" then return false, "TU EJECUTOR NO PERMITE GUARDAR ARCHIVOS" end
+	local payload = {
+		version = 2,
+		userId = LocalPlayer.UserId,
+		toggles = {},
+		sliders = {},
+		keybinds = KeybindManager and KeybindManager:Serialize() or {},
+	}
+	for id, button in pairs(self.ToggleButtons) do
+		if button and button.Parent then payload.toggles[id] = button:GetAttribute("IsActive") == true end
+	end
+	for id, controller in pairs(self.Sliders) do
+		if controller and type(controller.Get) == "function" then
+			local ok, value = pcall(controller.Get)
+			if ok and type(value) == "number" then payload.sliders[id] = value end
+		end
+	end
+	local ok, encoded = pcall(function() return HttpService:JSONEncode(payload) end)
+	if not ok then return false, "NO SE PUDO CODIFICAR LA CONFIGURACIÓN" end
+	local wrote = pcall(function() writefile(self.FileName, encoded) end)
+	return wrote, wrote and "CONFIGURACIÓN GUARDADA" or "NO SE PUDO GUARDAR"
+end
+
+function ConfigManager:Load()
+	if type(readfile) ~= "function" or type(isfile) ~= "function" then
+		return false, "TU EJECUTOR NO PERMITE CARGAR ARCHIVOS"
+	end
+	local exists = false
+	pcall(function() exists = isfile(self.FileName) end)
+	if not exists then return false, "NO HAY CONFIGURACIÓN GUARDADA" end
+	local ok, raw = pcall(function() return readfile(self.FileName) end)
+	if not ok or type(raw) ~= "string" then return false, "NO SE PUDO LEER LA CONFIGURACIÓN" end
+	local decodedOk, data = pcall(function() return HttpService:JSONDecode(raw) end)
+	if not decodedOk or type(data) ~= "table" then return false, "CONFIGURACIÓN INVÁLIDA" end
+	if tonumber(data.userId) ~= LocalPlayer.UserId then return false, "ESTA CONFIGURACIÓN ES DE OTRO USUARIO" end
+
+	self.PendingToggles = type(data.toggles) == "table" and data.toggles or {}
+	self.PendingSliders = type(data.sliders) == "table" and data.sliders or {}
+	self.PendingKeybinds = type(data.keybinds) == "table" and data.keybinds or {}
+	self.Loading = true
+
+	-- Primero barras y keybinds, luego funciones activadas/desactivadas.
+	for id, value in pairs(self.PendingSliders) do
+		local controller = self.Sliders[id]
+		if controller and type(controller.Set) == "function" then
+			local numeric = tonumber(value)
+			if numeric then pcall(function() controller.Set(numeric) end) end
+		end
+	end
+	if KeybindManager then KeybindManager:LoadSerialized(self.PendingKeybinds) end
+	for id, desired in pairs(self.PendingToggles) do
+		local button = self.ToggleButtons[id]
+		if button and button.Parent then self:SetToggleState(button, desired == true) end
+	end
+
+	self.Loading = false
+	return true, "CONFIGURACIÓN CARGADA"
+end
+
 local function addVipStateListener(callback)
 	table.insert(VipStateListeners, callback)
 end
@@ -546,6 +730,10 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	btn:SetAttribute("BaseText", text)
 	btn:SetAttribute("IsActive", false)
 	btn:SetAttribute("IsToggle", true)
+	ConfigManager:RegisterToggle(btn, parent, text)
+	if KeybindManager then task.defer(function()
+		if btn and btn.Parent then KeybindManager:RegisterToggleButton(btn) end
+	end) end
 	
 	addHover(btn, Theme.PurpleDeep, Theme.PurpleDark, Theme.Active)
 	if UI_READY then
@@ -824,9 +1012,13 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 		currentValue = value
 		controller.Refresh()
 	end
+	function controller.Get()
+		return currentValue
+	end
 	controller.Container = container
 	controller.Maximum = originalMax
 	controller.TitleLabel = label
+	ConfigManager:RegisterSlider(controller, parent, title)
 	table.insert(AllSliders, controller)
 
 	local limitNoticeShown = false
@@ -943,62 +1135,6 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 	if vipOnly then markVipControl(container) end
 	controller.Refresh()
 	return controller
-end
-
-local function createKeybindButton(parent: Instance, size: UDim2, pos: UDim2, onKeyChanged: (any) -> ())
-	local keyBtn = neonButton(parent, MOBILE_DEVICE and "ACTIVACIÓN: AUTOMÁTICA" or "TECLA: AUTOMÁTICA", size, pos)
-	keyBtn:SetAttribute("HexaNoFavorite", true)
-	if MOBILE_DEVICE then
-		local modes = {
-			{value = "AUTO", label = "ACTIVACIÓN: AUTOMÁTICA"},
-			{value = "AIM", label = "ACTIVACIÓN: AL APUNTAR"},
-			{value = "FIRE", label = "ACTIVACIÓN: AL DISPARAR"},
-		}
-		local index = 1
-		keyBtn.MouseButton1Click:Connect(function()
-			index = index % #modes + 1
-			local mode = modes[index]
-			keyBtn.Text = mode.label
-			keyBtn:SetAttribute("BaseText", mode.label)
-			onKeyChanged(mode.value)
-		end)
-		onKeyChanged("AUTO")
-		return keyBtn
-	end
-
-	local binding = false
-	keyBtn.MouseButton1Click:Connect(function()
-		if binding then return end
-		binding = true
-		keyBtn.Text = "PRESIONA UNA TECLA..."
-		task.wait(0.1)
-		local conn
-		conn = UserInputService.InputBegan:Connect(function(input, gpe)
-			if input.UserInputType == Enum.UserInputType.Keyboard then
-				if gpe then return end
-				if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace then
-					keyBtn.Text = "TECLA: AUTOMÁTICA"
-					onKeyChanged(nil)
-				else
-					keyBtn.Text = "TECLA: " .. input.KeyCode.Name
-					onKeyChanged(input.KeyCode)
-				end
-				keyBtn:SetAttribute("BaseText", keyBtn.Text)
-				conn:Disconnect()
-				task.delay(0.1, function() binding = false end)
-			elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.MouseButton3 then
-				local name = input.UserInputType.Name
-				if name == "MouseButton1" then keyBtn.Text = "TECLA: CLIC IZQ."
-				elseif name == "MouseButton2" then keyBtn.Text = "TECLA: CLIC DER."
-				elseif name == "MouseButton3" then keyBtn.Text = "TECLA: CLIC CENTRAL" end
-				keyBtn:SetAttribute("BaseText", keyBtn.Text)
-				onKeyChanged(input.UserInputType)
-				conn:Disconnect()
-				task.delay(0.1, function() binding = false end)
-			end
-		end)
-	end)
-	return keyBtn
 end
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -1176,7 +1312,10 @@ end
 
 Lang.Pairs = {
 	{[[PUNTERÍA AUTOMÁTICA
-Activa la puntería a la cabeza o al cuerpo. En computadora puedes asignar una tecla o botón del ratón. En celular puedes elegir activación automática, al apuntar o al disparar.
+Activa la puntería a la cabeza o al cuerpo. Los atajos ya no aparecen dentro de las funciones: configúralos desde la categoría KEYBINDS.
+
+KEYBINDS
+Asigna teclas o botones del ratón a las funciones compatibles desde una sola categoría. Pulsa Retroceso o Escape al editar un atajo para dejarlo sin tecla.
 
 CÍRCULO FOV
 Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
@@ -1192,7 +1331,10 @@ Selecciona un jugador y pulsa IR AL JUGADOR. En computadora puedes usar TP AL RA
 
 FUNCIONES VIP
 Las opciones que muestran la etiqueta VIP requieren una clave VIP activa.]], [[AUTO AIM
-Enable aiming at the head or body. On computer you can assign a keyboard key or mouse button. On mobile you can choose automatic activation, while aiming, or while firing.
+Enable aiming at the head or body. Keybind controls are no longer embedded inside each feature; configure them from the KEYBINDS category.
+
+KEYBINDS
+Assign keyboard keys or mouse buttons to compatible features from one category. Press Backspace or Escape while editing a bind to leave it unbound.
 
 FOV CIRCLE
 Limits the area where targets are selected. Enable USE FOV CIRCLE and adjust its radius.
@@ -1218,11 +1360,12 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"JUGADOR", "PLAYER"},
 	{"SISTEMA", "SYSTEM"},
 	{"PERSONALIZAR", "CUSTOMIZE"},
+	{"KEYBINDS", "KEYBINDS"},
+	{"CONFIGURACIÓN DE USUARIO", "USER CONFIGURATION"},
+	{"GUARDAR CONFIGURACIÓN", "SAVE CONFIGURATION"},
+	{"CARGAR CONFIGURACIÓN", "LOAD CONFIGURATION"},
 	{"FAVORITOS", "FAVORITES"},
 	{"NO TIENES FUNCIONES FAVORITAS", "YOU HAVE NO FAVORITE FEATURES"},
-	{"ACTIVACIÓN: AUTOMÁTICA", "ACTIVATION: AUTOMATIC"},
-	{"ACTIVACIÓN: AL APUNTAR", "ACTIVATION: WHILE AIMING"},
-	{"ACTIVACIÓN: AL DISPARAR", "ACTIVATION: WHILE FIRING"},
 	{"TELETRANSPORTARSE AL TOQUE", "TELEPORT TO TOUCH"},
 	{"AUTO TOQUES", "AUTO TAP"},
 	{"Toques por segundo", "Taps per second"},
@@ -1312,9 +1455,6 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"FUNCIONES ESENCIALES", "ESSENTIAL FEATURES"},
 	{"INSTANT HIT", "INSTANT HIT"},
 	{"MODO JESÚS (CAMINAR SOBRE AGUA)", "JESUS MODE (WALK ON WATER)"},
-	{"CÁMARA, VEHÍCULOS Y ESTADOS", "CAMERA, VEHICLES AND STATES"},
-	{"VELOCIDAD DE VEHÍCULOS", "VEHICLE SPEED"},
-	{"Multiplicador del vehículo", "Vehicle multiplier"},
 	{"CÁMARA LIBRE", "FREE CAMERA"},
 	{"Velocidad de la cámara libre", "Free camera speed"},
 	{"SPIN", "SPIN"},
@@ -1354,7 +1494,6 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"SISTEMA Y UTILIDADES", "SYSTEM AND UTILITIES"},
 	{"OPTIMIZACIÓN DE RENDIMIENTO", "PERFORMANCE OPTIMIZATION"},
 	{"CÁMARA Y MOVIMIENTO", "CAMERA AND MOVEMENT"},
-	{"VEHÍCULOS", "VEHICLES"},
 	{"PROTECCIÓN DEL PERSONAJE", "PLAYER PROTECTION"},
 	{"MISCELÁNEO", "MISCELLANEOUS"},
 	{"ANTI AUSENCIA (AFK)", "ANTI AFK"},
@@ -1403,11 +1542,6 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"CANCELAR", "CANCEL"},
 	{"SÍ", "YES"},
 	{"PRESIONA UNA TECLA...", "PRESS A KEY..."},
-	{"TECLA: AUTOMÁTICA", "KEY: AUTO"},
-	{"TECLA: CLIC IZQ.", "KEY: LMB"},
-	{"TECLA: CLIC DER.", "KEY: RMB"},
-	{"TECLA: CLIC CENTRAL", "KEY: MMB"},
-	{"TECLA:", "KEY:"},
 	{"BLANCO", "WHITE"},
 	{"ROJO", "RED"},
 	{"VERDE", "GREEN"},
@@ -1860,6 +1994,7 @@ local CategoryUI = {
 		{Key = "PLAYER", Label = "JUGADOR"},
 		{Key = "INFO", Label = "INFORMACIÓN"},
 		{Key = "SYSTEM", Label = "SISTEMA"},
+		{Key = "KEYBINDS", Label = "KEYBINDS"},
 		{Key = "CUSTOMIZE", Label = "PERSONALIZAR"},
 	},
 }
@@ -2047,6 +2182,11 @@ local function createCategoryIcon(parent, categoryKey)
 		line("GearBottom", 7, 12, 2, 4, 0)
 		line("GearLeft", 0, 7, 4, 2, 0)
 		line("GearRight", 12, 7, 4, 2, 0)
+	elseif categoryKey == "KEYBINDS" then
+		part("KeyLeft", 1, 4, 4, 4, 0, 2, true)
+		part("KeyMid", 6, 4, 4, 4, 0, 2, true)
+		part("KeyRight", 11, 4, 4, 4, 0, 2, true)
+		part("Space", 3, 10, 10, 4, 0, 2, true)
 	elseif categoryKey == "CUSTOMIZE" then
 		line("SliderTop", 1, 3, 14, 2, 0)
 		line("SliderMiddle", 1, 7, 14, 2, 0)
@@ -2062,6 +2202,8 @@ end
 function CategoryUI:GetCardCategory(card)
 	if not card or not card:IsA("Frame") then return "ALL" end
 	if card.Name == "HexaFavoritesCard" then return "HOME" end
+	local override = card:GetAttribute("HexaCategoryOverride")
+	if type(override) == "string" and override ~= "" then return override end
 	local order = tonumber(card.LayoutOrder) or 0
 	if order < -1 then return "SYSTEM" end
 	if order < 10 or order >= 90 then return "HOME" end
@@ -2688,6 +2830,197 @@ local function sectionCard(height: number)
 	return card
 end
 
+-- Categoría independiente para todos los atajos. Los botones originales ya no
+-- muestran keybinds a su lado: aquí se centralizan los atajos de funciones de
+-- movimiento, combate, visuales, teletransporte y jugador.
+KeybindManager = {
+	Card = sectionCard(96),
+	Rows = 0,
+	Bindings = {},
+	Buttons = {},
+	Targets = {},
+	Capturing = nil,
+	ReadyAt = 0,
+}
+KeybindManager.Card.LayoutOrder = 95
+KeybindManager.Card:SetAttribute("HexaCategoryOverride", "KEYBINDS")
+sectionTitle(KeybindManager.Card, "KEYBINDS", UDim2.new(0, 16, 0, 14))
+
+function KeybindManager:IsEligible(targetButton)
+	if not targetButton or not targetButton.Parent then return false end
+	if targetButton:GetAttribute("IsToggle") ~= true then return false end
+	if targetButton:GetAttribute("HexaNoKeybind") == true then return false end
+	local card = targetButton.Parent
+	while card and card.Parent and card:GetAttribute("HexaContentCard") ~= true do card = card.Parent end
+	if not card then return false end
+	local category = CategoryUI:GetCardCategory(card)
+	return category == "MOVEMENT" or category == "COMBAT" or category == "VISUALS"
+		or category == "TELEPORT" or category == "PLAYER"
+end
+
+function KeybindManager:FormatBinding(binding)
+	if typeof(binding) ~= "EnumItem" then return "SIN TECLA" end
+	if binding.EnumType == Enum.UserInputType then
+		if binding == Enum.UserInputType.MouseButton1 then return "CLIC IZQ." end
+		if binding == Enum.UserInputType.MouseButton2 then return "CLIC DER." end
+		if binding == Enum.UserInputType.MouseButton3 then return "CLIC CENTRAL" end
+	end
+	return binding.Name
+end
+
+function KeybindManager:RefreshButton(id)
+	local keyButton = self.Buttons[id]
+	local target = self.Targets[id]
+	if not keyButton or not target then return end
+	local label = tostring(target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
+	keyButton.Text = label .. "  •  " .. self:FormatBinding(self.Bindings[id])
+	keyButton:SetAttribute("BaseText", keyButton.Text)
+end
+
+function KeybindManager:SetBinding(id, binding)
+	self.Bindings[id] = binding
+	self:RefreshButton(id)
+end
+
+function KeybindManager:DecodeBinding(kind, name)
+	local enumType = kind == "KeyCode" and Enum.KeyCode or Enum.UserInputType
+	for _, item in ipairs(enumType:GetEnumItems()) do
+		if item.Name == name then return item end
+	end
+	return nil
+end
+
+function KeybindManager:RegisterToggleButton(targetButton)
+	if not self:IsEligible(targetButton) then return end
+	local id = targetButton:GetAttribute("HexaConfigId")
+	if type(id) ~= "string" or self.Targets[id] then return end
+	self.Rows += 1
+	self.Targets[id] = targetButton
+
+	local y = 44 + (self.Rows - 1) * 46
+	local keyButton = neonButton(self.Card, "", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, y))
+	keyButton:SetAttribute("HexaNoFavorite", true)
+	keyButton:SetAttribute("HexaNoTranslate", true)
+	keyButton.TextXAlignment = Enum.TextXAlignment.Left
+	local pad = keyButton:FindFirstChildOfClass("UIPadding") or Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 14)
+	pad.Parent = keyButton
+	self.Buttons[id] = keyButton
+	self.Card.Size = UDim2.new(1, 0, 0, math.max(96, y + 50))
+	self.Card:SetAttribute("HexaMobileBaseHeight", self.Card.Size.Y.Offset)
+	self:RefreshButton(id)
+
+	keyButton.MouseButton1Click:Connect(function()
+		if self.Capturing then return end
+		self.Capturing = id
+		self.ReadyAt = os.clock() + 0.12
+		local label = tostring(targetButton:GetAttribute("BaseText") or targetButton.Text or "FUNCIÓN")
+		keyButton.Text = label .. "  •  PRESIONA UNA TECLA..."
+	end)
+
+	if ConfigManager.PendingKeybinds and ConfigManager.PendingKeybinds[id] then
+		local packed = ConfigManager.PendingKeybinds[id]
+		task.defer(function()
+			if packed and packed.kind and packed.name then
+				local binding = self:DecodeBinding(packed.kind, packed.name)
+				if binding then self:SetBinding(id, binding) end
+			end
+		end)
+	end
+end
+
+function KeybindManager:Serialize()
+	local result = {}
+	for id, binding in pairs(self.Bindings) do
+		if typeof(binding) == "EnumItem" then
+			result[id] = {kind = binding.EnumType == Enum.KeyCode and "KeyCode" or "UserInputType", name = binding.Name}
+		end
+	end
+	return result
+end
+
+function KeybindManager:LoadSerialized(data)
+	if type(data) ~= "table" then return end
+	for id, packed in pairs(data) do
+		if type(packed) == "table" and type(packed.kind) == "string" and type(packed.name) == "string" then
+			local binding = self:DecodeBinding(packed.kind, packed.name)
+			if binding then self:SetBinding(id, binding) end
+		end
+	end
+end
+
+AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, processed)
+	if UserInputService:GetFocusedTextBox() then return end
+	if KeybindManager.Capturing then
+		if os.clock() < KeybindManager.ReadyAt then return end
+		local id = KeybindManager.Capturing
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace then
+				KeybindManager:SetBinding(id, nil)
+			else
+				KeybindManager:SetBinding(id, input.KeyCode)
+			end
+			KeybindManager.Capturing = nil
+			return
+		elseif input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.MouseButton2
+			or input.UserInputType == Enum.UserInputType.MouseButton3 then
+			KeybindManager:SetBinding(id, input.UserInputType)
+			KeybindManager.Capturing = nil
+			return
+		end
+		return
+	end
+	if processed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.MouseButton2
+		or input.UserInputType == Enum.UserInputType.MouseButton3 then
+		local point = input.Position
+		local pos, size = MainFrame.AbsolutePosition, MainFrame.AbsoluteSize
+		if MainFrame.Visible and point.X >= pos.X and point.X <= pos.X + size.X and point.Y >= pos.Y and point.Y <= pos.Y + size.Y then
+			return
+		end
+	end
+	for id, binding in pairs(KeybindManager.Bindings) do
+		local matched = false
+		if typeof(binding) == "EnumItem" then
+			if binding.EnumType == Enum.KeyCode then matched = input.KeyCode == binding
+			elseif binding.EnumType == Enum.UserInputType then matched = input.UserInputType == binding end
+		end
+		if matched then
+			local target = KeybindManager.Targets[id]
+			if target and target.Parent then ConfigManager:ActivateToggle(target) end
+		end
+	end
+end))
+
+ConfigManager.Card = sectionCard(140)
+ConfigManager.Card.LayoutOrder = 72
+sectionTitle(ConfigManager.Card, "CONFIGURACIÓN DE USUARIO", UDim2.new(0, 16, 0, 14))
+ConfigManager.SaveButton = neonButton(ConfigManager.Card, "GUARDAR CONFIGURACIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
+ConfigManager.LoadButton = neonButton(ConfigManager.Card, "CARGAR CONFIGURACIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
+ConfigManager.SaveButton:SetAttribute("HexaNoFavorite", true)
+ConfigManager.LoadButton:SetAttribute("HexaNoFavorite", true)
+
+function ConfigManager:ShowButtonResult(button, message, baseText)
+	button.Text = message
+	task.delay(1.5, function()
+		if button and button.Parent then
+			button.Text = baseText
+			button:SetAttribute("BaseText", baseText)
+		end
+	end)
+end
+
+ConfigManager.SaveButton.MouseButton1Click:Connect(function()
+	local _, message = ConfigManager:Save()
+	ConfigManager:ShowButtonResult(ConfigManager.SaveButton, message, "GUARDAR CONFIGURACIÓN")
+end)
+ConfigManager.LoadButton.MouseButton1Click:Connect(function()
+	local _, message = ConfigManager:Load()
+	ConfigManager:ShowButtonResult(ConfigManager.LoadButton, message, "CARGAR CONFIGURACIÓN")
+end)
+
 local ProfileCard = sectionCard(100)
 ProfileCard.LayoutOrder = -1
 
@@ -2758,7 +3091,7 @@ local jumpSlider = createSlider(MoveCard, "Potencia de salto", 50, 2500, current
 local infiniteJumpButton = createToggleButton(MoveCard, "SALTO INFINITO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 346))
 local noclipButton = createToggleButton(MoveCard, "SIN COLISIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 393))
 
-local CombatCard = sectionCard(MOBILE_DEVICE and 532 or 394)
+local CombatCard = sectionCard(394)
 CombatCard.LayoutOrder = 20
 sectionTitle(CombatCard, "COMBATE Y PUNTERÍA", UDim2.new(0, 16, 0, 14))
 
@@ -2767,11 +3100,8 @@ local autoAimBodyActive = false
 local ignoreFriendsActive = false
 local fovActive = false
 
-local AimKeys = {
-	Head = MOBILE_DEVICE and "AUTO" or nil,
-	Body = MOBILE_DEVICE and "AUTO" or nil,
-	Smoothing = MOBILE_DEVICE and "AUTO" or nil,
-}
+-- Los aimbots ya no tienen controles de keybind incrustados en esta tarjeta.
+-- Los atajos se administran desde la categoría KEYBINDS.
 local maxAimDistance = 500
 local fovRadius = 200
 
@@ -2789,33 +3119,11 @@ mkCorner(FovCircle, 999)
 local FovStroke = mkStroke(FovCircle, Color3.fromRGB(255, 255, 255), 0.2, 1.5)
 
 local aimDistanceSlider = createSlider(CombatCard, "Distancia máxima de puntería (3D)", 50, 2000, maxAimDistance, 38, function(v) maxAimDistance = v end)
-local autoAimHeadButton = createToggleButton(
-	CombatCard,
-	"AIMBOT (CABEZA)",
-	MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.62, 0, 0, 38),
-	UDim2.new(0, 16, 0, 96)
-)
-local headKeybindBtn = createKeybindButton(
-	CombatCard,
-	MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.32, -8, 0, 38),
-	MOBILE_DEVICE and UDim2.new(0, 16, 0, 142) or UDim2.new(0.65, 16, 0, 96),
-	function(key) AimKeys.Head = key end
-)
-local autoAimBodyButton = createToggleButton(
-	CombatCard,
-	"AIMBOT (CUERPO)",
-	MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.62, 0, 0, 38),
-	MOBILE_DEVICE and UDim2.new(0, 16, 0, 188) or UDim2.new(0, 16, 0, 142)
-)
-local bodyKeybindBtn = createKeybindButton(
-	CombatCard,
-	MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.32, -8, 0, 38),
-	MOBILE_DEVICE and UDim2.new(0, 16, 0, 234) or UDim2.new(0.65, 16, 0, 142),
-	function(key) AimKeys.Body = key end
-)
-local ignoreFriendsButton = createToggleButton(CombatCard, "IGNORAR AMIGOS", UDim2.new(1, -32, 0, 38), MOBILE_DEVICE and UDim2.new(0, 16, 0, 372) or UDim2.new(0, 16, 0, 234))
-local fovButton = createToggleButton(CombatCard, "USAR CÍRCULO FOV", UDim2.new(1, -32, 0, 38), MOBILE_DEVICE and UDim2.new(0, 16, 0, 418) or UDim2.new(0, 16, 0, 280))
-local fovSlider = createSlider(CombatCard, "Radio del FOV", 30, 800, fovRadius, MOBILE_DEVICE and 464 or 326, function(v)
+local autoAimHeadButton = createToggleButton(CombatCard, "AIMBOT (CABEZA)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 96))
+local autoAimBodyButton = createToggleButton(CombatCard, "AIMBOT (CUERPO)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 142))
+local ignoreFriendsButton = createToggleButton(CombatCard, "IGNORAR AMIGOS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 234))
+local fovButton = createToggleButton(CombatCard, "USAR CÍRCULO FOV", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 280))
+local fovSlider = createSlider(CombatCard, "Radio del FOV", 30, 800, fovRadius, 326, function(v)
 	fovRadius = v
 	FovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
 end)
@@ -3111,8 +3419,6 @@ local Runtime = {
 	currentAimWorldPosition = nil,
 	currentAimSmoothing = false,
 	weaponLockEnabled = false,
-	weaponLockKey = nil,
-	weaponLockKeybindReadyAt = 0,
 	weaponLockInputCaptured = false,
 	weaponLockSavedMouseBehavior = nil,
 	weaponLockSavedMouseIconEnabled = nil,
@@ -3194,24 +3500,6 @@ if MOBILE_DEVICE then
 	scanMobileTools(LocalPlayer:FindFirstChildOfClass("Backpack"))
 	scanMobileTools(LocalPlayer.Character)
 	AllSliders.TrackConnection(LocalPlayer.CharacterAdded:Connect(function(character) scanMobileTools(character) end))
-end
-
-local function isKeyActive(targetKey: any): boolean
-	if MOBILE_DEVICE then
-		local mode = type(targetKey) == "string" and targetKey or "AUTO"
-		if mode == "AIM" then return Runtime.mobileAimTouchActive end
-		if mode == "FIRE" then return os.clock() <= Runtime.mobileShotUntil end
-		return true
-	end
-	if not targetKey then return true end
-	if typeof(targetKey) == "EnumItem" then
-		if targetKey.EnumType == Enum.KeyCode then
-			return UserInputService:IsKeyDown(targetKey)
-		elseif targetKey.EnumType == Enum.UserInputType then
-			return UserInputService:IsMouseButtonPressed(targetKey)
-		end
-	end
-	return true
 end
 
 local HexaSharedTargetFilters = {
@@ -3644,23 +3932,23 @@ AllSliders.TrackConnection(Players.PlayerRemoving:Connect(function(player)
 	end
 end))
 
-flyButton.MouseButton1Click:Connect(function() flyActive = not flyActive; setActive(flyButton, flyActive); if flyActive then ensureFly() else clearFly() end end)
-speedButton.MouseButton1Click:Connect(function() speedActive = not speedActive; setActive(speedButton, speedActive); if speedActive then local _,h = getCharacterData() if h then Runtime.speedBase=h.WalkSpeed end else local _,h=getCharacterData() if h then pcall(function() h.WalkSpeed=Runtime.speedBase end) end end end)
-jumpButton.MouseButton1Click:Connect(function() jumpActive = not jumpActive; setActive(jumpButton, jumpActive); if jumpActive then local _,h = getCharacterData() if h then Runtime.jumpBase=h.JumpPower pcall(function() h.UseJumpPower=true end) end else local _,h=getCharacterData() if h then pcall(function() h.UseJumpPower=true; h.JumpPower=Runtime.jumpBase end) end end end)
-infiniteJumpButton.MouseButton1Click:Connect(function() infiniteJumpActive = not infiniteJumpActive; setActive(infiniteJumpButton, infiniteJumpActive) end)
-noclipButton.MouseButton1Click:Connect(function()
+ConfigManager:BindToggle(flyButton, function() flyActive = not flyActive; setActive(flyButton, flyActive); if flyActive then ensureFly() else clearFly() end end)
+ConfigManager:BindToggle(speedButton, function() speedActive = not speedActive; setActive(speedButton, speedActive); if speedActive then local _,h = getCharacterData() if h then Runtime.speedBase=h.WalkSpeed end else local _,h=getCharacterData() if h then pcall(function() h.WalkSpeed=Runtime.speedBase end) end end end)
+ConfigManager:BindToggle(jumpButton, function() jumpActive = not jumpActive; setActive(jumpButton, jumpActive); if jumpActive then local _,h = getCharacterData() if h then Runtime.jumpBase=h.JumpPower pcall(function() h.UseJumpPower=true end) end else local _,h=getCharacterData() if h then pcall(function() h.UseJumpPower=true; h.JumpPower=Runtime.jumpBase end) end end end)
+ConfigManager:BindToggle(infiniteJumpButton, function() infiniteJumpActive = not infiniteJumpActive; setActive(infiniteJumpButton, infiniteJumpActive) end)
+ConfigManager:BindToggle(noclipButton, function()
 	noclipActive = not noclipActive
 	setActive(noclipButton, noclipActive)
 	if noclipActive then Runtime.lastNoclipScan = 0 else restoreNoclip() end
 end)
 
-autoAimHeadButton.MouseButton1Click:Connect(function() autoAimHeadActive = not autoAimHeadActive; setActive(autoAimHeadButton, autoAimHeadActive); if autoAimHeadActive and autoAimBodyActive then autoAimBodyActive=false; setActive(autoAimBodyButton,false) end; if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee=nil end end)
-autoAimBodyButton.MouseButton1Click:Connect(function() autoAimBodyActive = not autoAimBodyActive; setActive(autoAimBodyButton, autoAimBodyActive); if autoAimBodyActive and autoAimHeadActive then autoAimHeadActive=false; setActive(autoAimHeadButton,false) end; if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee=nil end end)
-ignoreFriendsButton.MouseButton1Click:Connect(function() ignoreFriendsActive = not ignoreFriendsActive; setActive(ignoreFriendsButton, ignoreFriendsActive) end)
-fovButton.MouseButton1Click:Connect(function() fovActive = not fovActive; setActive(fovButton, fovActive); FovCircle.Visible = fovActive end)
+ConfigManager:BindToggle(autoAimHeadButton, function() autoAimHeadActive = not autoAimHeadActive; setActive(autoAimHeadButton, autoAimHeadActive); if autoAimHeadActive and autoAimBodyActive then autoAimBodyActive=false; setActive(autoAimBodyButton,false) end; if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee=nil end end)
+ConfigManager:BindToggle(autoAimBodyButton, function() autoAimBodyActive = not autoAimBodyActive; setActive(autoAimBodyButton, autoAimBodyActive); if autoAimBodyActive and autoAimHeadActive then autoAimHeadActive=false; setActive(autoAimHeadButton,false) end; if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee=nil end end)
+ConfigManager:BindToggle(ignoreFriendsButton, function() ignoreFriendsActive = not ignoreFriendsActive; setActive(ignoreFriendsButton, ignoreFriendsActive) end)
+ConfigManager:BindToggle(fovButton, function() fovActive = not fovActive; setActive(fovButton, fovActive); FovCircle.Visible = fovActive end)
 
-espSkeletonButton.MouseButton1Click:Connect(function() espSkeletonActive = not espSkeletonActive; setActive(espSkeletonButton, espSkeletonActive) end)
-espLinesButton.MouseButton1Click:Connect(function() espLinesActive = not espLinesActive; setActive(espLinesButton, espLinesActive) end)
+ConfigManager:BindToggle(espSkeletonButton, function() espSkeletonActive = not espSkeletonActive; setActive(espSkeletonButton, espSkeletonActive) end)
+ConfigManager:BindToggle(espLinesButton, function() espLinesActive = not espLinesActive; setActive(espLinesButton, espLinesActive) end)
 
 
 -- ================================================================
@@ -3700,8 +3988,6 @@ task.spawn(function()
 			Fullbright = false,
 			XRay = false,
 			XRayTransparency = 75,
-			VehicleSpeed = false,
-			VehicleMultiplier = 3,
 			DroneCamera = false,
 			DroneSpeed = 50,
 			Spin = false,
@@ -3723,7 +4009,6 @@ task.spawn(function()
 			LastAutoReload = 0,
 			LastHitboxUpdate = 0,
 			LastFullbrightUpdate = 0,
-			LastVehicleUpdate = 0,
 			LastCharacterControlUpdate = 0,
 			LastHumanoidUpdate = 0,
 			FullbrightOriginal = nil,
@@ -3763,7 +4048,6 @@ task.spawn(function()
 			InfiniteAmmoAttributes = setmetatable({}, {__mode = "k"}),
 			HitboxOriginal = setmetatable({}, {__mode = "k"}),
 			HighlightCache = {},
-			VehicleCache = setmetatable({}, {__mode = "k"}),
 			Drone = {
 				Active = false,
 				SavedType = nil,
@@ -3794,6 +4078,7 @@ task.spawn(function()
 		}
 
 		local function connect(signal, callback)
+			ConfigManager:AttachSignalCallback(signal, callback)
 			local connection = signal:Connect(callback)
 			table.insert(State.Connections, connection)
 			return connection
@@ -3823,14 +4108,8 @@ task.spawn(function()
 		local AimSmoothingButton = createToggleButton(
 			CombatCard,
 			"SUAVIZADO DE PUNTERÍA",
-			MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.62, 0, 0, 38),
-			MOBILE_DEVICE and UDim2.new(0, 16, 0, 280) or UDim2.new(0, 16, 0, 188)
-		)
-		createKeybindButton(
-			CombatCard,
-			MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.32, -8, 0, 38),
-			MOBILE_DEVICE and UDim2.new(0, 16, 0, 326) or UDim2.new(0.65, 16, 0, 188),
-			function(key) AimKeys.Smoothing = key end
+			UDim2.new(1, -32, 0, 38),
+			UDim2.new(0, 16, 0, 188)
 		)
 
 		local HitboxColors = {
@@ -3876,21 +4155,9 @@ task.spawn(function()
 		local WeaponLockButton = createToggleButton(
 			WeaponLockCard,
 			"BLOQUEO DE ARMA",
-			MOBILE_DEVICE and UDim2.new(1, -32, 0, 38) or UDim2.new(0.62, 0, 0, 38),
+			UDim2.new(1, -32, 0, 38),
 			UDim2.new(0, 16, 0, 44)
 		)
-		local WeaponLockKeybindButton = nil
-		if not MOBILE_DEVICE then
-			WeaponLockKeybindButton = createKeybindButton(
-				WeaponLockCard,
-				UDim2.new(0.32, -8, 0, 38),
-				UDim2.new(0.65, 16, 0, 44),
-				function(key)
-					Runtime.weaponLockKey = key
-					Runtime.weaponLockKeybindReadyAt = os.clock() + 0.25
-				end
-			)
-		end
 
 		local ProjectileModifiersCard = sectionCard(510)
 		ProjectileModifiersCard.LayoutOrder = 24
@@ -3957,13 +4224,6 @@ task.spawn(function()
 			Settings.SpinSpeed = value
 		end)
 
-		local VehicleCard = sectionCard(158)
-		VehicleCard.LayoutOrder = 35
-		sectionTitle(VehicleCard, "VEHÍCULOS", UDim2.new(0, 16, 0, 14))
-		local VehicleButton = createToggleButton(VehicleCard, "VELOCIDAD DE VEHÍCULOS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
-		createSlider(VehicleCard, "Multiplicador del vehículo", 1, 10, Settings.VehicleMultiplier, 90, function(value)
-			Settings.VehicleMultiplier = value
-		end)
 
 		local ProtectionCard = sectionCard(140)
 		ProtectionCard.LayoutOrder = 36
@@ -3992,7 +4252,6 @@ task.spawn(function()
 			Fullbright = FullbrightButton,
 			Hitbox = HitboxButton,
 			HeadHitbox = HeadHitboxButton,
-			VehicleSpeed = VehicleButton,
 			DroneCamera = DroneButton,
 			Spin = SpinButton,
 			AntiStun = AntiStunButton,
@@ -4702,37 +4961,6 @@ task.spawn(function()
 			end
 		end
 
-		local function restoreVehicle()
-			for seat, original in pairs(State.VehicleCache) do
-				if seat and seat.Parent then
-					pcall(function() seat.MaxSpeed = original.MaxSpeed end)
-					pcall(function() seat.Torque = original.Torque end)
-				end
-			end
-			table.clear(State.VehicleCache)
-		end
-
-		local function updateVehicle()
-			local _, humanoid = getLocalCharacter()
-			local seat = humanoid and humanoid.SeatPart
-			if not seat or not seat:IsA("VehicleSeat") then return end
-			local original = State.VehicleCache[seat]
-			if not original then
-				original = {MaxSpeed = seat.MaxSpeed, Torque = seat.Torque}
-				State.VehicleCache[seat] = original
-			end
-			local multiplier = math.max(1, Settings.VehicleMultiplier)
-			pcall(function() seat.MaxSpeed = math.max(original.MaxSpeed, original.MaxSpeed * multiplier) end)
-			pcall(function() seat.Torque = math.max(original.Torque, original.Torque * multiplier) end)
-			local root = seat.AssemblyRootPart or seat
-			local velocity = root.AssemblyLinearVelocity
-			local speed = velocity.Magnitude
-			local limit = math.max(40, math.max(original.MaxSpeed, 40) * multiplier)
-			if math.abs(seat.ThrottleFloat) > 0.01 and speed > 0.5 and speed < limit then
-				local scale = math.min(1.03, limit / math.max(speed, 0.1))
-				pcall(function() root.AssemblyLinearVelocity = velocity * scale end)
-			end
-		end
 
 		local function showDroneControls(visible)
 			State.Drone.Vertical = 0
@@ -5204,7 +5432,6 @@ task.spawn(function()
 			destroyHighlights()
 			restoreFullbright()
 			restoreXRay()
-			restoreVehicle()
 			restoreHumanoid()
 			releaseCharacterControl()
 			hideAllEsp()
@@ -5241,12 +5468,14 @@ task.spawn(function()
 		end
 
 		local function bindToggle(button, settingName, callback)
-			connect(button.MouseButton1Click, function()
+			local handler = function()
 				if button:GetAttribute("HexaVipOnly") == true and not requireVip() then return end
 				Settings[settingName] = not Settings[settingName]
 				setActive(button, Settings[settingName])
 				if callback then pcall(callback, Settings[settingName]) end
-			end)
+			end
+			ConfigManager:SetToggleCallback(button, handler)
+			connect(button.MouseButton1Click, handler)
 		end
 
 		local function refreshHitboxColorButton()
@@ -5281,25 +5510,6 @@ task.spawn(function()
 			if not Runtime.weaponLockEnabled then Runtime.releaseWeaponLockInput(true) end
 		end)
 
-		if WeaponLockKeybindButton then WeaponLockKeybindButton:SetAttribute("HexaNoFavorite", true) end
-		connect(UserInputService.InputBegan, function(input, processed)
-			if MOBILE_DEVICE or Runtime.weaponLockKey == nil then return end
-			if UserInputService:GetFocusedTextBox() then return end
-			if os.clock() < Runtime.weaponLockKeybindReadyAt then return end
-			local matched = false
-			if typeof(Runtime.weaponLockKey) == "EnumItem" then
-				if Runtime.weaponLockKey.EnumType == Enum.KeyCode then
-					matched = input.KeyCode == Runtime.weaponLockKey
-				elseif Runtime.weaponLockKey.EnumType == Enum.UserInputType then
-					matched = input.UserInputType == Runtime.weaponLockKey
-				end
-			end
-			if not matched then return end
-			Settings.WeaponLock = not Settings.WeaponLock
-			Runtime.weaponLockEnabled = Settings.WeaponLock
-			setActive(WeaponLockButton, Settings.WeaponLock)
-			if not Runtime.weaponLockEnabled then Runtime.releaseWeaponLockInput(true) end
-		end)
 
 		bindToggle(PredictionButton, "TargetPrediction", function(enabled)
 			HexaSharedTargetFilters.TargetPrediction = enabled
@@ -5397,7 +5607,6 @@ task.spawn(function()
 		bindToggle(XRayButton, "XRay", function(enabled)
 			if enabled then applyXRay() else restoreXRay() end
 		end)
-		bindToggle(VehicleButton, "VehicleSpeed", function(enabled) if not enabled then restoreVehicle() end end)
 		bindToggle(DroneButton, "DroneCamera", function(enabled)
 			if enabled then startDrone() else stopDrone() end
 		end)
@@ -5551,7 +5760,7 @@ task.spawn(function()
 				or Settings.FullAutoConversion or Settings.RangeExtender or Settings.DamageFalloffModifier
 				or Settings.BulletVelocityModifier or Settings.ProjectileLifetimeExtender or Settings.SurfacePenetration
 			local advancedFeatureActive = weaponFeatureActive or Settings.Fullbright or Settings.Hitbox or Settings.HeadHitbox
-				or Settings.VehicleSpeed or Settings.DroneCamera or Settings.Spin or Settings.AntiStun or Settings.AntiRagdoll
+				or Settings.DroneCamera or Settings.Spin or Settings.AntiStun or Settings.AntiRagdoll
 				or Settings.BoxESP or Settings.NameESP or Settings.HealthESP or Settings.ESPHighlight
 			if not advancedFeatureActive then return end
 
@@ -5570,12 +5779,6 @@ task.spawn(function()
 			if (Settings.Hitbox or Settings.HeadHitbox) and now - State.LastHitboxUpdate >= hitboxInterval then
 				State.LastHitboxUpdate = now
 				updateHitboxes()
-			end
-			local vehicleInterval = PERFORMANCE_MODE and (MOBILE_DEVICE and (1 / 20) or (1 / 16))
-				or (MOBILE_DEVICE and (1 / 30) or (1 / 20))
-			if Settings.VehicleSpeed and now - State.LastVehicleUpdate >= vehicleInterval then
-				State.LastVehicleUpdate = now
-				updateVehicle()
 			end
 			if (Settings.DroneCamera or Settings.Spin) and now - State.LastCharacterControlUpdate >= 0.5 then
 				State.LastCharacterControlUpdate = now
@@ -5630,6 +5833,7 @@ task.spawn(function()
 		}
 
 		local function connect(signal, callback)
+			ConfigManager:AttachSignalCallback(signal, callback)
 			local connection = signal:Connect(callback)
 			table.insert(State.Connections, connection)
 			return connection
@@ -5757,11 +5961,19 @@ task.spawn(function()
 			if JesusPart then JesusPart:Destroy() end
 		end
 
-		connect(InstantHitButton.MouseButton1Click, function()
-			if not State.InstantHitActive and not requireVip() then return end
-			setInstantHit(not State.InstantHitActive)
-		end)
-		connect(JesusButton.MouseButton1Click, function() setJesus(not State.JesusActive) end)
+		do
+			local handler = function()
+				if not State.InstantHitActive and not requireVip() then return end
+				setInstantHit(not State.InstantHitActive)
+			end
+			ConfigManager:SetToggleCallback(InstantHitButton, handler)
+			connect(InstantHitButton.MouseButton1Click, handler)
+		end
+		do
+			local handler = function() setJesus(not State.JesusActive) end
+			ConfigManager:SetToggleCallback(JesusButton, handler)
+			connect(JesusButton.MouseButton1Click, handler)
+		end
 
 		addVipStateListener(function(isVip)
 			if State.Dead then return end
@@ -6145,9 +6357,8 @@ Runtime.renderConn = RunService.RenderStepped:Connect(function()
 	local smoothingOnlyActive = HexaSharedTargetFilters.AimSmoothing
 		and not autoAimHeadActive
 		and not autoAimBodyActive
-		and isKeyActive(AimKeys.Smoothing)
-	local isHeadActive = (autoAimHeadActive and isKeyActive(AimKeys.Head)) or smoothingOnlyActive
-	local isBodyActive = autoAimBodyActive and isKeyActive(AimKeys.Body)
+	local isHeadActive = autoAimHeadActive or smoothingOnlyActive
+	local isBodyActive = autoAimBodyActive
 
 	if isHeadActive or isBodyActive then
 		Runtime.aimWasActive = true
@@ -6440,9 +6651,15 @@ task.spawn(function()
 		}
 
 		function X:connect(signal, callback)
+			ConfigManager:AttachSignalCallback(signal, callback)
 			local connection = signal:Connect(callback)
 			table.insert(self.Connections, connection)
 			return connection
+		end
+
+		function X:bindToggle(button, callback)
+			ConfigManager:SetToggleCallback(button, callback)
+			return self:connect(button.MouseButton1Click, callback)
 		end
 
 		function X:addReset(callback)
@@ -6521,7 +6738,7 @@ task.spawn(function()
 			markVipControl(self.CrosshairColorButton)
 			markVipControl(self.CrosshairRainbowButton)
 
-			self:connect(self.CrosshairButton.MouseButton1Click, function()
+			self:bindToggle(self.CrosshairButton, function()
 				self.CrosshairEnabled = not self.CrosshairEnabled
 				self:toggle(self.CrosshairButton, self.CrosshairEnabled)
 				self:updateCrosshair()
@@ -6538,7 +6755,7 @@ task.spawn(function()
 				self.CrosshairColorButton.Text = "COLOR DE LA MIRA: " .. nombres[self.CrosshairColorIndex]
 				self:updateCrosshair()
 			end)
-			self:connect(self.CrosshairRainbowButton.MouseButton1Click, function()
+			self:bindToggle(self.CrosshairRainbowButton, function()
 				if not requireVip() then return end
 				self.CrosshairRainbow = not self.CrosshairRainbow
 				self:toggle(self.CrosshairRainbowButton, self.CrosshairRainbow)
@@ -6599,21 +6816,21 @@ task.spawn(function()
 				workspace.Gravity = self.GravityDefault
 				self.GravitySlider.Set(self.GravityDefault)
 			end)
-			self:connect(self.AirWalkButton.MouseButton1Click, function()
+			self:bindToggle(self.AirWalkButton, function()
 				self.AirWalk = not self.AirWalk
 				self:toggle(self.AirWalkButton, self.AirWalk)
 				if not self.AirWalk then self:destroyAirWalk() end
 			end)
-			self:connect(self.BunnyHopButton.MouseButton1Click, function()
+			self:bindToggle(self.BunnyHopButton, function()
 				self.BunnyHop = not self.BunnyHop
 				self:toggle(self.BunnyHopButton, self.BunnyHop)
 			end)
-			self:connect(self.NoFallButton.MouseButton1Click, function()
+			self:bindToggle(self.NoFallButton, function()
 				if not requireVip() then return end
 				self.NoFall = not self.NoFall
 				self:toggle(self.NoFallButton, self.NoFall)
 			end)
-			self:connect(self.AntiVoidButton.MouseButton1Click, function()
+			self:bindToggle(self.AntiVoidButton, function()
 				self.AntiVoid = not self.AntiVoid
 				self.LastSafeCFrame = nil
 				self.LastSafeUpdate = 0
@@ -6682,29 +6899,29 @@ task.spawn(function()
 			self.ThirdPersonButton = createToggleButton(self.PlayerCard, "FORZAR TERCERA PERSONA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
 			self.FirstPersonButton = createToggleButton(self.PlayerCard, "BLOQUEAR PRIMERA PERSONA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 228))
 
-			self:connect(self.RemoveFogButton.MouseButton1Click, function()
+			self:bindToggle(self.RemoveFogButton, function()
 				self.FogRemoved = not self.FogRemoved
 				self:toggle(self.RemoveFogButton, self.FogRemoved)
 				self:applyFog()
 			end)
-			self:connect(self.RemoveBlurButton.MouseButton1Click, function()
+			self:bindToggle(self.RemoveBlurButton, function()
 				self.BlurRemoved = not self.BlurRemoved
 				self:toggle(self.RemoveBlurButton, self.BlurRemoved)
 				self:applyBlur()
 			end)
-			self:connect(self.RemoveShadowsButton.MouseButton1Click, function()
+			self:bindToggle(self.RemoveShadowsButton, function()
 				self.ShadowsRemoved = not self.ShadowsRemoved
 				self:toggle(self.RemoveShadowsButton, self.ShadowsRemoved)
 				Lighting.GlobalShadows = not self.ShadowsRemoved and self.ShadowBackup or false
 			end)
-			self:connect(self.ThirdPersonButton.MouseButton1Click, function()
+			self:bindToggle(self.ThirdPersonButton, function()
 				self.ThirdPerson = not self.ThirdPerson
 				if self.ThirdPerson then self.FirstPerson = false end
 				self:toggle(self.ThirdPersonButton, self.ThirdPerson)
 				self:toggle(self.FirstPersonButton, self.FirstPerson)
 				self:applyCameraMode()
 			end)
-			self:connect(self.FirstPersonButton.MouseButton1Click, function()
+			self:bindToggle(self.FirstPersonButton, function()
 				self.FirstPerson = not self.FirstPerson
 				if self.FirstPerson then self.ThirdPerson = false end
 				self:toggle(self.FirstPersonButton, self.FirstPerson)
@@ -6848,7 +7065,7 @@ task.spawn(function()
 			self.InspectorText.Parent = self.InspectorFrame
 			self.InspectorText:SetAttribute("HexaNoTranslate", true)
 
-			self:connect(self.FollowPlayerButton.MouseButton1Click, function()
+			self:bindToggle(self.FollowPlayerButton, function()
 				local enabling = not self.FollowPlayer
 				if enabling and not HexaSharedTargetFilters:AllowsPlayer(selectedTargetPlayer, true) then return end
 				self.FollowPlayer = enabling
@@ -6858,7 +7075,7 @@ task.spawn(function()
 					if humanoid and root then pcall(function() humanoid:MoveTo(root.Position) end) end
 				end
 			end)
-			self:connect(self.SpectateButton.MouseButton1Click, function()
+			self:bindToggle(self.SpectateButton, function()
 				if not requireVip() then return end
 				local enabling = not self.Spectating
 				if enabling and not HexaSharedTargetFilters:AllowsPlayer(selectedTargetPlayer, true) then return end
@@ -6866,7 +7083,7 @@ task.spawn(function()
 				self:toggle(self.SpectateButton, self.Spectating)
 				if not self.Spectating then self:restoreCameraSubject() end
 			end)
-			self:connect(self.InspectorButton.MouseButton1Click, function()
+			self:bindToggle(self.InspectorButton, function()
 				local enabling = not self.InspectorEnabled
 				if enabling and not HexaSharedTargetFilters:AllowsPlayer(selectedTargetPlayer, false) then return end
 				self.InspectorEnabled = enabling
@@ -7027,7 +7244,7 @@ task.spawn(function()
 				if root and target then root.CFrame = target end
 				self:updateHistoryText()
 			end)
-			self:connect(self.MouseTeleportButton.MouseButton1Click, function()
+			self:bindToggle(self.MouseTeleportButton, function()
 				if not requireVip() then return end
 				self.MouseTeleport = not self.MouseTeleport
 				self.MouseTeleportArmedAt = self.MouseTeleport and (os.clock() + 0.25) or 0
@@ -7107,7 +7324,7 @@ task.spawn(function()
 				{self.SpeedButton, "SpeedEnabled"},
 			}
 			for _, item in ipairs(pairsList) do
-				self:connect(item[1].MouseButton1Click, function()
+				self:bindToggle(item[1], function()
 					self[item[2]] = not self[item[2]]
 					self:toggle(item[1], self[item[2]])
 					self:updateInfoVisibility()
@@ -7220,15 +7437,15 @@ task.spawn(function()
 			self.ReconnectButton = neonButton(self.SystemCard, "RECONECTAR AL SERVIDOR", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 			self.StreamerButton = createToggleButton(self.SystemCard, "MODO TRANSMISIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
 
-			self:connect(self.AutoRespawnButton.MouseButton1Click, function()
+			self:bindToggle(self.AutoRespawnButton, function()
 				self.AutoRespawn = not self.AutoRespawn
 				self:toggle(self.AutoRespawnButton, self.AutoRespawn)
 			end)
-			self:connect(self.AutoEquipButton.MouseButton1Click, function()
+			self:bindToggle(self.AutoEquipButton, function()
 				self.AutoEquip = not self.AutoEquip
 				self:toggle(self.AutoEquipButton, self.AutoEquip)
 			end)
-			self:connect(self.AntiAfkButton.MouseButton1Click, function()
+			self:bindToggle(self.AntiAfkButton, function()
 				self.AntiAfk = not self.AntiAfk
 				self:toggle(self.AntiAfkButton, self.AntiAfk)
 			end)
@@ -7237,12 +7454,12 @@ task.spawn(function()
 					TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
 				end)
 			end)
-			self:connect(self.PerformanceButton.MouseButton1Click, function()
+			self:bindToggle(self.PerformanceButton, function()
 				self.Performance = not self.Performance
 				self:toggle(self.PerformanceButton, self.Performance)
 				self:applyPerformance()
 			end)
-			self:connect(self.StreamerButton.MouseButton1Click, function()
+			self:bindToggle(self.StreamerButton, function()
 				self.Streamer = not self.Streamer
 				self:toggle(self.StreamerButton, self.Streamer)
 				self:applyStreamer()
