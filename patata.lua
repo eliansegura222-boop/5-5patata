@@ -182,7 +182,8 @@ local MOBILE_DEVICE = false
 local KeybindManager = nil
 local FloatingButtonManager = nil
 local ConfigManager = {
-	FileName = ("H3X4_X_Config_%d.json"):format(LocalPlayer.UserId),
+	FileName = nil,
+	DeviceMode = nil,
 	ToggleButtons = {},
 	ToggleCallbacks = {},
 	Sliders = {},
@@ -191,6 +192,32 @@ local ConfigManager = {
 	PendingKeybinds = nil,
 	Loading = false,
 }
+
+function ConfigManager:SetDeviceMode(mode)
+	self.DeviceMode = mode == "MOBILE" and "MOBILE" or "PC"
+	self.FileName = ("H3X4_X_Config_%d_%s.json"):format(LocalPlayer.UserId, self.DeviceMode)
+end
+
+function ConfigManager:GetFileName()
+	if type(self.FileName) ~= "string" or self.FileName == "" then
+		self:SetDeviceMode(MOBILE_DEVICE and "MOBILE" or "PC")
+	end
+	return self.FileName
+end
+
+function ConfigManager:GetLegacyFileName()
+	return ("H3X4_X_Config_%d.json"):format(LocalPlayer.UserId)
+end
+
+function ConfigManager:IsAvailableForCurrentDevice(object)
+	local current = object
+	while current do
+		if MOBILE_DEVICE and current:GetAttribute("HexaDesktopOnly") == true then return false end
+		if (not MOBILE_DEVICE) and current:GetAttribute("HexaMobileOnly") == true then return false end
+		current = current.Parent
+	end
+	return true
+end
 
 function ConfigManager:NormalizeLabel(value)
 	local text = string.lower(tostring(value or ""))
@@ -214,20 +241,33 @@ function ConfigManager:MakeId(kind, parent, label)
 	return tostring(kind) .. ":" .. tostring(self:GetCardOrder(parent)) .. ":" .. self:NormalizeLabel(label)
 end
 
+function ConfigManager:MakeUniqueId(kind, parent, label, registry)
+	local base = self:MakeId(kind, parent, label)
+	local id = base
+	local suffix = 2
+	while registry[id] ~= nil do
+		id = base .. ":" .. tostring(suffix)
+		suffix += 1
+	end
+	return id
+end
+
 function ConfigManager:RegisterToggle(button, parent, label)
-	local id = self:MakeId("toggle", parent, label)
+	local id = self:MakeUniqueId("toggle", parent, label, self.ToggleButtons)
 	button:SetAttribute("HexaConfigId", id)
 	self.ToggleButtons[id] = button
 	return id
 end
 
 function ConfigManager:RegisterSlider(controller, parent, label)
-	local id = self:MakeId("slider", parent, label)
+	local id = self:MakeUniqueId("slider", parent, label, self.Sliders)
 	controller.ConfigId = id
 	self.Sliders[id] = controller
 	if self.PendingSliders and self.PendingSliders[id] ~= nil then
 		local value = tonumber(self.PendingSliders[id])
-		if value then pcall(function() controller.Set(value) end) end
+		local applied = false
+		if value then applied = pcall(function() controller.Set(value) end) end
+		if applied then self.PendingSliders[id] = nil end
 	end
 	return id
 end
@@ -243,6 +283,10 @@ function ConfigManager:SetToggleCallback(button, callback)
 			if not button or not button.Parent then return end
 			if button:GetAttribute("IsActive") ~= desired then
 				pcall(callback)
+			end
+			-- No descartar el pendiente si el callback falló o rechazó el cambio.
+			if self.PendingToggles and button:GetAttribute("IsActive") == desired then
+				self.PendingToggles[id] = nil
 			end
 		end)
 	end
@@ -297,68 +341,179 @@ end
 
 function ConfigManager:SetToggleState(button, desired)
 	if not button or not button.Parent then return false end
+	if not self:IsAvailableForCurrentDevice(button) then return false end
 	desired = desired == true
+	if button:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then desired = false end
 	if button:GetAttribute("IsActive") == desired then return true end
-	return self:ActivateToggle(button)
+	local activated = self:ActivateToggle(button)
+	if not activated then return false end
+	return button:GetAttribute("IsActive") == desired
 end
 
 function ConfigManager:Save()
+	if self.Loading then return false, "LA CONFIGURACIÓN TODAVÍA SE ESTÁ CARGANDO" end
 	if type(writefile) ~= "function" then return false, "TU EJECUTOR NO PERMITE GUARDAR ARCHIVOS" end
 	local payload = {
-		version = 3,
+		version = 4,
 		userId = LocalPlayer.UserId,
+		device = self.DeviceMode or (MOBILE_DEVICE and "MOBILE" or "PC"),
 		toggles = {},
 		sliders = {},
-		keybinds = KeybindManager and KeybindManager:Serialize() or {},
+		keybinds = (not MOBILE_DEVICE and KeybindManager) and KeybindManager:Serialize() or {},
 	}
 	for id, button in pairs(self.ToggleButtons) do
-		if button and button.Parent then payload.toggles[id] = button:GetAttribute("IsActive") == true end
+		if button and button.Parent and self:IsAvailableForCurrentDevice(button) then
+			payload.toggles[id] = button:GetAttribute("IsActive") == true
+		end
 	end
 	for id, controller in pairs(self.Sliders) do
-		if controller and type(controller.Get) == "function" then
+		local owner = controller and controller.Container
+		if controller and type(controller.Get) == "function" and (not owner or self:IsAvailableForCurrentDevice(owner)) then
 			local ok, value = pcall(controller.Get)
 			if ok and type(value) == "number" then payload.sliders[id] = value end
 		end
 	end
+
+	-- Si algún módulo todavía está terminando de crearse después de una carga,
+	-- conservar sus valores pendientes para que pulsar GUARDAR demasiado pronto
+	-- no borre silenciosamente parte de la configuración anterior.
+	if type(self.PendingToggles) == "table" then
+		for id, value in pairs(self.PendingToggles) do
+			if payload.toggles[id] == nil then payload.toggles[id] = value == true end
+		end
+	end
+	if type(self.PendingSliders) == "table" then
+		for id, value in pairs(self.PendingSliders) do
+			if payload.sliders[id] == nil and tonumber(value) then payload.sliders[id] = tonumber(value) end
+		end
+	end
+	if not MOBILE_DEVICE and type(self.PendingKeybinds) == "table" then
+		for id, packed in pairs(self.PendingKeybinds) do
+			if payload.keybinds[id] == nil and type(packed) == "table" then payload.keybinds[id] = packed end
+		end
+	end
+
 	local ok, encoded = pcall(function() return HttpService:JSONEncode(payload) end)
 	if not ok then return false, "NO SE PUDO CODIFICAR LA CONFIGURACIÓN" end
-	local wrote = pcall(function() writefile(self.FileName, encoded) end)
-	return wrote, wrote and "CONFIGURACIÓN GUARDADA" or "NO SE PUDO GUARDAR"
+	local fileName = self:GetFileName()
+	local wrote = pcall(function() writefile(fileName, encoded) end)
+	if not wrote then return false, "NO SE PUDO GUARDAR" end
+
+	-- Cuando el executor permite leer archivos, validar inmediatamente que lo
+	-- escrito realmente existe y corresponde al usuario/dispositivo actual.
+	if type(isfile) == "function" and type(readfile) == "function" then
+		local verified = pcall(function()
+			assert(isfile(fileName), "missing")
+			local check = HttpService:JSONDecode(readfile(fileName))
+			assert(type(check) == "table", "invalid")
+			assert(tonumber(check.userId) == LocalPlayer.UserId, "user")
+			assert(check.device == payload.device, "device")
+		end)
+		if not verified then return false, "EL ARCHIVO SE ESCRIBIÓ PERO NO SE PUDO VERIFICAR" end
+	end
+	return true, "CONFIGURACIÓN GUARDADA"
 end
 
 function ConfigManager:Load()
+	if self.Loading then return false, "YA SE ESTÁ CARGANDO UNA CONFIGURACIÓN" end
 	if type(readfile) ~= "function" or type(isfile) ~= "function" then
 		return false, "TU EJECUTOR NO PERMITE CARGAR ARCHIVOS"
 	end
+	local fileName = self:GetFileName()
+	local sourceIsLegacy = false
 	local exists = false
-	pcall(function() exists = isfile(self.FileName) end)
-	if not exists then return false, "NO HAY CONFIGURACIÓN GUARDADA" end
-	local ok, raw = pcall(function() return readfile(self.FileName) end)
+	pcall(function() exists = isfile(fileName) end)
+	-- Compatibilidad con las versiones anteriores que guardaban PC y móvil en
+	-- un solo archivo. Solo se consulta cuando el usuario pulsa CARGAR; nunca se
+	-- carga automáticamente. Después de guardar, ya se usará el archivo por dispositivo.
+	if not exists then
+		local legacyName = self:GetLegacyFileName()
+		local legacyExists = false
+		pcall(function() legacyExists = isfile(legacyName) end)
+		if legacyExists then
+			fileName = legacyName
+			exists = true
+			sourceIsLegacy = true
+		end
+	end
+	if not exists then return false, "NO HAY CONFIGURACIÓN GUARDADA PARA ESTE DISPOSITIVO" end
+	local ok, raw = pcall(function() return readfile(fileName) end)
 	if not ok or type(raw) ~= "string" then return false, "NO SE PUDO LEER LA CONFIGURACIÓN" end
 	local decodedOk, data = pcall(function() return HttpService:JSONDecode(raw) end)
 	if not decodedOk or type(data) ~= "table" then return false, "CONFIGURACIÓN INVÁLIDA" end
 	if tonumber(data.userId) ~= LocalPlayer.UserId then return false, "ESTA CONFIGURACIÓN ES DE OTRO USUARIO" end
+	local expectedDevice = self.DeviceMode or (MOBILE_DEVICE and "MOBILE" or "PC")
+	if type(data.device) == "string" and data.device ~= expectedDevice then
+		return false, "LA CONFIGURACIÓN PERTENECE A OTRO DISPOSITIVO"
+	end
 
-	self.PendingToggles = type(data.toggles) == "table" and data.toggles or {}
-	self.PendingSliders = type(data.sliders) == "table" and data.sliders or {}
-	self.PendingKeybinds = type(data.keybinds) == "table" and data.keybinds or {}
+	local savedToggles = type(data.toggles) == "table" and data.toggles or {}
+	local savedSliders = type(data.sliders) == "table" and data.sliders or {}
+	local savedKeybinds = type(data.keybinds) == "table" and data.keybinds or {}
+	self.PendingToggles = {}
+	self.PendingSliders = {}
+	self.PendingKeybinds = {}
+	for id, packed in pairs(savedKeybinds) do
+		self.PendingKeybinds[id] = packed
+	end
 	self.Loading = true
 
-	-- Primero barras y keybinds, luego funciones activadas/desactivadas.
-	for id, value in pairs(self.PendingSliders) do
-		local controller = self.Sliders[id]
-		if controller and type(controller.Set) == "function" then
-			local numeric = tonumber(value)
-			if numeric then pcall(function() controller.Set(numeric) end) end
+	local applied, applyError = pcall(function()
+		-- Barras: aplicar las que existen y conservar como pendientes únicamente las
+		-- que todavía no fueron creadas por un módulo tardío.
+		for id, value in pairs(savedSliders) do
+			local controller = self.Sliders[id]
+			local owner = controller and controller.Container
+			if controller and type(controller.Set) == "function" and (not owner or self:IsAvailableForCurrentDevice(owner)) then
+				local numeric = tonumber(value)
+				local appliedSlider = false
+				if numeric then appliedSlider = pcall(function() controller.Set(numeric) end) end
+				if not appliedSlider then self.PendingSliders[id] = value end
+			else
+				self.PendingSliders[id] = value
+			end
 		end
-	end
-	if KeybindManager then KeybindManager:LoadSerialized(self.PendingKeybinds) end
-	for id, desired in pairs(self.PendingToggles) do
-		local button = self.ToggleButtons[id]
-		if button and button.Parent then self:SetToggleState(button, desired == true) end
-	end
+
+		-- Los keybinds de la configuración son autoritativos: al cargar se eliminan
+		-- primero los actuales para que una tecla borrada en el archivo no sobreviva.
+		if KeybindManager then
+			if MOBILE_DEVICE then
+				KeybindManager:ClearBindings()
+				self.PendingKeybinds = {}
+			else
+				KeybindManager:LoadSerialized(savedKeybinds, true)
+			end
+		end
+
+		-- Toggles: una carga representa el estado completo guardado. Toda función
+		-- disponible que no figure en el archivo queda apagada, en vez de conservar
+		-- accidentalmente el estado que tenía antes de pulsar CARGAR.
+		for id, button in pairs(self.ToggleButtons) do
+			if button and button.Parent and self:IsAvailableForCurrentDevice(button) then
+				local desired = savedToggles[id] == true
+				local okState = self:SetToggleState(button, desired)
+				-- Algunas extensiones crean primero el botón y conectan su callback
+				-- unos instantes después. Si todavía no se puede aplicar, conservar el
+				-- estado para SetToggleCallback en vez de perderlo silenciosamente.
+				if not okState then self.PendingToggles[id] = desired end
+			end
+		end
+		for id, desired in pairs(savedToggles) do
+			local button = self.ToggleButtons[id]
+			if not (button and button.Parent and self:IsAvailableForCurrentDevice(button)) then
+				self.PendingToggles[id] = desired == true
+			end
+		end
+	end)
 
 	self.Loading = false
+	if not applied then
+		warn("[H3X4 X / CONFIG] " .. tostring(applyError))
+		return false, "LA CONFIGURACIÓN NO SE PUDO APLICAR COMPLETAMENTE"
+	end
+	if sourceIsLegacy then
+		return true, "CONFIGURACIÓN ANTIGUA CARGADA · PULSA GUARDAR PARA MIGRARLA"
+	end
 	return true, "CONFIGURACIÓN CARGADA"
 end
 
@@ -1807,6 +1962,7 @@ function Lang.Set(language)
 		FunctionSearchBox.PlaceholderText = Lang.Current == "EN" and "SEARCH FUNCTIONS..." or "BUSCAR FUNCIONES..."
 	end
 	refreshDeviceSpecificTexts()
+	if KeybindManager then KeybindManager:RefreshAll() end
 	task.defer(function()
 		refreshFavoritesCard()
 		refreshCategoryView()
@@ -2964,6 +3120,8 @@ KeybindManager = {
 	Bindings = {},
 	Buttons = {},
 	Targets = {},
+	Held = {},
+	LastTrigger = {},
 	Capturing = nil,
 	ReadyAt = 0,
 }
@@ -2973,7 +3131,9 @@ KeybindManager.Card:SetAttribute("HexaDesktopOnly", true)
 sectionTitle(KeybindManager.Card, "KEYBINDS", UDim2.new(0, 16, 0, 14))
 
 function KeybindManager:IsEligible(targetButton)
-	if MOBILE_DEVICE then return false end
+	-- Registrar siempre los controles compatibles aunque el perfil todavía no se
+	-- haya elegido o una tarjeta termine de crearse tarde. En móvil la categoría
+	-- simplemente permanece oculta y las teclas no se ejecutan.
 	if not targetButton or not targetButton.Parent then return false end
 	if targetButton:GetAttribute("IsToggle") ~= true then return false end
 	if targetButton:GetAttribute("HexaNoKeybind") == true then return false end
@@ -2985,12 +3145,35 @@ function KeybindManager:IsEligible(targetButton)
 		or category == "TELEPORT" or category == "PLAYER"
 end
 
+function KeybindManager:IsHoldTarget(id)
+	local target = self.Targets[id]
+	return target ~= nil and target:GetAttribute("HexaKeybindMode") == "Hold"
+end
+
+function KeybindManager:HasBindingForButton(button)
+	if not button then return false end
+	local id = button:GetAttribute("HexaConfigId")
+	return type(id) == "string" and typeof(self.Bindings[id]) == "EnumItem"
+end
+
+function KeybindManager:IsButtonEngaged(button, baseState)
+	baseState = baseState == true
+	if not baseState or MOBILE_DEVICE then return baseState end
+	if not button then return baseState end
+	local id = button:GetAttribute("HexaConfigId")
+	if type(id) ~= "string" then return baseState end
+	if self:IsHoldTarget(id) and typeof(self.Bindings[id]) == "EnumItem" then
+		return self.Held[id] == true
+	end
+	return baseState
+end
+
 function KeybindManager:FormatBinding(binding)
-	if typeof(binding) ~= "EnumItem" then return "SIN TECLA" end
+	if typeof(binding) ~= "EnumItem" then return Lang.Current == "EN" and "NO KEY" or "SIN TECLA" end
 	if binding.EnumType == Enum.UserInputType then
-		if binding == Enum.UserInputType.MouseButton1 then return "CLIC IZQ." end
-		if binding == Enum.UserInputType.MouseButton2 then return "CLIC DER." end
-		if binding == Enum.UserInputType.MouseButton3 then return "CLIC CENTRAL" end
+		if binding == Enum.UserInputType.MouseButton1 then return Lang.Current == "EN" and "LEFT CLICK" or "CLIC IZQ." end
+		if binding == Enum.UserInputType.MouseButton2 then return Lang.Current == "EN" and "RIGHT CLICK" or "CLIC DER." end
+		if binding == Enum.UserInputType.MouseButton3 then return Lang.Current == "EN" and "MIDDLE CLICK" or "CLIC CENTRAL" end
 	end
 	return binding.Name
 end
@@ -3000,8 +3183,16 @@ function KeybindManager:RefreshButton(id)
 	local target = self.Targets[id]
 	if not keyButton or not target then return end
 	local label = tostring(target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
-	keyButton.Text = label .. "  •  " .. self:FormatBinding(self.Bindings[id])
+	local suffix = self:FormatBinding(self.Bindings[id])
+	if self:IsHoldTarget(id) and typeof(self.Bindings[id]) == "EnumItem" then
+		suffix = suffix .. (Lang.Current == "EN" and "  •  HOLD" or "  •  MANTENER")
+	end
+	keyButton.Text = label .. "  •  " .. suffix
 	keyButton:SetAttribute("BaseText", keyButton.Text)
+end
+
+function KeybindManager:RefreshAll()
+	for id in pairs(self.Targets) do self:RefreshButton(id) end
 end
 
 function KeybindManager:FindBindingOwner(id, binding)
@@ -3016,8 +3207,20 @@ end
 
 function KeybindManager:SetBinding(id, binding, silentDuplicate)
 	local target = self.Targets[id]
-	if target and target:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
+	if not target then return false, "missing" end
+	if target:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP then
 		return false, "vip"
+	end
+
+	if binding == nil then
+		self.Bindings[id] = nil
+		self.Held[id] = nil
+		self:RefreshButton(id)
+		return true
+	end
+	if typeof(binding) ~= "EnumItem" then return false, "invalid" end
+	if binding.EnumType == Enum.KeyCode and binding == Enum.KeyCode.Unknown then
+		return false, "invalid"
 	end
 
 	local ownerId = self:FindBindingOwner(id, binding)
@@ -3037,12 +3240,22 @@ function KeybindManager:SetBinding(id, binding, silentDuplicate)
 	end
 
 	self.Bindings[id] = binding
+	self.Held[id] = nil
 	self:RefreshButton(id)
 	return true
 end
 
+function KeybindManager:ClearBindings()
+	self.Capturing = nil
+	table.clear(self.Held)
+	table.clear(self.LastTrigger)
+	table.clear(self.Bindings)
+	self:RefreshAll()
+end
+
 function KeybindManager:DecodeBinding(kind, name)
-	local enumType = kind == "KeyCode" and Enum.KeyCode or Enum.UserInputType
+	local enumType = kind == "KeyCode" and Enum.KeyCode or (kind == "UserInputType" and Enum.UserInputType or nil)
+	if not enumType then return nil end
 	for _, item in ipairs(enumType:GetEnumItems()) do
 		if item.Name == name then return item end
 	end
@@ -3067,11 +3280,20 @@ function KeybindManager:RegisterToggleButton(targetButton)
 	self.Buttons[id] = keyButton
 	self.Card.Size = UDim2.new(1, 0, 0, math.max(96, y + 50))
 	self.Card:SetAttribute("HexaMobileBaseHeight", self.Card.Size.Y.Offset)
-	if targetButton:GetAttribute("HexaVipOnly") == true then
-		keyButton:SetAttribute("HexaVipKeybind", true)
-		markVipControl(keyButton)
+	local function syncVipKeybindState()
+		if targetButton:GetAttribute("HexaVipOnly") == true then
+			keyButton:SetAttribute("HexaVipKeybind", true)
+			if keyButton:GetAttribute("HexaVipOnly") ~= true then markVipControl(keyButton) end
+		end
 	end
+	syncVipKeybindState()
 	self:RefreshButton(id)
+
+	targetButton:GetAttributeChangedSignal("HexaVipOnly"):Connect(syncVipKeybindState)
+	targetButton:GetAttributeChangedSignal("IsActive"):Connect(function()
+		if targetButton:GetAttribute("IsActive") ~= true then self.Held[id] = nil end
+	end)
+	targetButton:GetAttributeChangedSignal("BaseText"):Connect(function() self:RefreshButton(id) end)
 
 	keyButton.MouseButton1Click:Connect(function()
 		if MOBILE_DEVICE or self.Capturing then return end
@@ -3079,7 +3301,7 @@ function KeybindManager:RegisterToggleButton(targetButton)
 		self.Capturing = id
 		self.ReadyAt = os.clock() + 0.12
 		local label = tostring(targetButton:GetAttribute("BaseText") or targetButton.Text or "FUNCIÓN")
-		keyButton.Text = label .. "  •  PRESIONA UNA TECLA..."
+		keyButton.Text = label .. "  •  " .. (Lang.Current == "EN" and "PRESS A KEY..." or "PRESIONA UNA TECLA...")
 	end)
 
 	if ConfigManager.PendingKeybinds and ConfigManager.PendingKeybinds[id] then
@@ -3089,6 +3311,7 @@ function KeybindManager:RegisterToggleButton(targetButton)
 				local binding = self:DecodeBinding(packed.kind, packed.name)
 				if binding then self:SetBinding(id, binding, true) end
 			end
+			if ConfigManager.PendingKeybinds then ConfigManager.PendingKeybinds[id] = nil end
 		end)
 	end
 end
@@ -3097,7 +3320,7 @@ function KeybindManager:Serialize()
 	local result = {}
 	for id, binding in pairs(self.Bindings) do
 		local target = self.Targets[id]
-		local allowed = not target or target:GetAttribute("HexaVipOnly") ~= true or HEXA_IS_VIP
+		local allowed = target and target.Parent and (target:GetAttribute("HexaVipOnly") ~= true or HEXA_IS_VIP)
 		if allowed and typeof(binding) == "EnumItem" then
 			result[id] = {kind = binding.EnumType == Enum.KeyCode and "KeyCode" or "UserInputType", name = binding.Name}
 		end
@@ -3105,12 +3328,22 @@ function KeybindManager:Serialize()
 	return result
 end
 
-function KeybindManager:LoadSerialized(data)
+function KeybindManager:LoadSerialized(data, clearExisting)
+	if clearExisting then self:ClearBindings() end
 	if type(data) ~= "table" then return end
-	for id, packed in pairs(data) do
+	-- pairs() no garantiza orden. Ordenar los IDs hace que una configuración vieja
+	-- con keybinds duplicados se resuelva siempre de la misma forma.
+	local ids = {}
+	for id in pairs(data) do table.insert(ids, tostring(id)) end
+	table.sort(ids)
+	for _, id in ipairs(ids) do
+		local packed = data[id]
 		if type(packed) == "table" and type(packed.kind) == "string" and type(packed.name) == "string" then
 			local binding = self:DecodeBinding(packed.kind, packed.name)
-			if binding then self:SetBinding(id, binding, true) end
+			if binding and self.Targets[id] then
+				self:SetBinding(id, binding, true)
+				if ConfigManager.PendingKeybinds then ConfigManager.PendingKeybinds[id] = nil end
+			end
 		end
 	end
 end
@@ -3124,10 +3357,18 @@ addVipStateListener(function(isVip)
 	for id, target in pairs(KeybindManager.Targets) do
 		if target and target:GetAttribute("HexaVipOnly") == true then
 			KeybindManager.Bindings[id] = nil
+			KeybindManager.Held[id] = nil
 			KeybindManager:RefreshButton(id)
 		end
 	end
 end)
+
+local function keybindInputMatches(binding, input)
+	if typeof(binding) ~= "EnumItem" then return false end
+	if binding.EnumType == Enum.KeyCode then return input.KeyCode == binding end
+	if binding.EnumType == Enum.UserInputType then return input.UserInputType == binding end
+	return false
+end
 
 AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, processed)
 	if MOBILE_DEVICE then KeybindManager.Capturing = nil; return end
@@ -3173,7 +3414,10 @@ AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, p
 		end
 		return
 	end
-	if processed then return end
+
+	-- No descartamos una tecla solo porque Roblox la marque como processed:
+	-- muchos controles de juego hacen eso. El TextBox enfocado ya evita activar
+	-- atajos mientras el usuario escribe.
 	if input.UserInputType == Enum.UserInputType.MouseButton1
 		or input.UserInputType == Enum.UserInputType.MouseButton2
 		or input.UserInputType == Enum.UserInputType.MouseButton3 then
@@ -3183,19 +3427,37 @@ AllSliders.TrackConnection(UserInputService.InputBegan:Connect(function(input, p
 			return
 		end
 	end
+
+	local now = os.clock()
 	for id, binding in pairs(KeybindManager.Bindings) do
-		local matched = false
-		if typeof(binding) == "EnumItem" then
-			if binding.EnumType == Enum.KeyCode then matched = input.KeyCode == binding
-			elseif binding.EnumType == Enum.UserInputType then matched = input.UserInputType == binding end
-		end
-		if matched then
+		if keybindInputMatches(binding, input) then
 			local target = KeybindManager.Targets[id]
 			if target and target.Parent and not (target:GetAttribute("HexaVipOnly") == true and not HEXA_IS_VIP) then
-				ConfigManager:ActivateToggle(target)
+				if KeybindManager:IsHoldTarget(id) then
+					KeybindManager.Held[id] = true
+				else
+					local last = KeybindManager.LastTrigger[id] or 0
+					if now - last >= 0.08 then
+						KeybindManager.LastTrigger[id] = now
+						ConfigManager:ActivateToggle(target)
+					end
+				end
 			end
 		end
 	end
+end))
+
+AllSliders.TrackConnection(UserInputService.InputEnded:Connect(function(input)
+	if MOBILE_DEVICE then return end
+	for id, binding in pairs(KeybindManager.Bindings) do
+		if KeybindManager:IsHoldTarget(id) and keybindInputMatches(binding, input) then
+			KeybindManager.Held[id] = nil
+		end
+	end
+end))
+
+AllSliders.TrackConnection(UserInputService.WindowFocusReleased:Connect(function()
+	table.clear(KeybindManager.Held)
 end))
 
 -- Categoría exclusiva de CELULAR para construir un HUD flotante a gusto del
@@ -3594,6 +3856,11 @@ local FovStroke = mkStroke(FovCircle, Color3.fromRGB(255, 255, 255), 0.2, 1.5)
 local aimDistanceSlider = createSlider(CombatCard, "Distancia máxima de puntería (3D)", 50, 2000, maxAimDistance, 38, function(v) maxAimDistance = v end)
 local autoAimHeadButton = createToggleButton(CombatCard, "AIMBOT (CABEZA)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 96))
 local autoAimBodyButton = createToggleButton(CombatCard, "AIMBOT (CUERPO)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 142))
+-- En PC, si el usuario asigna una tecla al Aimbot, esa tecla pasa a ser
+-- un control de mantener pulsado. El toggle habilita el modo; sin keybind el
+-- comportamiento continúa siendo automático como antes.
+autoAimHeadButton:SetAttribute("HexaKeybindMode", "Hold")
+autoAimBodyButton:SetAttribute("HexaKeybindMode", "Hold")
 -- En móvil ambos modos comparten el BOTÓN AIM FLOTANTE especial.
 autoAimHeadButton:SetAttribute("HexaNoFloating", true)
 autoAimBodyButton:SetAttribute("HexaNoFloating", true)
@@ -4801,7 +5068,7 @@ task.spawn(function()
 			Penetration = {"penetration", "penetrate", "wallbang", "wall_bang", "pierce", "piercing", "surfacepenetration", "surface_penetration", "penetrationdepth", "penetration_depth", "penetrationpower", "penetration_power", "maxpenetrations", "max_penetrations"},
 		}
 
-		-- Aim Smoothing puede funcionar como modo independiente y usa su propia tecla.
+		-- Aim Smoothing solo modifica un Aimbot activo; nunca activa el apuntado por sí mismo.
 		local AimSmoothingButton = createToggleButton(
 			CombatCard,
 			"SUAVIZADO DE PUNTERÍA",
@@ -6901,6 +7168,11 @@ end
 
 local function applyDeviceProfile(mode)
 	MOBILE_DEVICE = mode == "MOBILE"
+	ConfigManager:SetDeviceMode(MOBILE_DEVICE and "MOBILE" or "PC")
+	if KeybindManager then
+		table.clear(KeybindManager.Held)
+		KeybindManager.Capturing = nil
+	end
 	MAIN_SIZE = calculateMainSize()
 
 	-- Reubicar la GUI según el modo elegido. La selección manual prevalece sobre
@@ -7031,6 +7303,8 @@ local function openMainInterface()
 end
 
 local function chooseDevice(mode)
+	if DeviceSelector.Choosing then return end
+	DeviceSelector.Choosing = true
 	local t = tween(DeviceSelector.Frame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
 	t.Completed:Connect(function()
 		applyDeviceProfile(mode)
@@ -7199,13 +7473,15 @@ Runtime.espConn = RunService.RenderStepped:Connect(function()
 end)
 
 Runtime.renderConn = RunService.RenderStepped:Connect(function()
-	-- El botón flotante móvil acciona los mismos toggles del Aimbot normal, por
-	-- lo que el estado queda incluido en Guardar/Cargar configuración.
-	local smoothingOnlyActive = HexaSharedTargetFilters.AimSmoothing
-		and not autoAimHeadActive
-		and not autoAimBodyActive
-	local isHeadActive = autoAimHeadActive or smoothingOnlyActive
+	-- Aim Smoothing es únicamente un modificador: nunca debe activar el Aimbot
+	-- por sí solo. En PC, un Aimbot con keybind asignado solo apunta mientras la
+	-- tecla correspondiente se mantiene pulsada. Sin keybind sigue automático.
+	local isHeadActive = autoAimHeadActive
 	local isBodyActive = autoAimBodyActive
+	if KeybindManager and not MOBILE_DEVICE then
+		isHeadActive = KeybindManager:IsButtonEngaged(autoAimHeadButton, autoAimHeadActive)
+		isBodyActive = KeybindManager:IsButtonEngaged(autoAimBodyButton, autoAimBodyActive)
+	end
 
 	if isHeadActive or isBodyActive then
 		Runtime.aimWasActive = true
@@ -7314,13 +7590,34 @@ RunService:BindToRenderStep(
 	end
 )
 
-ScreenGui.Destroying:Connect(function()
+function Runtime.shutdown()
+	if Runtime.shuttingDown then return end
+	Runtime.shuttingDown = true
+	pcall(cleanupMovement)
+	for _, field in ipairs({"loopConn", "espConn", "renderConn", "charAddedConn"}) do
+		local connection = Runtime[field]
+		if connection then
+			pcall(function() connection:Disconnect() end)
+			Runtime[field] = nil
+		end
+	end
 	Runtime.weaponLockEnabled = false
+	Runtime.currentAimWorldPosition = nil
+	Runtime.cachedAimCandidate = nil
+	Runtime.cachedResolvedAimTarget = nil
 	Runtime.releaseWeaponLockInput(true)
 	pcall(function()
 		RunService:UnbindFromRenderStep("H3X4X_WeaponLock")
 		RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock")
 	end)
+	if KeybindManager then
+		KeybindManager.Capturing = nil
+		table.clear(KeybindManager.Held)
+	end
+end
+
+ScreenGui.Destroying:Connect(function()
+	Runtime.shutdown()
 end)
 
 Runtime.charAddedConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
@@ -7420,17 +7717,7 @@ end)
 YesBtn.MouseButton1Click:Connect(function()
 	local t = tween(ConfirmFrame, tweenOut, {Size = UDim2.new(0, 0, 0, 0)})
 	t.Completed:Connect(function()
-		cleanupMovement()
-		if Runtime.loopConn then Runtime.loopConn:Disconnect() end
-		if Runtime.espConn then Runtime.espConn:Disconnect() end
-		if Runtime.renderConn then Runtime.renderConn:Disconnect() end
-		if Runtime.charAddedConn then Runtime.charAddedConn:Disconnect() end
-		Runtime.weaponLockEnabled = false
-		Runtime.releaseWeaponLockInput(true)
-		pcall(function()
-			RunService:UnbindFromRenderStep("H3X4X_WeaponLock")
-			RunService:UnbindFromRenderStep("H3X4X_AimWeaponLock")
-		end)
+		Runtime.shutdown()
 		if ScreenGui then ScreenGui:Destroy() end
 	end)
 end)
@@ -8495,6 +8782,7 @@ task.spawn(function()
 
 		function X:panic()
 			self:disableOriginalFeatures()
+			if KeybindManager then table.clear(KeybindManager.Held) end
 			for _, resetter in ipairs(self.Resetters) do
 				pcall(resetter)
 			end
