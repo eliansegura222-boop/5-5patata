@@ -19,17 +19,17 @@ return {
         expires = "permanent"
     },        
 
-   ["3808563939"] = { --ALE (SORTEO)
+    ["3808563939"] = { --ALE (SORTEO)
         vip = true,
         expires = "permanent"  
     },    
                 
-   ["5385333777"] = { --enma (sorteo)
+    ["5385333777"] = { --enma (sorteo)
         vip = false,
         expires = "2026-08-17" 
-    },     
+   },     
 
-   ["1853904678"] = { --discord id 1392649417349271603 (etiqueta)
+    ["1853904678"] = { --discord id 1392649417349271603 (etiqueta)
         vip = true,
         expires = "permanent"                
     }
