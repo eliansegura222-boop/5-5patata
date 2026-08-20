@@ -588,7 +588,7 @@ Main.ClipsDescendants = true
 Main.ZIndex = 10
 Main.Parent = ScreenGui
 Main.Visible = false
-corner(Main, 24)
+corner(Main, 32)
 stroke(Main, Color3.fromRGB(255, 255, 255), 0.72, 1)
 
 local BackgroundImage = Instance.new("ImageLabel")
@@ -601,6 +601,7 @@ BackgroundImage.ImageTransparency = 0.42
 BackgroundImage.ScaleType = Enum.ScaleType.Crop
 BackgroundImage.ZIndex = 10
 BackgroundImage.Parent = Main
+corner(BackgroundImage, 32)
 
 local BackgroundSoftLayer = BackgroundImage:Clone()
 BackgroundSoftLayer.Name = "BackgroundSoftLayer"
@@ -610,6 +611,7 @@ BackgroundSoftLayer.ImageColor3 = Color3.fromRGB(105, 105, 110)
 BackgroundSoftLayer.ImageTransparency = 0.84
 BackgroundSoftLayer.ZIndex = 10
 BackgroundSoftLayer.Parent = Main
+corner(BackgroundSoftLayer, 32)
 
 local GlassOverlay = Instance.new("Frame")
 GlassOverlay.Name = "GlassOverlay"
@@ -3153,7 +3155,6 @@ end)
 -- =========================================================
 
 setCategory("HOME")
-notify("H3X4 OBBY", "Interfaz Monochrome Glass cargada. Categorías completas y layout fijo.", "success")
 
 task.delay(0.35, function()
     Main.Visible = false
