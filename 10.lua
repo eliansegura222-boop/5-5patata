@@ -1030,53 +1030,26 @@ end
 -- =========================================================
 
 local function makeCard(page, titleText, subtitleText)
+    -- Los títulos y descripciones de las tarjetas se omiten intencionalmente.
+    -- La tarjeta contiene únicamente sus controles/funciones.
     local card = Instance.new("Frame")
     card.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
     card.BackgroundTransparency = 0.46
     card.BorderSizePixel = 0
-    card.Size = UDim2.new(1, 0, 0, 60)
+    card.Size = UDim2.new(1, 0, 0, 40)
     card.ZIndex = 13
     card.Parent = page
     corner(card, 18)
     stroke(card, Color3.fromRGB(255, 255, 255), 0.86, 1)
-    padding(card, 14, 14, 13, 14)
+    padding(card, 14, 14, 10, 10)
 
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 9)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = card
 
-    local title = Instance.new("TextLabel")
-    title.BackgroundTransparency = 1
-    title.Size = UDim2.new(1, 0, 0, 20)
-    title.Text = titleText
-    title.TextColor3 = Theme.Text
-    title.TextSize = 11
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.LayoutOrder = 1
-    title.ZIndex = 14
-    title.Parent = card
-
-    if subtitleText and subtitleText ~= "" then
-        local subtitle = Instance.new("TextLabel")
-        subtitle.BackgroundTransparency = 1
-        subtitle.Size = UDim2.new(1, 0, 0, 0)
-        subtitle.AutomaticSize = Enum.AutomaticSize.Y
-        subtitle.TextWrapped = true
-        subtitle.Text = subtitleText
-        subtitle.TextColor3 = Theme.TextDim
-        subtitle.TextSize = 9
-        subtitle.Font = Enum.Font.GothamMedium
-        subtitle.TextXAlignment = Enum.TextXAlignment.Left
-        subtitle.TextYAlignment = Enum.TextYAlignment.Top
-        subtitle.LayoutOrder = 2
-        subtitle.ZIndex = 14
-        subtitle.Parent = card
-    end
-
     local function updateCardHeight()
-        card.Size = UDim2.new(1, 0, 0, math.max(54, layout.AbsoluteContentSize.Y + 27))
+        card.Size = UDim2.new(1, 0, 0, math.max(20, layout.AbsoluteContentSize.Y + 20))
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardHeight))
     task.defer(updateCardHeight)
@@ -2620,21 +2593,21 @@ table.insert(State.RenderConnections, RenderLoop)
 do
     local page = Pages.HOME
 
-    local card = makeCard(page, "H3X4 OBBY", "Hub separado para obbies, parkour y speedruns. Las funciones genéricas intentan adaptarse a distintos juegos.")
+    local card = makeCard(page)
     makeButton(card, "GUARDAR CHECKPOINT RÁPIDO", function()
         saveCheckpoint(false)
     end)
     makeButton(card, "VOLVER AL CHECKPOINT", returnCheckpoint)
     makeButton(card, "INICIAR / DETENER TIMER", toggleTimer)
 
-    local stats = makeCard(page, "ESTADO DE SESIÓN")
+    local stats = makeCard(page)
     table.insert(TimerLabels.Current, makeStat(stats, "TIEMPO ACTUAL", "00:00.00"))
     table.insert(TimerLabels.Best, makeStat(stats, "MEJOR TIEMPO", "--:--.--"))
     table.insert(TimerLabels.Deaths, makeStat(stats, "MUERTES", "0"))
     table.insert(TimerLabels.Checkpoint, makeStat(stats, "CHECKPOINT", "0 / 0"))
     table.insert(TimerLabels.Route, makeStat(stats, "RUTA", "0 pts"))
 
-    local community = makeCard(page, "UNIRSE AL DISCORD", "Únete al Discord oficial de la comunidad H3X4 para novedades, soporte y actualizaciones.")
+    local community = makeCard(page)
     makeButton(community, "COPIAR LINK DEL DISCORD", function()
         copyDiscordLink()
     end)
@@ -2642,7 +2615,7 @@ do
         showDiscordModal()
     end)
 
-    local device = makeCard(page, "DISPOSITIVO", "Elige el dispositivo para adaptar el panel automáticamente y hacerlo más cómodo.")
+    local device = makeCard(page)
     makeButton(device, "USAR MODO PC", function()
         Settings.AutoDeviceAlways = false
         finishDeviceSelection("PC", false)
@@ -2657,7 +2630,6 @@ do
         showAutoDeviceModal()
     end)
 
-    local help = makeCard(page, "NOTA", "Los detectores de killbricks, checkpoints y metas usan nombres/propiedades comunes. Algunos juegos pueden necesitar módulos específicos.")
 end
 
 -- CHECKPOINTS
@@ -2665,7 +2637,7 @@ local SelectedCheckpointLabel = nil
 do
     local page = Pages.CHECKPOINTS
 
-    local card = makeCard(page, "CHECKPOINTS MANUALES", "Hasta 12 checkpoints guardados durante la sesión.")
+    local card = makeCard(page)
     SelectedCheckpointLabel = makeStat(card, "SELECCIONADO", "NINGUNO")
 
     makeButton(card, "GUARDAR NUEVO CHECKPOINT", function()
@@ -2715,7 +2687,7 @@ do
     makeButton(card, "VOLVER AL SELECCIONADO", returnCheckpoint)
     makeButton(card, "ELIMINAR SELECCIONADO", deleteCheckpoint, true)
 
-    local autoCard = makeCard(page, "AUTO CHECKPOINT", "Guarda una nueva posición segura al avanzar cierta distancia.")
+    local autoCard = makeCard(page)
     makeToggle(autoCard, "AUTO CHECKPOINT", Settings.AutoCheckpoint, nil, "AutoCheckpoint")
     makeSlider(autoCard, "DISTANCIA ENTRE CHECKPOINTS", 10, 150, Settings.AutoCheckpointDistance, nil, "AutoCheckpointDistance")
     makeSlider(autoCard, "INTERVALO MÍNIMO (s)", 0.5, 10, Settings.AutoCheckpointInterval, nil, "AutoCheckpointInterval")
@@ -2725,7 +2697,7 @@ end
 do
     local page = Pages.MOVEMENT
 
-    local jumpCard = makeCard(page, "SALTO Y PARKOUR")
+    local jumpCard = makeCard(page)
     makeToggle(jumpCard, "SALTO ALTO", Settings.HighJump, function(value)
         if isAlive() then
             State.Humanoid.UseJumpPower = true
@@ -2741,7 +2713,7 @@ do
     makeToggle(jumpCard, "LONG JUMP", Settings.LongJump, nil, "LongJump")
     makeSlider(jumpCard, "IMPULSO DE LONG JUMP", 15, 120, Settings.LongJumpPower, nil, "LongJumpPower")
 
-    local assist = makeCard(page, "ASISTENCIA")
+    local assist = makeCard(page)
     makeToggle(assist, "EDGE ASSIST", Settings.EdgeAssist, nil, "EdgeAssist")
     makeSlider(assist, "DISTANCIA DE DETECCIÓN DEL BORDE", 1.5, 8, Settings.EdgeAssistDistance, nil, "EdgeAssistDistance")
     makeToggle(assist, "LADDER ASSIST", Settings.LadderAssist, nil, "LadderAssist")
@@ -2752,7 +2724,7 @@ end
 do
     local page = Pages.SAFETY
 
-    local safety = makeCard(page, "RECUPERACIÓN")
+    local safety = makeCard(page)
     makeToggle(safety, "ANTI VOID", Settings.AntiVoid, nil, "AntiVoid")
     makeSlider(safety, "DISTANCIA DE CAÍDA", 20, 180, Settings.VoidDropDistance, nil, "VoidDropDistance")
     makeToggle(safety, "AUTO RETRY AL MORIR", Settings.AutoRetry, nil, "AutoRetry")
@@ -2766,7 +2738,7 @@ do
         end
     end)
 
-    local hazards = makeCard(page, "OBSTÁCULOS")
+    local hazards = makeCard(page)
     makeToggle(hazards, "BYPASS LOCAL DE KILLBRICKS", Settings.KillbrickBypass, function()
         task.spawn(scanKillBricks)
     end, "KillbrickBypass")
@@ -2776,7 +2748,7 @@ end
 do
     local page = Pages.VISUALS
 
-    local visual = makeCard(page, "DETECTORES VISUALES")
+    local visual = makeCard(page)
     makeToggle(visual, "KILLBRICK ESP", Settings.KillbrickESP, function()
         task.spawn(scanKillBricks)
     end, "KillbrickESP")
@@ -2788,14 +2760,13 @@ do
     end, "ObjectivePointer")
     makeSlider(visual, "RANGO DEL SCANNER", 100, 2000, Settings.ObjectiveScanDistance, nil, "ObjectiveScanDistance")
 
-    local info = makeCard(page, "QUÉ BUSCA", "Killbrick ESP intenta detectar nombres como kill, lava, death, hazard, damage, acid, laser o spike. El indicador busca checkpoints, spawns y metas por nombres comunes.")
 end
 
 -- SPEEDRUN
 do
     local page = Pages.SPEEDRUN
 
-    local timerCard = makeCard(page, "CRONÓMETRO")
+    local timerCard = makeCard(page)
     table.insert(TimerLabels.Current, makeStat(timerCard, "TIEMPO", "00:00.00"))
     table.insert(TimerLabels.Best, makeStat(timerCard, "RÉCORD", "--:--.--"))
     table.insert(TimerLabels.Deaths, makeStat(timerCard, "MUERTES", "0"))
@@ -2807,7 +2778,7 @@ do
     makeButton(timerCard, "AÑADIR SPLIT", addSplit)
     makeButton(timerCard, "REINICIAR TIMER", resetTimer, true)
 
-    local auto = makeCard(page, "AUTOMATIZACIÓN DE SPEEDRUN")
+    local auto = makeCard(page)
     makeToggle(auto, "DETECTAR META AUTOMÁTICAMENTE", Settings.AutoFinish, nil, "AutoFinish")
     makeToggle(auto, "AUTO TIMER AL RESPAWN", Settings.AutoTimer, nil, "AutoTimer")
 end
@@ -2816,7 +2787,7 @@ end
 do
     local page = Pages.ROUTES
 
-    local route = makeCard(page, "ROUTE RECORDER", "Graba tu recorrido usando posiciones locales. Puedes visualizarlo y reproducirlo.")
+    local route = makeCard(page)
     local recordToggle = makeToggle(route, "GRABAR RUTA", State.RouteRecording, function(value)
         setRouteRecording(value)
     end)
@@ -2844,7 +2815,7 @@ local MobileHudToggle = nil
 do
     local page = Pages.SYSTEM
 
-    local config = makeCard(page, "CONFIGURACIÓN")
+    local config = makeCard(page)
     makeButton(config, "GUARDAR CONFIGURACIÓN", function()
         if type(writefile) ~= "function" then
             notify("CONFIGURACIÓN", "Tu executor no permite writefile.", "warning")
@@ -2922,7 +2893,7 @@ do
         notify("CONFIGURACIÓN", "Configuración cargada.", "success")
     end)
 
-    local mobile = makeCard(page, "DISPOSITIVO")
+    local mobile = makeCard(page)
     makeButton(mobile, "MODO PC", function()
         finishDeviceSelection("PC", false)
     end)
@@ -2933,11 +2904,11 @@ do
         showAutoDeviceModal()
     end)
 
-    local communitySystem = makeCard(page, "UNIRSE AL DISCORD")
+    local communitySystem = makeCard(page)
     makeButton(communitySystem, "COPIAR LINK DEL DISCORD", copyDiscordLink)
     makeButton(communitySystem, "MOSTRAR AVISO DE DISCORD", showDiscordModal)
 
-    local cleanup = makeCard(page, "PANEL")
+    local cleanup = makeCard(page)
     makeButton(cleanup, "RESTAURAR POSICIÓN DEL PANEL", function()
         Main.Position = UDim2.new(0.5, 0, 0.5, 0)
     end)
@@ -2947,7 +2918,7 @@ end
 local KeybindButtons = {}
 do
     local page = Pages.KEYBINDS
-    local keyCard = makeCard(page, "ATAJOS", "Pulsa un botón y después la nueva tecla. ESC cancela.")
+    local keyCard = makeCard(page)
 
     local names = {
         {"ToggleUI", "MOSTRAR / OCULTAR PANEL"},
