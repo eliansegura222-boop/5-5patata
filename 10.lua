@@ -183,7 +183,7 @@ local Settings = {
     ObjectivePointer = false,
     ObjectiveScanDistance = 600,
 
-    MobileHud = IS_MOBILE,
+    MobileHud = false,
     DeviceProfile = "AUTO",
     HideDiscordPrompt = false,
     AutoDeviceAlways = false,
@@ -890,108 +890,6 @@ local categories = {
     {"KEYBINDS", "KEYBINDS"},
 }
 
-local function iconPart(parent, x, y, w, h, fill, round)
-    local part = Instance.new("Frame")
-    part.BackgroundColor3 = fill or Theme.TextMuted
-    part.BorderSizePixel = 0
-    part.Position = UDim2.fromOffset(x, y)
-    part.Size = UDim2.fromOffset(w, h)
-    part.Parent = parent
-    if round then corner(part, round) end
-    return part
-end
-
-local function iconStrokeBox(parent, x, y, w, h, color, round, thick)
-    local box = Instance.new("Frame")
-    box.BackgroundTransparency = 1
-    box.BorderSizePixel = 0
-    box.Position = UDim2.fromOffset(x, y)
-    box.Size = UDim2.fromOffset(w, h)
-    box.Parent = parent
-    if round then corner(box, round) end
-    stroke(box, color or Theme.TextMuted, 0, thick or 1)
-    return box
-end
-
-local function setCategoryIconColor(iconRoot, color)
-    if not iconRoot then return end
-    for _, d in ipairs(iconRoot:GetDescendants()) do
-        if d:IsA("Frame") and d.BackgroundTransparency < 1 then
-            d.BackgroundColor3 = color
-        elseif d:IsA("UIStroke") then
-            d.Color = color
-        end
-    end
-end
-
-local function createCategoryIcon(parent, key, color)
-    local root = Instance.new("Frame")
-    root.Name = "Icon"
-    root.BackgroundTransparency = 1
-    root.Position = UDim2.fromOffset(12, 9)
-    root.Size = UDim2.fromOffset(22, 22)
-    root.Parent = parent
-
-    if key == "HOME" then
-        iconPart(root, 5, 10, 12, 9, color, 2)
-        local leftRoof = iconPart(root, 4, 7, 9, 2, color, 1)
-        leftRoof.Rotation = -35
-        local rightRoof = iconPart(root, 9, 7, 9, 2, color, 1)
-        rightRoof.Rotation = 35
-        iconPart(root, 9, 13, 4, 6, color, 1)
-    elseif key == "CHECKPOINTS" then
-        iconPart(root, 5, 3, 2, 16, color, 1)
-        iconPart(root, 7, 4, 10, 6, color, 2)
-        iconPart(root, 4, 19, 6, 2, color, 1)
-    elseif key == "MOVEMENT" then
-        iconPart(root, 4, 10, 10, 2, color, 1)
-        local up = iconPart(root, 12, 7, 6, 2, color, 1)
-        up.Rotation = 35
-        local down = iconPart(root, 12, 13, 6, 2, color, 1)
-        down.Rotation = -35
-    elseif key == "SAFETY" then
-        iconStrokeBox(root, 3, 3, 16, 16, color, 8, 1)
-        local check1 = iconPart(root, 6, 11, 4, 2, color, 1)
-        check1.Rotation = 35
-        local check2 = iconPart(root, 9, 10, 6, 2, color, 1)
-        check2.Rotation = -35
-    elseif key == "VISUALS" then
-        iconStrokeBox(root, 2, 6, 18, 10, color, 8, 1)
-        iconPart(root, 8, 8, 6, 6, color, 999)
-        iconPart(root, 10, 10, 2, 2, Color3.fromRGB(8,8,10), 999)
-    elseif key == "SPEEDRUN" then
-        iconStrokeBox(root, 3, 3, 16, 16, color, 8, 1)
-        iconPart(root, 10, 6, 2, 5, color, 1)
-        local hand = iconPart(root, 10, 10, 5, 2, color, 1)
-        hand.Rotation = 35
-        iconPart(root, 8, 1, 6, 2, color, 1)
-    elseif key == "ROUTES" then
-        local n1 = iconPart(root, 3, 14, 5, 5, color, 999)
-        local n2 = iconPart(root, 9, 7, 5, 5, color, 999)
-        local n3 = iconPart(root, 15, 14, 5, 5, color, 999)
-        local l1 = iconPart(root, 6, 12, 6, 2, color, 1)
-        l1.Rotation = -35
-        local l2 = iconPart(root, 12, 12, 6, 2, color, 1)
-        l2.Rotation = 35
-    elseif key == "SYSTEM" then
-        iconStrokeBox(root, 5, 5, 12, 12, color, 999, 1)
-        iconPart(root, 10, 1, 2, 4, color, 1)
-        iconPart(root, 10, 17, 2, 4, color, 1)
-        iconPart(root, 1, 10, 4, 2, color, 1)
-        iconPart(root, 17, 10, 4, 2, color, 1)
-    elseif key == "KEYBINDS" then
-        iconStrokeBox(root, 2, 5, 18, 12, color, 4, 1)
-        for row = 0, 1 do
-            for col = 0, 3 do
-                iconPart(root, 5 + col * 4, 8 + row * 4, 2, 2, color, 1)
-            end
-        end
-        iconPart(root, 7, 16, 8, 1, color, 1)
-    end
-
-    return root
-end
-
 local function createPage(key)
     local page = Instance.new("ScrollingFrame")
     page.Name = key .. "_Page"
@@ -1052,7 +950,6 @@ local function setCategory(key)
     for buttonKey, button in pairs(CategoryButtons) do
         local active = buttonKey == key
         local label = button:FindFirstChild("Label")
-        local iconRoot = button:FindFirstChild("Icon")
         local buttonStroke = button:FindFirstChildOfClass("UIStroke")
 
         tween(button, 0.16, {
@@ -1061,9 +958,6 @@ local function setCategory(key)
         })
         if label then
             tween(label, 0.16, {TextColor3 = active and Color3.fromRGB(5, 5, 6) or Theme.TextDim})
-        end
-        if iconRoot then
-            setCategoryIconColor(iconRoot, active and Color3.fromRGB(18, 18, 22) or Theme.TextMuted)
         end
         if buttonStroke then
             tween(buttonStroke, 0.16, {Transparency = active and 1 or 0.90})
@@ -1088,18 +982,17 @@ for index, definition in ipairs(categories) do
     corner(button, 14)
     stroke(button, Color3.fromRGB(255, 255, 255), 0.92, 1)
 
-    local iconRoot = createCategoryIcon(button, key, Theme.TextMuted)
-
     local label = Instance.new("TextLabel")
     label.Name = "Label"
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(42, 0)
-    label.Size = UDim2.new(1, -52, 1, 0)
+    label.Position = UDim2.fromOffset(8, 0)
+    label.Size = UDim2.new(1, -16, 1, 0)
     label.Text = labelText
     label.TextColor3 = Theme.TextDim
     label.TextSize = 9
     label.Font = Enum.Font.GothamSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextYAlignment = Enum.TextYAlignment.Center
     label.ZIndex = 14
     label.Parent = button
 
@@ -1107,14 +1000,12 @@ for index, definition in ipairs(categories) do
         if CurrentCategory ~= key then
             tween(button, 0.14, {BackgroundTransparency = 0.94})
             tween(label, 0.14, {TextColor3 = Theme.Text})
-            setCategoryIconColor(iconRoot, Theme.TextDim)
         end
     end)
     button.MouseLeave:Connect(function()
         if CurrentCategory ~= key then
             tween(button, 0.14, {BackgroundTransparency = 0.965})
             tween(label, 0.14, {TextColor3 = Theme.TextDim})
-            setCategoryIconColor(iconRoot, Theme.TextMuted)
         end
     end)
     button.MouseButton1Click:Connect(function()
@@ -1726,7 +1617,7 @@ local function applyDeviceMode(skipResize)
     end
 
     if MobileHud then
-        MobileHud.Visible = mobile and Settings.MobileHud
+        MobileHud.Visible = false
     end
     if not skipResize and Main and Main.Visible then
         local w, h = basePanelSize()
@@ -1763,7 +1654,7 @@ end))
 
 MobileHud = Instance.new("Frame")
 MobileHud.Name = "MobileHud"
-MobileHud.Visible = usingMobileLayout() and Settings.MobileHud
+MobileHud.Visible = false
 MobileHud.BackgroundTransparency = 1
 MobileHud.AnchorPoint = Vector2.new(1, 1)
 MobileHud.Position = UDim2.new(1, -14, 1, -90)
@@ -3014,7 +2905,7 @@ do
 
         State.BestTime = tonumber(data.bestTime) or State.BestTime
 
-        MobileHud.Visible = usingMobileLayout() and Settings.MobileHud
+        MobileHud.Visible = false
         task.spawn(scanKillBricks)
         task.spawn(scanInvisibleParts)
         if Settings.ObjectivePointer then task.spawn(scanObjectives) end
@@ -3023,11 +2914,7 @@ do
         notify("CONFIGURACIÓN", "Configuración cargada.", "success")
     end)
 
-    local mobile = makeCard(page, "DISPOSITIVO Y HUD")
-    MobileHudToggle = makeToggle(mobile, "HUD FLOTANTE", Settings.MobileHud, function(value)
-        Settings.MobileHud = value
-        MobileHud.Visible = value and usingMobileLayout()
-    end, "MobileHud")
+    local mobile = makeCard(page, "DISPOSITIVO")
     makeButton(mobile, "MODO PC", function()
         finishDeviceSelection("PC", false)
     end)
@@ -3138,19 +3025,10 @@ end
 -- MOBILE ACTIONS
 -- =========================================================
 
-MobileSave = mobileAction("SAVE", function()
-    saveCheckpoint(false)
-end)
-
-MobileReturn = mobileAction("BACK", function()
-    returnCheckpoint()
-end)
-
-MobileRetry = mobileAction("SAFE", function()
-    if State.LastSafeCFrame then
-        safePivot(State.LastSafeCFrame)
-    end
-end)
+-- Los botones flotantes automáticos de móvil fueron eliminados.
+MobileSave = nil
+MobileReturn = nil
+MobileRetry = nil
 
 -- =========================================================
 -- UI REFRESH LOOP
