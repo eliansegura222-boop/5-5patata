@@ -186,6 +186,7 @@ local Settings = {
     MobileHud = IS_MOBILE,
     DeviceProfile = "AUTO",
     HideDiscordPrompt = false,
+    AutoDeviceAlways = false,
 }
 
 local ActiveKeybindCapture = nil
@@ -329,10 +330,17 @@ end
 if PrefsData.HideDiscordPrompt ~= nil then
     Settings.HideDiscordPrompt = PrefsData.HideDiscordPrompt == true
 end
+if PrefsData.AutoDeviceAlways ~= nil then
+    Settings.AutoDeviceAlways = PrefsData.AutoDeviceAlways == true
+end
+if not Settings.AutoDeviceAlways then
+    Settings.DeviceProfile = "AUTO"
+end
 
 local function persistPrefs()
     PrefsData.DeviceProfile = Settings.DeviceProfile
     PrefsData.HideDiscordPrompt = Settings.HideDiscordPrompt == true
+    PrefsData.AutoDeviceAlways = Settings.AutoDeviceAlways == true
     savePrefsFile(PrefsData)
 end
 
@@ -456,9 +464,10 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "H3X4_Obby"
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ResetOnSpawn = false
-ScreenGui.DisplayOrder = 2147480000
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 2147483647
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 ScreenGui.Parent = GuiParent
+pcall(function() ScreenGui.OnTopOfCoreBlur = true end)
 
 -- =========================================================
 -- NOTIFICATIONS — MONOCHROME FROSTED TOASTS
@@ -470,7 +479,7 @@ NotificationHolder.BackgroundTransparency = 1
 NotificationHolder.AnchorPoint = Vector2.new(1, 0)
 NotificationHolder.Position = UDim2.new(1, -16, 0, 16)
 NotificationHolder.Size = UDim2.fromOffset(326, 260)
-NotificationHolder.ZIndex = 300
+NotificationHolder.ZIndex = 12000
 NotificationHolder.Parent = ScreenGui
 
 local NotificationLayout = Instance.new("UIListLayout")
@@ -493,7 +502,7 @@ local function notify(title, text, kind)
     card.BorderSizePixel = 0
     card.Size = UDim2.fromOffset(314, 0)
     card.ClipsDescendants = true
-    card.ZIndex = 301
+    card.ZIndex = 12001
     card.Parent = NotificationHolder
     corner(card, 16)
     stroke(card, Color3.fromRGB(255, 255, 255), 0.76, 1)
@@ -507,7 +516,7 @@ local function notify(title, text, kind)
     titleLabel.TextColor3 = Theme.Text
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.Text = title or "H3X4 OBBY"
-    titleLabel.ZIndex = 302
+    titleLabel.ZIndex = 12002
     titleLabel.Parent = card
 
     local markerDot = Instance.new("Frame")
@@ -516,7 +525,7 @@ local function notify(title, text, kind)
     markerDot.Size = UDim2.fromOffset(8, 8)
     markerDot.BackgroundColor3 = marker
     markerDot.BorderSizePixel = 0
-    markerDot.ZIndex = 302
+    markerDot.ZIndex = 12002
     markerDot.Parent = card
     corner(markerDot, 99)
 
@@ -532,7 +541,7 @@ local function notify(title, text, kind)
     body.TextXAlignment = Enum.TextXAlignment.Left
     body.TextYAlignment = Enum.TextYAlignment.Top
     body.Text = text or ""
-    body.ZIndex = 302
+    body.ZIndex = 12002
     body.Parent = card
 
     task.defer(function()
@@ -1471,6 +1480,19 @@ trackConnection(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
+local function usingMobileLayout()
+    if Settings.DeviceProfile == "MOBILE" then return true end
+    if Settings.DeviceProfile == "PC" then return false end
+    return IS_MOBILE
+end
+
+local function basePanelSize()
+    if usingMobileLayout() then
+        return 600, 378
+    end
+    return 730, 466
+end
+
 local RestoreOrb = Instance.new("ImageButton")
 RestoreOrb.Name = "RestoreOrb"
 RestoreOrb.Visible = false
@@ -1484,7 +1506,7 @@ RestoreOrb.ImageColor3 = Color3.fromRGB(255, 255, 255)
 RestoreOrb.ImageTransparency = 0
 RestoreOrb.ScaleType = Enum.ScaleType.Fit
 RestoreOrb.AutoButtonColor = false
-RestoreOrb.ZIndex = 200
+RestoreOrb.ZIndex = 15000
 RestoreOrb.Parent = ScreenGui
 corner(RestoreOrb, 18)
 
@@ -1511,7 +1533,51 @@ MinimizeButton.MouseButton1Click:Connect(function()
     end
 end)
 
+local orbDragging = false
+local orbDragInput = nil
+local orbDragStart = nil
+local orbStartPosition = nil
+local orbSuppressClickUntil = 0
+
+RestoreOrb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        orbDragging = true
+        orbDragInput = input
+        orbDragStart = input.Position
+        orbStartPosition = RestoreOrb.Position
+    end
+end)
+
+RestoreOrb.InputEnded:Connect(function(input)
+    if input == orbDragInput then
+        local moved = orbDragStart and ((input.Position - orbDragStart).Magnitude > 5)
+        orbDragging = false
+        orbDragInput = nil
+        if moved then
+            orbSuppressClickUntil = os.clock() + 0.20
+        end
+    end
+end)
+
+trackConnection(UserInputService.InputChanged:Connect(function(input)
+    if not orbDragging or not orbDragInput or not orbDragStart or not orbStartPosition then return end
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement
+        and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
+
+    local delta = input.Position - orbDragStart
+    RestoreOrb.Position = UDim2.new(
+        orbStartPosition.X.Scale,
+        orbStartPosition.X.Offset + delta.X,
+        orbStartPosition.Y.Scale,
+        orbStartPosition.Y.Offset + delta.Y
+    )
+end))
+
 RestoreOrb.MouseButton1Click:Connect(function()
+    if os.clock() < orbSuppressClickUntil then return end
     RestoreOrb.Visible = false
     Main.Visible = true
     local _w, _h = basePanelSize()
@@ -1520,19 +1586,6 @@ RestoreOrb.MouseButton1Click:Connect(function()
     Main.BackgroundTransparency = 0.64
     tween(Main, 0.28, {Size = targetSize, BackgroundTransparency = 0.44}, Enum.EasingStyle.Back)
 end)
-
-local function usingMobileLayout()
-    if Settings.DeviceProfile == "MOBILE" then return true end
-    if Settings.DeviceProfile == "PC" then return false end
-    return IS_MOBILE
-end
-
-local function basePanelSize()
-    if usingMobileLayout() then
-        return 600, 378
-    end
-    return 730, 466
-end
 
 local MobileHud
 
@@ -1550,6 +1603,33 @@ local function applyDeviceMode(skipResize)
     -- volver a Inicio para no dejar una página oculta seleccionada.
     if mobile and CurrentCategory == "KEYBINDS" then
         setCategory("HOME")
+    end
+
+    -- Layout real por dispositivo: no es solo cambiar el tamaño del Frame.
+    if mobile then
+        Sidebar.Position = UDim2.fromOffset(8, 76)
+        Sidebar.Size = UDim2.new(0, 146, 1, -84)
+        ContentShell.Position = UDim2.fromOffset(162, 76)
+        ContentShell.Size = UDim2.new(1, -170, 1, -84)
+        Title.Position = UDim2.fromOffset(64, 12)
+        Title.Size = UDim2.new(1, -230, 0, 24)
+        Title.TextSize = 15
+        Subtitle.Position = UDim2.fromOffset(64, 35)
+        Subtitle.Size = UDim2.new(1, -230, 0, 14)
+        Subtitle.TextSize = 7
+        StatusPill.Size = UDim2.fromOffset(70, 26)
+    else
+        Sidebar.Position = UDim2.fromOffset(10, 80)
+        Sidebar.Size = UDim2.new(0, 170, 1, -90)
+        ContentShell.Position = UDim2.fromOffset(190, 80)
+        ContentShell.Size = UDim2.new(1, -200, 1, -90)
+        Title.Position = UDim2.fromOffset(70, 13)
+        Title.Size = UDim2.new(1, -250, 0, 25)
+        Title.TextSize = 17
+        Subtitle.Position = UDim2.fromOffset(70, 37)
+        Subtitle.Size = UDim2.new(1, -250, 0, 15)
+        Subtitle.TextSize = 8
+        StatusPill.Size = UDim2.fromOffset(82, 28)
     end
 
     if MobileHud then
@@ -1661,25 +1741,25 @@ local ModalOverlay = Instance.new("Frame")
 ModalOverlay.Name = "ModalOverlay"
 ModalOverlay.Visible = false
 ModalOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-ModalOverlay.BackgroundTransparency = 0.32
+ModalOverlay.BackgroundTransparency = 0.26
 ModalOverlay.BorderSizePixel = 0
 ModalOverlay.Size = UDim2.fromScale(1, 1)
-ModalOverlay.ZIndex = 500
+ModalOverlay.ZIndex = 20000
 ModalOverlay.Parent = ScreenGui
 
-local function buildModal(titleText, bodyText)
+local function buildModal(titleText, bodyText, height)
     local modal = Instance.new("Frame")
     modal.Visible = false
     modal.AnchorPoint = Vector2.new(0.5, 0.5)
     modal.Position = UDim2.new(0.5, 0, 0.5, 0)
-    modal.Size = UDim2.fromOffset(360, 220)
+    modal.Size = UDim2.fromOffset(380, height or 230)
     modal.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    modal.BackgroundTransparency = 0.18
+    modal.BackgroundTransparency = 0.12
     modal.BorderSizePixel = 0
-    modal.ZIndex = 510
+    modal.ZIndex = 20010
     modal.Parent = ModalOverlay
     corner(modal, 18)
-    stroke(modal, Color3.fromRGB(255,255,255), 0.82, 1)
+    stroke(modal, Color3.fromRGB(255,255,255), 0.78, 1)
 
     local title = Instance.new("TextLabel")
     title.BackgroundTransparency = 1
@@ -1690,13 +1770,13 @@ local function buildModal(titleText, bodyText)
     title.TextSize = 14
     title.Font = Enum.Font.GothamBold
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 511
+    title.ZIndex = 20011
     title.Parent = modal
 
     local body = Instance.new("TextLabel")
     body.BackgroundTransparency = 1
     body.Position = UDim2.fromOffset(18, 46)
-    body.Size = UDim2.new(1, -36, 0, 56)
+    body.Size = UDim2.new(1, -36, 0, 70)
     body.TextWrapped = true
     body.TextYAlignment = Enum.TextYAlignment.Top
     body.TextXAlignment = Enum.TextXAlignment.Left
@@ -1704,33 +1784,48 @@ local function buildModal(titleText, bodyText)
     body.TextColor3 = Theme.TextDim
     body.TextSize = 10
     body.Font = Enum.Font.GothamMedium
-    body.ZIndex = 511
+    body.ZIndex = 20011
     body.Parent = modal
 
     return modal
 end
 
-local DeviceModal = buildModal("SELECCIONA TU DISPOSITIVO", "Elige el modo que te resulte más cómodo. El panel adaptará tamaño y controles automáticamente.")
-local DiscordModal = buildModal("ÚNETE A LA COMUNIDAD", "Únete a nuestro Discord para novedades, soporte y actualizaciones del proyecto H3X4 Obby.")
+local DeviceModal = buildModal(
+    "SELECCIONA TU DISPOSITIVO",
+    "Elige PC, Móvil o Automático. Después de seleccionar, la interfaz se adaptará al dispositivo y luego aparecerá el panel de la comunidad.",
+    232
+)
+
+local AutoDeviceModal = buildModal(
+    "MODO AUTOMÁTICO",
+    "¿Quieres que H3X4 detecte automáticamente tu dispositivo siempre, o usar la detección automática solamente esta vez?",
+    238
+)
+
+local DiscordModal = buildModal(
+    "ÚNETE A LA COMUNIDAD",
+    "Únete a nuestro Discord para novedades, soporte y actualizaciones del proyecto H3X4 Obby.",
+    230
+)
 
 local function modalButton(parent, text, position, width, callback)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromOffset(width or 100, 36)
+    btn.Size = UDim2.fromOffset(width or 100, 38)
     btn.Position = position
     btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    btn.BackgroundTransparency = 0.90
+    btn.BackgroundTransparency = 0.88
     btn.BorderSizePixel = 0
     btn.Text = text
     btn.TextColor3 = Theme.Text
     btn.TextSize = 9
     btn.Font = Enum.Font.GothamBold
     btn.AutoButtonColor = false
-    btn.ZIndex = 512
+    btn.ZIndex = 20020
     btn.Parent = parent
     corner(btn, 12)
-    stroke(btn, Color3.fromRGB(255,255,255), 0.86, 1)
-    btn.MouseEnter:Connect(function() tween(btn, 0.14, {BackgroundTransparency = 0.84}) end)
-    btn.MouseLeave:Connect(function() tween(btn, 0.14, {BackgroundTransparency = 0.90}) end)
+    stroke(btn, Color3.fromRGB(255,255,255), 0.84, 1)
+    btn.MouseEnter:Connect(function() tween(btn, 0.14, {BackgroundTransparency = 0.80}) end)
+    btn.MouseLeave:Connect(function() tween(btn, 0.14, {BackgroundTransparency = 0.88}) end)
     btn.MouseButton1Click:Connect(callback)
     return btn
 end
@@ -1738,54 +1833,82 @@ end
 local function hideModals()
     ModalOverlay.Visible = false
     DeviceModal.Visible = false
+    AutoDeviceModal.Visible = false
     DiscordModal.Visible = false
 end
 
 local function showDiscordModal()
-    if Settings.HideDiscordPrompt then return end
+    if Settings.HideDiscordPrompt then
+        hideModals()
+        return
+    end
     ModalOverlay.Visible = true
     DeviceModal.Visible = false
+    AutoDeviceModal.Visible = false
     DiscordModal.Visible = true
 end
 
 local function showDeviceModal()
     ModalOverlay.Visible = true
     DeviceModal.Visible = true
+    AutoDeviceModal.Visible = false
     DiscordModal.Visible = false
 end
 
-modalButton(DeviceModal, "PC", UDim2.fromOffset(18, 132), 100, function()
-    Settings.DeviceProfile = "PC"
+local function showAutoDeviceModal()
+    ModalOverlay.Visible = true
+    DeviceModal.Visible = false
+    AutoDeviceModal.Visible = true
+    DiscordModal.Visible = false
+end
+
+local function finishDeviceSelection(profile, rememberAutomatic)
+    Settings.DeviceProfile = profile
+    if profile == "AUTO" then
+        Settings.AutoDeviceAlways = rememberAutomatic == true
+    else
+        Settings.AutoDeviceAlways = false
+    end
     persistPrefs()
-    hideModals()
     applyDeviceMode(false)
     updateResponsive()
-    task.delay(0.12, showDiscordModal)
-end)
-modalButton(DeviceModal, "MÓVIL", UDim2.fromOffset(130, 132), 100, function()
-    Settings.DeviceProfile = "MOBILE"
-    persistPrefs()
     hideModals()
-    applyDeviceMode(false)
-    updateResponsive()
     task.delay(0.12, showDiscordModal)
-end)
-modalButton(DeviceModal, "AUTO", UDim2.fromOffset(242, 132), 100, function()
-    Settings.DeviceProfile = "AUTO"
-    persistPrefs()
-    hideModals()
-    applyDeviceMode(false)
-    updateResponsive()
-    task.delay(0.12, showDiscordModal)
+end
+
+modalButton(DeviceModal, "PC", UDim2.fromOffset(18, 148), 104, function()
+    finishDeviceSelection("PC", false)
 end)
 
-modalButton(DiscordModal, "COPIAR LINK", UDim2.fromOffset(18, 158), 104, function()
+modalButton(DeviceModal, "MÓVIL", UDim2.fromOffset(138, 148), 104, function()
+    finishDeviceSelection("MOBILE", false)
+end)
+
+modalButton(DeviceModal, "AUTOMÁTICO", UDim2.fromOffset(258, 148), 104, function()
+    showAutoDeviceModal()
+end)
+
+modalButton(AutoDeviceModal, "SIEMPRE", UDim2.fromOffset(18, 150), 104, function()
+    finishDeviceSelection("AUTO", true)
+end)
+
+modalButton(AutoDeviceModal, "SOLO ESTA VEZ", UDim2.fromOffset(138, 150), 118, function()
+    finishDeviceSelection("AUTO", false)
+end)
+
+modalButton(AutoDeviceModal, "VOLVER", UDim2.fromOffset(272, 150), 90, function()
+    showDeviceModal()
+end)
+
+modalButton(DiscordModal, "COPIAR LINK", UDim2.fromOffset(18, 158), 108, function()
     copyDiscordLink()
 end)
-modalButton(DiscordModal, "CANCELAR", UDim2.fromOffset(130, 158), 100, function()
+
+modalButton(DiscordModal, "CANCELAR", UDim2.fromOffset(136, 158), 100, function()
     hideModals()
 end)
-modalButton(DiscordModal, "NO MOSTRAR MÁS", UDim2.fromOffset(238, 158), 104, function()
+
+modalButton(DiscordModal, "NO MOSTRAR MÁS", UDim2.fromOffset(246, 158), 116, function()
     Settings.HideDiscordPrompt = true
     persistPrefs()
     hideModals()
@@ -2506,25 +2629,17 @@ do
 
     local device = makeCard(page, "DISPOSITIVO", "Elige el dispositivo para adaptar el panel automáticamente y hacerlo más cómodo.")
     makeButton(device, "USAR MODO PC", function()
-        Settings.DeviceProfile = "PC"
-        persistPrefs()
-        applyDeviceMode(false)
-        updateResponsive()
+        Settings.AutoDeviceAlways = false
+        finishDeviceSelection("PC", false)
         notify("DISPOSITIVO", "Modo PC aplicado.", "success")
     end)
     makeButton(device, "USAR MODO MÓVIL", function()
-        Settings.DeviceProfile = "MOBILE"
-        persistPrefs()
-        applyDeviceMode(false)
-        updateResponsive()
+        Settings.AutoDeviceAlways = false
+        finishDeviceSelection("MOBILE", false)
         notify("DISPOSITIVO", "Modo móvil aplicado.", "success")
     end)
-    makeButton(device, "USAR MODO AUTO", function()
-        Settings.DeviceProfile = "AUTO"
-        persistPrefs()
-        applyDeviceMode(false)
-        updateResponsive()
-        notify("DISPOSITIVO", "Modo automático aplicado.", "success")
+    makeButton(device, "USAR MODO AUTOMÁTICO", function()
+        showAutoDeviceModal()
     end)
 
     local help = makeCard(page, "NOTA", "Los detectores de killbricks, checkpoints y metas usan nombres/propiedades comunes. Algunos juegos pueden necesitar módulos específicos.")
@@ -2798,22 +2913,13 @@ do
         MobileHud.Visible = value and usingMobileLayout()
     end, "MobileHud")
     makeButton(mobile, "MODO PC", function()
-        Settings.DeviceProfile = "PC"
-        persistPrefs()
-        applyDeviceMode(false)
-        updateResponsive()
+        finishDeviceSelection("PC", false)
     end)
     makeButton(mobile, "MODO MÓVIL", function()
-        Settings.DeviceProfile = "MOBILE"
-        persistPrefs()
-        applyDeviceMode(false)
-        updateResponsive()
+        finishDeviceSelection("MOBILE", false)
     end)
-    makeButton(mobile, "MODO AUTO", function()
-        Settings.DeviceProfile = "AUTO"
-        persistPrefs()
-        applyDeviceMode(false)
-        updateResponsive()
+    makeButton(mobile, "MODO AUTOMÁTICO", function()
+        showAutoDeviceModal()
     end)
 
     local communitySystem = makeCard(page, "COMUNIDAD")
@@ -3065,10 +3171,13 @@ tween(Main, 0.38, {
 notify("H3X4 OBBY", "Interfaz Monochrome Glass cargada. Categorías completas y layout fijo.", "success")
 
 task.delay(0.35, function()
-    if PrefsData.DeviceProfile == nil then
-        showDeviceModal()
-    elseif not Settings.HideDiscordPrompt then
+    if Settings.AutoDeviceAlways then
+        Settings.DeviceProfile = "AUTO"
+        applyDeviceMode(false)
+        updateResponsive()
         showDiscordModal()
+    else
+        showDeviceModal()
     end
 end)
 
