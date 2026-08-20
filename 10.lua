@@ -80,24 +80,24 @@ end)
 -- =========================================================
 
 local Theme = {
-    BG = Color3.fromRGB(2, 4, 7),
-    Panel = Color3.fromRGB(6, 10, 14),
-    Panel2 = Color3.fromRGB(9, 15, 20),
-    Panel3 = Color3.fromRGB(14, 22, 28),
-    Card = Color3.fromRGB(7, 12, 17),
-    CardHover = Color3.fromRGB(13, 28, 34),
-    Accent = Color3.fromRGB(0, 239, 255),
-    Accent2 = Color3.fromRGB(255, 36, 176),
-    AccentDark = Color3.fromRGB(4, 48, 57),
-    AccentSoft = Color3.fromRGB(29, 119, 129),
-    Text = Color3.fromRGB(239, 252, 255),
-    TextDim = Color3.fromRGB(147, 183, 190),
-    TextMuted = Color3.fromRGB(79, 112, 120),
-    Border = Color3.fromRGB(28, 91, 101),
-    Danger = Color3.fromRGB(255, 61, 126),
-    Warning = Color3.fromRGB(255, 214, 74),
-    Success = Color3.fromRGB(74, 255, 174),
-    ToggleOff = Color3.fromRGB(17, 31, 37),
+    BG = Color3.fromRGB(3, 3, 4),
+    Panel = Color3.fromRGB(8, 8, 10),
+    Panel2 = Color3.fromRGB(14, 14, 17),
+    Panel3 = Color3.fromRGB(24, 24, 28),
+    Card = Color3.fromRGB(10, 10, 12),
+    CardHover = Color3.fromRGB(28, 28, 32),
+    Accent = Color3.fromRGB(248, 248, 248),
+    Accent2 = Color3.fromRGB(168, 168, 176),
+    AccentDark = Color3.fromRGB(46, 46, 52),
+    AccentSoft = Color3.fromRGB(112, 112, 120),
+    Text = Color3.fromRGB(248, 248, 248),
+    TextDim = Color3.fromRGB(178, 178, 186),
+    TextMuted = Color3.fromRGB(104, 104, 112),
+    Border = Color3.fromRGB(88, 88, 96),
+    Danger = Color3.fromRGB(255, 102, 118),
+    Warning = Color3.fromRGB(235, 235, 200),
+    Success = Color3.fromRGB(220, 255, 232),
+    ToggleOff = Color3.fromRGB(20, 20, 24),
 }
 local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local CONFIG_FILE = ("H3X4_OBBY_%d.json"):format(LocalPlayer.UserId)
@@ -409,12 +409,16 @@ ScreenGui.DisplayOrder = 2147480000
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = GuiParent
 
+-- =========================================================
+-- NOTIFICATIONS — MONOCHROME FROSTED TOASTS
+-- =========================================================
+
 local NotificationHolder = Instance.new("Frame")
 NotificationHolder.Name = "Notifications"
 NotificationHolder.BackgroundTransparency = 1
 NotificationHolder.AnchorPoint = Vector2.new(1, 0)
-NotificationHolder.Position = UDim2.new(1, -14, 0, 14)
-NotificationHolder.Size = UDim2.fromOffset(330, 250)
+NotificationHolder.Position = UDim2.new(1, -16, 0, 16)
+NotificationHolder.Size = UDim2.fromOffset(326, 260)
 NotificationHolder.ZIndex = 300
 NotificationHolder.Parent = ScreenGui
 
@@ -427,35 +431,26 @@ NotificationLayout.Parent = NotificationHolder
 local function notify(title, text, kind)
     if State.Destroyed then return end
 
-    local dotColor = Theme.Accent
-    if kind == "success" then dotColor = Theme.Success end
-    if kind == "danger" then dotColor = Theme.Danger end
-    if kind == "warning" then dotColor = Theme.Warning end
+    local marker = Theme.Text
+    if kind == "danger" then marker = Theme.Danger end
+    if kind == "warning" then marker = Theme.Warning end
+    if kind == "success" then marker = Theme.Success end
 
     local card = Instance.new("Frame")
-    card.BackgroundColor3 = Theme.Panel
-    card.BackgroundTransparency = 0.12
+    card.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    card.BackgroundTransparency = 0.26
     card.BorderSizePixel = 0
-    card.Size = UDim2.fromOffset(316, 0)
+    card.Size = UDim2.fromOffset(314, 0)
     card.ClipsDescendants = true
     card.ZIndex = 301
     card.Parent = NotificationHolder
-    corner(card, 14)
-    stroke(card, Theme.Border, 0.1, 1)
-
-    local dot = Instance.new("Frame")
-    dot.BackgroundColor3 = dotColor
-    dot.BorderSizePixel = 0
-    dot.Position = UDim2.fromOffset(14, 14)
-    dot.Size = UDim2.fromOffset(9, 9)
-    dot.ZIndex = 302
-    dot.Parent = card
-    corner(dot, 99)
+    corner(card, 16)
+    stroke(card, Color3.fromRGB(255, 255, 255), 0.76, 1)
 
     local titleLabel = Instance.new("TextLabel")
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Position = UDim2.fromOffset(32, 8)
-    titleLabel.Size = UDim2.new(1, -44, 0, 19)
+    titleLabel.Position = UDim2.fromOffset(16, 10)
+    titleLabel.Size = UDim2.new(1, -54, 0, 18)
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextSize = 11
     titleLabel.TextColor3 = Theme.Text
@@ -464,10 +459,20 @@ local function notify(title, text, kind)
     titleLabel.ZIndex = 302
     titleLabel.Parent = card
 
+    local markerDot = Instance.new("Frame")
+    markerDot.AnchorPoint = Vector2.new(1, 0.5)
+    markerDot.Position = UDim2.new(1, -16, 0, 19)
+    markerDot.Size = UDim2.fromOffset(8, 8)
+    markerDot.BackgroundColor3 = marker
+    markerDot.BorderSizePixel = 0
+    markerDot.ZIndex = 302
+    markerDot.Parent = card
+    corner(markerDot, 99)
+
     local body = Instance.new("TextLabel")
     body.BackgroundTransparency = 1
-    body.Position = UDim2.fromOffset(14, 29)
-    body.Size = UDim2.new(1, -28, 0, 0)
+    body.Position = UDim2.fromOffset(16, 31)
+    body.Size = UDim2.new(1, -32, 0, 0)
     body.AutomaticSize = Enum.AutomaticSize.Y
     body.Font = Enum.Font.GothamMedium
     body.TextSize = 9
@@ -481,13 +486,20 @@ local function notify(title, text, kind)
 
     task.defer(function()
         if not card.Parent then return end
-        local targetHeight = math.max(62, body.AbsoluteSize.Y + 42)
-        card.Size = UDim2.fromOffset(316, 0)
-        card.Position = UDim2.fromOffset(22, 0)
-        tween(card, 0.24, {Size = UDim2.fromOffset(316, targetHeight), Position = UDim2.fromOffset(0, 0)}, Enum.EasingStyle.Quint)
+        local targetHeight = math.max(62, body.AbsoluteSize.Y + 44)
+        card.Size = UDim2.fromOffset(314, 0)
+        card.Position = UDim2.fromOffset(18, 0)
+        tween(card, 0.22, {
+            Size = UDim2.fromOffset(314, targetHeight),
+            Position = UDim2.fromOffset(0, 0),
+        }, Enum.EasingStyle.Quint)
+
         task.delay(3.0, function()
             if card and card.Parent then
-                local tw = tween(card, 0.2, {Size = UDim2.fromOffset(316, 0), BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+                local tw = tween(card, 0.20, {
+                    Size = UDim2.fromOffset(314, 0),
+                    BackgroundTransparency = 1,
+                }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
                 if tw then
                     tw.Completed:Connect(function()
                         if card then card:Destroy() end
@@ -500,30 +512,31 @@ local function notify(title, text, kind)
     end)
 end
 
+-- =========================================================
+-- MAIN SHELL — MONOCHROME FROSTED GLASS
+-- =========================================================
+
 local Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.Position = UDim2.new(0.5, 0, 0.5, 0)
 Main.Size = IS_MOBILE and UDim2.fromOffset(600, 378) or UDim2.fromOffset(730, 466)
-Main.BackgroundColor3 = Theme.BG
-Main.BackgroundTransparency = 0.52
+Main.BackgroundColor3 = Color3.fromRGB(5, 5, 6)
+Main.BackgroundTransparency = 0.44
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.ZIndex = 10
 Main.Parent = ScreenGui
-corner(Main, 20)
-stroke(Main, Theme.Accent, 0.48, 1)
+corner(Main, 24)
+stroke(Main, Color3.fromRGB(255, 255, 255), 0.72, 1)
 
--- Fondo visual tenue. Roblox no ofrece blur local real para UI; usamos
--- varias capas casi transparentes + overlay oscuro para un efecto suave/glass.
 local BackgroundImage = Instance.new("ImageLabel")
 BackgroundImage.Name = "BackgroundImage"
 BackgroundImage.BackgroundTransparency = 1
-BackgroundImage.Position = UDim2.fromOffset(-2, -2)
-BackgroundImage.Size = UDim2.new(1, 4, 1, 4)
+BackgroundImage.Size = UDim2.fromScale(1, 1)
 BackgroundImage.Image = "rbxassetid://110238194996163"
-BackgroundImage.ImageColor3 = Color3.fromRGB(150, 225, 235)
-BackgroundImage.ImageTransparency = 0.33
+BackgroundImage.ImageColor3 = Color3.fromRGB(235, 235, 235)
+BackgroundImage.ImageTransparency = 0.42
 BackgroundImage.ScaleType = Enum.ScaleType.Crop
 BackgroundImage.ZIndex = 10
 BackgroundImage.Parent = Main
@@ -532,121 +545,94 @@ local BackgroundSoftLayer = BackgroundImage:Clone()
 BackgroundSoftLayer.Name = "BackgroundSoftLayer"
 BackgroundSoftLayer.Position = UDim2.fromOffset(2, 2)
 BackgroundSoftLayer.Size = UDim2.new(1, -4, 1, -4)
-BackgroundSoftLayer.ImageColor3 = Color3.fromRGB(255, 105, 210)
-BackgroundSoftLayer.ImageTransparency = 0.88
+BackgroundSoftLayer.ImageColor3 = Color3.fromRGB(105, 105, 110)
+BackgroundSoftLayer.ImageTransparency = 0.84
 BackgroundSoftLayer.ZIndex = 10
 BackgroundSoftLayer.Parent = Main
 
 local GlassOverlay = Instance.new("Frame")
 GlassOverlay.Name = "GlassOverlay"
-GlassOverlay.BackgroundColor3 = Color3.fromRGB(0, 7, 10)
-GlassOverlay.BackgroundTransparency = 0.82
+GlassOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+GlassOverlay.BackgroundTransparency = 0.64
 GlassOverlay.BorderSizePixel = 0
 GlassOverlay.Size = UDim2.fromScale(1, 1)
 GlassOverlay.ZIndex = 10
 GlassOverlay.Parent = Main
-corner(GlassOverlay, 20)
-
-local GlassShade = Instance.new("Frame")
-GlassShade.Name = "GlassShade"
-GlassShade.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-GlassShade.BackgroundTransparency = 0.95
-GlassShade.BorderSizePixel = 0
-GlassShade.Position = UDim2.new(0, 0, 0.48, 0)
-GlassShade.Size = UDim2.new(1, 0, 0.52, 0)
-GlassShade.ZIndex = 10
-GlassShade.Parent = Main
+corner(GlassOverlay, 24)
 
 local UIScale = Instance.new("UIScale")
 UIScale.Scale = 1
 UIScale.Parent = Main
 
+-- =========================================================
+-- TOP BAR
+-- =========================================================
+
 local Top = Instance.new("Frame")
-Top.BackgroundColor3 = Theme.Panel
-Top.BackgroundTransparency = 0.54
+Top.Name = "TopBar"
+Top.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+Top.BackgroundTransparency = 0.42
 Top.BorderSizePixel = 0
-Top.Size = UDim2.new(1, 0, 0, 66)
+Top.Size = UDim2.new(1, 0, 0, 70)
 Top.ZIndex = 11
 Top.Parent = Main
 
-local AccentLine = Instance.new("Frame")
-AccentLine.BorderSizePixel = 0
-AccentLine.BackgroundColor3 = Theme.Accent
-AccentLine.Size = UDim2.new(1, 0, 0, 1)
-AccentLine.Position = UDim2.new(0, 0, 1, -1)
-AccentLine.ZIndex = 12
-AccentLine.Parent = Top
-gradient(AccentLine, Theme.Accent, Theme.Accent2, 0)
-
 local Logo = Instance.new("ImageLabel")
 Logo.Name = "BrandLogo"
-Logo.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Logo.BackgroundTransparency = 1
 Logo.BorderSizePixel = 0
-Logo.Position = UDim2.fromOffset(16, 13)
+Logo.Position = UDim2.fromOffset(18, 15)
 Logo.Size = UDim2.fromOffset(40, 40)
 Logo.Image = "rbxassetid://72742584610344"
-Logo.ImageColor3 = Color3.fromRGB(220, 252, 255)
+Logo.ImageColor3 = Color3.fromRGB(255, 255, 255)
 Logo.ImageTransparency = 0
 Logo.ScaleType = Enum.ScaleType.Fit
 Logo.ZIndex = 13
 Logo.Parent = Top
-corner(Logo, 12)
 
 local Title = Instance.new("TextLabel")
 Title.BackgroundTransparency = 1
-Title.Position = UDim2.fromOffset(68, 13)
-Title.Size = UDim2.new(1, -200, 0, 22)
-Title.Font = Enum.Font.Code
-Title.TextSize = 18
+Title.Position = UDim2.fromOffset(70, 13)
+Title.Size = UDim2.new(1, -250, 0, 25)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 17
 Title.TextColor3 = Theme.Text
 Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Text = "H3X4 // OBBY"
+Title.Text = "H3X4 OBBY"
 Title.ZIndex = 12
 Title.Parent = Top
 
 local Subtitle = Instance.new("TextLabel")
 Subtitle.BackgroundTransparency = 1
-Subtitle.Position = UDim2.fromOffset(68, 35)
-Subtitle.Size = UDim2.new(1, -220, 0, 16)
-Subtitle.Font = Enum.Font.Code
-Subtitle.TextSize = 9
+Subtitle.Position = UDim2.fromOffset(70, 37)
+Subtitle.Size = UDim2.new(1, -250, 0, 15)
+Subtitle.Font = Enum.Font.GothamMedium
+Subtitle.TextSize = 8
 Subtitle.TextColor3 = Theme.TextDim
 Subtitle.TextXAlignment = Enum.TextXAlignment.Left
-Subtitle.Text = "[ PARKOUR SYSTEM / SPEEDRUN MODULE ]"
+Subtitle.Text = "PARKOUR  /  CHECKPOINTS  /  SPEEDRUN"
 Subtitle.ZIndex = 12
 Subtitle.Parent = Top
 
 local StatusPill = Instance.new("Frame")
 StatusPill.AnchorPoint = Vector2.new(1, 0.5)
-StatusPill.Position = UDim2.new(1, -94, 0.5, 0)
-StatusPill.Size = UDim2.fromOffset(82, 26)
-StatusPill.BackgroundColor3 = Theme.Panel2
-StatusPill.BackgroundTransparency = 0.46
+StatusPill.Position = UDim2.new(1, -92, 0.5, 0)
+StatusPill.Size = UDim2.fromOffset(82, 28)
+StatusPill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+StatusPill.BackgroundTransparency = 0.90
 StatusPill.BorderSizePixel = 0
 StatusPill.ZIndex = 12
 StatusPill.Parent = Top
-corner(StatusPill, 3)
-stroke(StatusPill, Theme.Accent, 0.52, 1)
-
-local StatusDot = Instance.new("Frame")
-StatusDot.BackgroundColor3 = Theme.Accent
-StatusDot.BorderSizePixel = 0
-StatusDot.Position = UDim2.fromOffset(10, 9)
-StatusDot.Size = UDim2.fromOffset(8, 8)
-StatusDot.ZIndex = 13
-StatusDot.Parent = StatusPill
-corner(StatusDot, 99)
+corner(StatusPill, 14)
+stroke(StatusPill, Color3.fromRGB(255, 255, 255), 0.82, 1)
 
 local StatusText = Instance.new("TextLabel")
 StatusText.BackgroundTransparency = 1
-StatusText.Position = UDim2.fromOffset(23, 0)
-StatusText.Size = UDim2.new(1, -27, 1, 0)
-StatusText.Text = IS_MOBILE and "MOBILE::ON" or "PC::ON"
+StatusText.Size = UDim2.fromScale(1, 1)
+StatusText.Text = IS_MOBILE and "MOBILE" or "DESKTOP"
 StatusText.TextColor3 = Theme.TextDim
-StatusText.TextSize = 7
-StatusText.Font = Enum.Font.Code
-StatusText.TextXAlignment = Enum.TextXAlignment.Left
+StatusText.TextSize = 8
+StatusText.Font = Enum.Font.GothamSemibold
 StatusText.ZIndex = 13
 StatusText.Parent = StatusPill
 
@@ -655,8 +641,8 @@ local function topButton(text, offset)
     button.AnchorPoint = Vector2.new(1, 0.5)
     button.Position = UDim2.new(1, offset, 0.5, 0)
     button.Size = UDim2.fromOffset(34, 34)
-    button.BackgroundColor3 = Theme.Panel2
-    button.BackgroundTransparency = 0.46
+    button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundTransparency = 0.92
     button.BorderSizePixel = 0
     button.Text = text
     button.TextColor3 = Theme.Text
@@ -665,40 +651,46 @@ local function topButton(text, offset)
     button.AutoButtonColor = false
     button.ZIndex = 13
     button.Parent = Top
-    corner(button, 3)
-    stroke(button, Theme.Border, 0.50, 1)
+    corner(button, 17)
+    stroke(button, Color3.fromRGB(255, 255, 255), 0.84, 1)
+
     button.MouseEnter:Connect(function()
-        tween(button, 0.14, {BackgroundTransparency = 0.26, BackgroundColor3 = Theme.CardHover})
+        tween(button, 0.14, {BackgroundTransparency = 0.78})
     end)
     button.MouseLeave:Connect(function()
-        tween(button, 0.14, {BackgroundTransparency = 0.46, BackgroundColor3 = Theme.Panel2})
+        tween(button, 0.14, {BackgroundTransparency = 0.92})
     end)
     return button
 end
 
-local MinimizeButton = topButton("—", -48)
+local MinimizeButton = topButton("−", -48)
 local CloseButton = topButton("×", -10)
 CloseButton.TextColor3 = Theme.Danger
 
+-- =========================================================
+-- SIDEBAR / NAVIGATION
+-- =========================================================
+
 local Sidebar = Instance.new("Frame")
-Sidebar.BackgroundColor3 = Theme.Panel
-Sidebar.BackgroundTransparency = 0.56
+Sidebar.Name = "Sidebar"
+Sidebar.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+Sidebar.BackgroundTransparency = 0.48
 Sidebar.BorderSizePixel = 0
-Sidebar.Position = UDim2.fromOffset(10, 76)
-Sidebar.Size = UDim2.new(0, 170, 1, -86)
+Sidebar.Position = UDim2.fromOffset(10, 80)
+Sidebar.Size = UDim2.new(0, 170, 1, -90)
 Sidebar.ZIndex = 11
 Sidebar.Parent = Main
-corner(Sidebar, 16)
-stroke(Sidebar, Theme.Accent, 0.64, 1)
+corner(Sidebar, 20)
+stroke(Sidebar, Color3.fromRGB(255, 255, 255), 0.86, 1)
 
 local SidebarTitle = Instance.new("TextLabel")
 SidebarTitle.BackgroundTransparency = 1
-SidebarTitle.Position = UDim2.fromOffset(14, 10)
-SidebarTitle.Size = UDim2.new(1, -24, 0, 20)
-SidebarTitle.Text = "CATEGORÍAS"
-SidebarTitle.TextColor3 = Theme.TextDim
-SidebarTitle.TextSize = 9
-SidebarTitle.Font = Enum.Font.Code
+SidebarTitle.Position = UDim2.fromOffset(14, 12)
+SidebarTitle.Size = UDim2.new(1, -28, 0, 20)
+SidebarTitle.Text = "MENÚ"
+SidebarTitle.TextColor3 = Theme.TextMuted
+SidebarTitle.TextSize = 8
+SidebarTitle.Font = Enum.Font.GothamBold
 SidebarTitle.TextXAlignment = Enum.TextXAlignment.Left
 SidebarTitle.ZIndex = 12
 SidebarTitle.Parent = Sidebar
@@ -706,10 +698,11 @@ SidebarTitle.Parent = Sidebar
 local CategoryScroll = Instance.new("ScrollingFrame")
 CategoryScroll.BackgroundTransparency = 1
 CategoryScroll.BorderSizePixel = 0
-CategoryScroll.Position = UDim2.fromOffset(10, 36)
-CategoryScroll.Size = UDim2.new(1, -20, 1, -46)
-CategoryScroll.ScrollBarThickness = 3
-CategoryScroll.ScrollBarImageColor3 = Theme.Accent
+CategoryScroll.Position = UDim2.fromOffset(8, 38)
+CategoryScroll.Size = UDim2.new(1, -16, 1, -48)
+CategoryScroll.ScrollBarThickness = 2
+CategoryScroll.ScrollBarImageColor3 = Color3.fromRGB(225, 225, 225)
+CategoryScroll.ScrollBarImageTransparency = 0.35
 CategoryScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 CategoryScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 CategoryScroll.ZIndex = 12
@@ -721,17 +714,80 @@ CategoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
 CategoryLayout.Parent = CategoryScroll
 
 local function updateCategoryCanvas()
-    CategoryScroll.CanvasSize = UDim2.new(0, 0, 0, CategoryLayout.AbsoluteContentSize.Y + 6)
+    CategoryScroll.CanvasSize = UDim2.new(0, 0, 0, CategoryLayout.AbsoluteContentSize.Y + 8)
 end
 trackConnection(CategoryLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCategoryCanvas))
 task.defer(updateCategoryCanvas)
 
+-- =========================================================
+-- CONTENT SHELL / PAGE HEADER
+-- =========================================================
+
+local ContentShell = Instance.new("Frame")
+ContentShell.Name = "ContentShell"
+ContentShell.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+ContentShell.BackgroundTransparency = 0.52
+ContentShell.BorderSizePixel = 0
+ContentShell.Position = UDim2.fromOffset(190, 80)
+ContentShell.Size = UDim2.new(1, -200, 1, -90)
+ContentShell.ZIndex = 11
+ContentShell.Parent = Main
+corner(ContentShell, 20)
+stroke(ContentShell, Color3.fromRGB(255, 255, 255), 0.88, 1)
+
+local PageHeader = Instance.new("Frame")
+PageHeader.BackgroundTransparency = 1
+PageHeader.Size = UDim2.new(1, 0, 0, 52)
+PageHeader.ZIndex = 12
+PageHeader.Parent = ContentShell
+
+local CurrentPageTitle = Instance.new("TextLabel")
+CurrentPageTitle.BackgroundTransparency = 1
+CurrentPageTitle.Position = UDim2.fromOffset(14, 9)
+CurrentPageTitle.Size = UDim2.new(1, -120, 0, 22)
+CurrentPageTitle.Text = "INICIO"
+CurrentPageTitle.TextColor3 = Theme.Text
+CurrentPageTitle.TextSize = 13
+CurrentPageTitle.Font = Enum.Font.GothamBold
+CurrentPageTitle.TextXAlignment = Enum.TextXAlignment.Left
+CurrentPageTitle.ZIndex = 13
+CurrentPageTitle.Parent = PageHeader
+
+local CurrentPageHint = Instance.new("TextLabel")
+CurrentPageHint.BackgroundTransparency = 1
+CurrentPageHint.Position = UDim2.fromOffset(14, 30)
+CurrentPageHint.Size = UDim2.new(1, -120, 0, 14)
+CurrentPageHint.Text = "H3X4 / OBBY"
+CurrentPageHint.TextColor3 = Theme.TextMuted
+CurrentPageHint.TextSize = 8
+CurrentPageHint.Font = Enum.Font.GothamMedium
+CurrentPageHint.TextXAlignment = Enum.TextXAlignment.Left
+CurrentPageHint.ZIndex = 13
+CurrentPageHint.Parent = PageHeader
+
+local PageCount = Instance.new("TextLabel")
+PageCount.AnchorPoint = Vector2.new(1, 0.5)
+PageCount.Position = UDim2.new(1, -14, 0.5, 0)
+PageCount.Size = UDim2.fromOffset(70, 26)
+PageCount.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+PageCount.BackgroundTransparency = 0.92
+PageCount.BorderSizePixel = 0
+PageCount.Text = "01 / 09"
+PageCount.TextColor3 = Theme.TextDim
+PageCount.TextSize = 8
+PageCount.Font = Enum.Font.GothamSemibold
+PageCount.ZIndex = 13
+PageCount.Parent = PageHeader
+corner(PageCount, 13)
+stroke(PageCount, Color3.fromRGB(255, 255, 255), 0.86, 1)
+
 local Content = Instance.new("Frame")
+Content.Name = "Pages"
 Content.BackgroundTransparency = 1
-Content.Position = UDim2.fromOffset(190, 76)
-Content.Size = UDim2.new(1, -200, 1, -86)
-Content.ZIndex = 11
-Content.Parent = Main
+Content.Position = UDim2.fromOffset(0, 52)
+Content.Size = UDim2.new(1, 0, 1, -52)
+Content.ZIndex = 12
+Content.Parent = ContentShell
 
 local Pages = {}
 local CategoryButtons = {}
@@ -755,15 +811,15 @@ local function createPage(key)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.Size = UDim2.fromScale(1, 1)
-    page.ScrollBarThickness = 3
-    page.ScrollBarImageColor3 = Theme.Accent
-    page.ScrollBarImageTransparency = 0.25
+    page.ScrollBarThickness = 2
+    page.ScrollBarImageColor3 = Color3.fromRGB(230, 230, 230)
+    page.ScrollBarImageTransparency = 0.36
     page.AutomaticCanvasSize = Enum.AutomaticSize.None
     page.CanvasSize = UDim2.new(0, 0, 0, 0)
     page.Visible = false
     page.ZIndex = 12
     page.Parent = Content
-    padding(page, 10, 10, 10, 14)
+    padding(page, 10, 10, 6, 14)
 
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 10)
@@ -771,7 +827,7 @@ local function createPage(key)
     layout.Parent = page
 
     local function updateCanvas()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 24)
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 22)
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas))
     task.defer(updateCanvas)
@@ -786,129 +842,100 @@ end
 
 local function setCategory(key)
     CurrentCategory = key
+
+    local selectedIndex = 1
+    local selectedLabel = key
+    for i, definition in ipairs(categories) do
+        if definition[1] == key then
+            selectedIndex = i
+            selectedLabel = definition[2]
+            break
+        end
+    end
+
+    CurrentPageTitle.Text = selectedLabel
+    CurrentPageHint.Text = "H3X4  /  " .. selectedLabel
+    PageCount.Text = string.format("%02d / %02d", selectedIndex, #categories)
+
     for pageKey, page in pairs(Pages) do
         page.Visible = pageKey == key
-        if pageKey == key then
-            page.CanvasPosition = Vector2.zero
-        end
+        if pageKey == key then page.CanvasPosition = Vector2.zero end
     end
 
     for buttonKey, button in pairs(CategoryButtons) do
         local active = buttonKey == key
-        local labelText = button:FindFirstChild("Label")
-        local indexBox = button:FindFirstChild("IndexBox")
-        local stateBox = button:FindFirstChild("StateBox")
+        local label = button:FindFirstChild("Label")
+        local indexLabel = button:FindFirstChild("Index")
         local buttonStroke = button:FindFirstChildOfClass("UIStroke")
 
         tween(button, 0.16, {
-            BackgroundColor3 = active and Theme.AccentDark or Theme.Panel2,
-            BackgroundTransparency = active and 0.26 or 0.56,
+            BackgroundColor3 = active and Color3.fromRGB(245, 245, 245) or Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = active and 0.06 or 0.94,
         })
-        if labelText then
-            tween(labelText, 0.16, {TextColor3 = active and Theme.Text or Theme.TextDim})
+        if label then
+            tween(label, 0.16, {TextColor3 = active and Color3.fromRGB(5, 5, 6) or Theme.TextDim})
         end
-        if indexBox then
-            tween(indexBox, 0.16, {
-                BackgroundColor3 = active and Theme.Accent or Theme.Panel3,
-                BackgroundTransparency = active and 0.08 or 0.28,
-            })
-            local t = indexBox:FindFirstChildOfClass("TextLabel")
-            if t then tween(t, 0.16, {TextColor3 = active and Theme.BG or Theme.Accent}) end
-        end
-        if stateBox then
-            stateBox.Text = active and "ON" or ">"
-            tween(stateBox, 0.16, {
-                TextColor3 = active and Theme.Accent2 or Theme.TextMuted,
-                BackgroundTransparency = active and 0.12 or 0.35,
-            })
+        if indexLabel then
+            tween(indexLabel, 0.16, {TextColor3 = active and Color3.fromRGB(75, 75, 80) or Theme.TextMuted})
         end
         if buttonStroke then
-            tween(buttonStroke, 0.16, {
-                Transparency = active and 0.20 or 0.66,
-                Color = active and Theme.Accent or Theme.Border,
-            })
+            tween(buttonStroke, 0.16, {Transparency = active and 1 or 0.90})
         end
     end
 end
 
 for index, definition in ipairs(categories) do
-    local key, label = definition[1], definition[2]
+    local key, labelText = definition[1], definition[2]
+
     local button = Instance.new("TextButton")
     button.Name = key
-    button.Size = UDim2.new(1, 0, 0, 46)
-    button.BackgroundColor3 = Theme.Panel2
-    button.BackgroundTransparency = 0.56
+    button.Size = UDim2.new(1, 0, 0, 40)
+    button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundTransparency = 0.94
     button.BorderSizePixel = 0
     button.Text = ""
     button.AutoButtonColor = false
     button.LayoutOrder = index
     button.ZIndex = 13
     button.Parent = CategoryScroll
-    corner(button, 3)
-    stroke(button, Theme.Border, 0.66, 1)
+    corner(button, 14)
+    stroke(button, Color3.fromRGB(255, 255, 255), 0.90, 1)
 
-    local indexBox = Instance.new("Frame")
-    indexBox.Name = "IndexBox"
-    indexBox.BackgroundColor3 = Theme.Panel3
-    indexBox.BackgroundTransparency = 0.28
-    indexBox.BorderSizePixel = 0
-    indexBox.Position = UDim2.fromOffset(5, 5)
-    indexBox.Size = UDim2.fromOffset(32, 36)
-    indexBox.ZIndex = 14
-    indexBox.Parent = button
-    corner(indexBox, 2)
+    local indexLabel = Instance.new("TextLabel")
+    indexLabel.Name = "Index"
+    indexLabel.BackgroundTransparency = 1
+    indexLabel.Position = UDim2.fromOffset(12, 0)
+    indexLabel.Size = UDim2.fromOffset(24, 40)
+    indexLabel.Text = string.format("%02d", index)
+    indexLabel.TextColor3 = Theme.TextMuted
+    indexLabel.TextSize = 8
+    indexLabel.Font = Enum.Font.GothamBold
+    indexLabel.ZIndex = 14
+    indexLabel.Parent = button
 
-    local indexText = Instance.new("TextLabel")
-    indexText.BackgroundTransparency = 1
-    indexText.Size = UDim2.fromScale(1, 1)
-    indexText.Text = string.format("%02d", index)
-    indexText.TextColor3 = Theme.Accent
-    indexText.TextSize = 9
-    indexText.Font = Enum.Font.Code
-    indexText.ZIndex = 15
-    indexText.Parent = indexBox
-
-    local labelText = Instance.new("TextLabel")
-    labelText.Name = "Label"
-    labelText.BackgroundTransparency = 1
-    labelText.Position = UDim2.fromOffset(46, 0)
-    labelText.Size = UDim2.new(1, -76, 1, 0)
-    labelText.Text = label
-    labelText.TextColor3 = Theme.TextDim
-    labelText.TextSize = 10
-    labelText.Font = Enum.Font.Code
-    labelText.TextXAlignment = Enum.TextXAlignment.Left
-    labelText.ZIndex = 14
-    labelText.Parent = button
-
-    local stateBox = Instance.new("TextLabel")
-    stateBox.Name = "StateBox"
-    stateBox.AnchorPoint = Vector2.new(1, 0.5)
-    stateBox.Position = UDim2.new(1, -8, 0.5, 0)
-    stateBox.Size = UDim2.fromOffset(20, 20)
-    stateBox.BackgroundColor3 = Theme.Panel3
-    stateBox.BackgroundTransparency = 0.35
-    stateBox.BorderSizePixel = 0
-    stateBox.Text = ">"
-    stateBox.TextColor3 = Theme.TextMuted
-    stateBox.TextSize = 10
-    stateBox.Font = Enum.Font.Code
-    stateBox.ZIndex = 14
-    stateBox.Parent = button
-    corner(stateBox, 2)
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.BackgroundTransparency = 1
+    label.Position = UDim2.fromOffset(42, 0)
+    label.Size = UDim2.new(1, -52, 1, 0)
+    label.Text = labelText
+    label.TextColor3 = Theme.TextDim
+    label.TextSize = 9
+    label.Font = Enum.Font.GothamSemibold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 14
+    label.Parent = button
 
     button.MouseEnter:Connect(function()
         if CurrentCategory ~= key then
-            tween(button, 0.12, {BackgroundTransparency = 0.38, BackgroundColor3 = Theme.CardHover})
-            tween(labelText, 0.12, {TextColor3 = Theme.Text})
-            tween(stateBox, 0.12, {TextColor3 = Theme.Accent})
+            tween(button, 0.14, {BackgroundTransparency = 0.88})
+            tween(label, 0.14, {TextColor3 = Theme.Text})
         end
     end)
     button.MouseLeave:Connect(function()
         if CurrentCategory ~= key then
-            tween(button, 0.12, {BackgroundTransparency = 0.56, BackgroundColor3 = Theme.Panel2})
-            tween(labelText, 0.12, {TextColor3 = Theme.TextDim})
-            tween(stateBox, 0.12, {TextColor3 = Theme.TextMuted})
+            tween(button, 0.14, {BackgroundTransparency = 0.94})
+            tween(label, 0.14, {TextColor3 = Theme.TextDim})
         end
     end)
     button.MouseButton1Click:Connect(function()
@@ -918,18 +945,23 @@ for index, definition in ipairs(categories) do
     CategoryButtons[key] = button
 end
 
+-- =========================================================
+-- COMPONENT FACTORY
+-- IMPORTANT: cards calculate their own height explicitly so controls never
+-- disappear because of AutomaticSize/AutomaticCanvasSize inconsistencies.
+-- =========================================================
+
 local function makeCard(page, titleText, subtitleText)
     local card = Instance.new("Frame")
-    card.BackgroundColor3 = Theme.Card
-    card.BackgroundTransparency = 0.54
+    card.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
+    card.BackgroundTransparency = 0.46
     card.BorderSizePixel = 0
-    card.Size = UDim2.new(1, 0, 0, 64)
-    card.AutomaticSize = Enum.AutomaticSize.None
+    card.Size = UDim2.new(1, 0, 0, 60)
     card.ZIndex = 13
     card.Parent = page
-    corner(card, 4)
-    stroke(card, Theme.Border, 0.52, 1)
-    padding(card, 14, 14, 12, 14)
+    corner(card, 18)
+    stroke(card, Color3.fromRGB(255, 255, 255), 0.86, 1)
+    padding(card, 14, 14, 13, 14)
 
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 9)
@@ -938,11 +970,11 @@ local function makeCard(page, titleText, subtitleText)
 
     local title = Instance.new("TextLabel")
     title.BackgroundTransparency = 1
-    title.Size = UDim2.new(1, 0, 0, 22)
-    title.Text = "[ " .. string.upper(titleText) .. " ]"
+    title.Size = UDim2.new(1, 0, 0, 20)
+    title.Text = titleText
     title.TextColor3 = Theme.Text
     title.TextSize = 11
-    title.Font = Enum.Font.Code
+    title.Font = Enum.Font.GothamBold
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.LayoutOrder = 1
     title.ZIndex = 14
@@ -957,7 +989,7 @@ local function makeCard(page, titleText, subtitleText)
         subtitle.Text = subtitleText
         subtitle.TextColor3 = Theme.TextDim
         subtitle.TextSize = 9
-        subtitle.Font = Enum.Font.Code
+        subtitle.Font = Enum.Font.GothamMedium
         subtitle.TextXAlignment = Enum.TextXAlignment.Left
         subtitle.TextYAlignment = Enum.TextYAlignment.Top
         subtitle.LayoutOrder = 2
@@ -965,19 +997,19 @@ local function makeCard(page, titleText, subtitleText)
         subtitle.Parent = card
     end
 
-    local function updateHeight()
-        card.Size = UDim2.new(1, 0, 0, math.max(58, layout.AbsoluteContentSize.Y + 26))
+    local function updateCardHeight()
+        card.Size = UDim2.new(1, 0, 0, math.max(54, layout.AbsoluteContentSize.Y + 27))
     end
-    trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateHeight))
-    task.defer(updateHeight)
+    trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardHeight))
+    task.defer(updateCardHeight)
 
     return card
 end
 
 local function makeDivider(parent)
     local line = Instance.new("Frame")
-    line.BackgroundColor3 = Theme.Text
-    line.BackgroundTransparency = 0.92
+    line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    line.BackgroundTransparency = 0.90
     line.BorderSizePixel = 0
     line.Size = UDim2.new(1, 0, 0, 1)
     line.ZIndex = 14
@@ -985,89 +1017,73 @@ local function makeDivider(parent)
     return line
 end
 
-local ActionButtonSerial = 0
 local function makeButton(parent, text, callback, danger)
-    ActionButtonSerial += 1
-    local normal = danger and Color3.fromRGB(30, 13, 20) or Theme.Panel2
-    local hovered = danger and Color3.fromRGB(48, 18, 29) or Theme.CardHover
-    local accentColor = danger and Theme.Danger or Theme.Accent
-
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 46)
-    button.BackgroundColor3 = normal
-    button.BackgroundTransparency = 0.55
+    button.Size = UDim2.new(1, 0, 0, 42)
+    button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundTransparency = 0.93
     button.BorderSizePixel = 0
     button.Text = ""
     button.AutoButtonColor = false
     button.ZIndex = 14
     button.Parent = parent
-    corner(button, 3)
-    stroke(button, accentColor, danger and 0.42 or 0.62, 1)
+    corner(button, 16)
+    stroke(button, danger and Theme.Danger or Color3.fromRGB(255, 255, 255), danger and 0.65 or 0.88, 1)
 
-    local serial = Instance.new("TextLabel")
-    serial.Name = "Serial"
-    serial.Position = UDim2.fromOffset(6, 6)
-    serial.Size = UDim2.fromOffset(38, 34)
-    serial.BackgroundColor3 = danger and Color3.fromRGB(56, 18, 31) or Theme.Panel3
-    serial.BackgroundTransparency = 0.22
-    serial.BorderSizePixel = 0
-    serial.Text = string.format("A%02d", ((ActionButtonSerial - 1) % 99) + 1)
-    serial.TextColor3 = accentColor
-    serial.TextSize = 8
-    serial.Font = Enum.Font.Code
-    serial.ZIndex = 15
-    serial.Parent = button
-    corner(serial, 2)
+    local actionLabel = Instance.new("TextLabel")
+    actionLabel.Name = "ActionLabel"
+    actionLabel.BackgroundTransparency = 1
+    actionLabel.Position = UDim2.fromOffset(14, 0)
+    actionLabel.Size = UDim2.new(1, -58, 1, 0)
+    actionLabel.Text = text
+    actionLabel.TextColor3 = danger and Theme.Danger or Theme.Text
+    actionLabel.TextSize = 9
+    actionLabel.Font = Enum.Font.GothamSemibold
+    actionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    actionLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    actionLabel.ZIndex = 15
+    actionLabel.Parent = button
 
-    local label = Instance.new("TextLabel")
-    label.Name = "ActionLabel"
-    label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(54, 0)
-    label.Size = UDim2.new(1, -104, 1, 0)
-    label.Text = string.upper(text)
-    label.TextColor3 = danger and Theme.Danger or Theme.Text
-    label.TextSize = 10
-    label.Font = Enum.Font.Code
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 15
-    label.Parent = button
+    local actionIcon = Instance.new("TextLabel")
+    actionIcon.Name = "ActionIcon"
+    actionIcon.AnchorPoint = Vector2.new(1, 0.5)
+    actionIcon.Position = UDim2.new(1, -8, 0.5, 0)
+    actionIcon.Size = UDim2.fromOffset(28, 28)
+    actionIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    actionIcon.BackgroundTransparency = danger and 0.93 or 0.08
+    actionIcon.BorderSizePixel = 0
+    actionIcon.Text = danger and "!" or "›"
+    actionIcon.TextColor3 = danger and Theme.Danger or Color3.fromRGB(8, 8, 10)
+    actionIcon.TextSize = 14
+    actionIcon.Font = Enum.Font.GothamBold
+    actionIcon.ZIndex = 15
+    actionIcon.Parent = button
+    corner(actionIcon, 14)
 
-    local actionBox = Instance.new("TextLabel")
-    actionBox.Name = "ActionBox"
-    actionBox.AnchorPoint = Vector2.new(1, 0.5)
-    actionBox.Position = UDim2.new(1, -6, 0.5, 0)
-    actionBox.Size = UDim2.fromOffset(38, 34)
-    actionBox.BackgroundColor3 = danger and Color3.fromRGB(56, 18, 31) or Theme.AccentDark
-    actionBox.BackgroundTransparency = 0.20
-    actionBox.BorderSizePixel = 0
-    actionBox.Text = danger and "DEL" or "RUN"
-    actionBox.TextColor3 = accentColor
-    actionBox.TextSize = 8
-    actionBox.Font = Enum.Font.Code
-    actionBox.ZIndex = 15
-    actionBox.Parent = button
-    corner(actionBox, 2)
+    local scale = Instance.new("UIScale")
+    scale.Scale = 1
+    scale.Parent = button
 
     button.MouseEnter:Connect(function()
-        tween(button, 0.12, {BackgroundColor3 = hovered, BackgroundTransparency = 0.34})
-        tween(actionBox, 0.12, {BackgroundTransparency = 0.04, TextColor3 = danger and Theme.Text or Theme.BG, BackgroundColor3 = accentColor})
+        tween(button, 0.14, {BackgroundTransparency = 0.86})
+        tween(scale, 0.14, {Scale = 1.008})
+        if not danger then
+            tween(actionIcon, 0.14, {BackgroundTransparency = 0})
+        end
     end)
     button.MouseLeave:Connect(function()
-        tween(button, 0.12, {BackgroundColor3 = normal, BackgroundTransparency = 0.55})
-        tween(actionBox, 0.12, {BackgroundTransparency = 0.20, TextColor3 = accentColor, BackgroundColor3 = danger and Color3.fromRGB(56, 18, 31) or Theme.AccentDark})
+        tween(button, 0.14, {BackgroundTransparency = 0.93})
+        tween(scale, 0.14, {Scale = 1})
+        if not danger then
+            tween(actionIcon, 0.14, {BackgroundTransparency = 0.08})
+        end
     end)
 
     if callback then
         button.MouseButton1Click:Connect(function()
-            actionBox.Text = "..."
-            tween(button, 0.06, {BackgroundTransparency = 0.20})
-            task.delay(0.10, function()
-                if actionBox and actionBox.Parent then
-                    actionBox.Text = danger and "DEL" or "RUN"
-                end
-                if button and button.Parent then
-                    tween(button, 0.10, {BackgroundTransparency = 0.34})
-                end
+            tween(scale, 0.07, {Scale = 0.985})
+            task.delay(0.07, function()
+                if scale and scale.Parent then tween(scale, 0.10, {Scale = 1}) end
             end)
             local ok, err = pcall(callback, button)
             if not ok then warn("[H3X4 OBBY] " .. tostring(err)) end
@@ -1081,85 +1097,53 @@ local ToggleControllers = {}
 
 local function makeToggle(parent, text, defaultValue, callback, settingKey)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 46)
-    button.BackgroundColor3 = Theme.Panel2
-    button.BackgroundTransparency = 0.55
+    button.Size = UDim2.new(1, 0, 0, 44)
+    button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundTransparency = 0.95
     button.BorderSizePixel = 0
     button.Text = ""
     button.AutoButtonColor = false
     button.ZIndex = 14
     button.Parent = parent
-    corner(button, 3)
-    stroke(button, Theme.Border, 0.62, 1)
-
-    local tag = Instance.new("TextLabel")
-    tag.Position = UDim2.fromOffset(6, 6)
-    tag.Size = UDim2.fromOffset(38, 34)
-    tag.BackgroundColor3 = Theme.Panel3
-    tag.BackgroundTransparency = 0.22
-    tag.BorderSizePixel = 0
-    tag.Text = "TGL"
-    tag.TextColor3 = Theme.Accent2
-    tag.TextSize = 8
-    tag.Font = Enum.Font.Code
-    tag.ZIndex = 15
-    tag.Parent = button
-    corner(tag, 2)
+    corner(button, 16)
+    local buttonStroke = stroke(button, Color3.fromRGB(255, 255, 255), 0.90, 1)
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(54, 0)
-    label.Size = UDim2.new(1, -154, 1, 0)
-    label.Text = string.upper(text)
+    label.Position = UDim2.fromOffset(14, 0)
+    label.Size = UDim2.new(1, -82, 1, 0)
+    label.Text = text
     label.TextColor3 = Theme.Text
-    label.TextSize = 10
-    label.Font = Enum.Font.Code
+    label.TextSize = 9
+    label.Font = Enum.Font.GothamSemibold
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextTruncate = Enum.TextTruncate.AtEnd
     label.ZIndex = 15
     label.Parent = button
 
-    local switch = Instance.new("Frame")
-    switch.Name = "ToggleTrack"
-    switch.AnchorPoint = Vector2.new(1, 0.5)
-    switch.Position = UDim2.new(1, -6, 0.5, 0)
-    switch.Size = UDim2.fromOffset(88, 34)
-    switch.BackgroundColor3 = Theme.Panel3
-    switch.BackgroundTransparency = 0.18
-    switch.BorderSizePixel = 0
-    switch.ZIndex = 15
-    switch.Parent = button
-    corner(switch, 2)
-    stroke(switch, Theme.Border, 0.56, 1)
+    local track = Instance.new("Frame")
+    track.Name = "ToggleTrack"
+    track.AnchorPoint = Vector2.new(1, 0.5)
+    track.Position = UDim2.new(1, -10, 0.5, 0)
+    track.Size = UDim2.fromOffset(48, 26)
+    track.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+    track.BackgroundTransparency = 0.18
+    track.BorderSizePixel = 0
+    track.ZIndex = 15
+    track.Parent = button
+    corner(track, 13)
+    stroke(track, Color3.fromRGB(255, 255, 255), 0.82, 1)
 
-    local offBox = Instance.new("TextLabel")
-    offBox.Name = "OffBox"
-    offBox.Position = UDim2.fromOffset(3, 3)
-    offBox.Size = UDim2.fromOffset(39, 28)
-    offBox.BackgroundColor3 = Theme.ToggleOff
-    offBox.BackgroundTransparency = 0.08
-    offBox.BorderSizePixel = 0
-    offBox.Text = "OFF"
-    offBox.TextColor3 = Theme.TextDim
-    offBox.TextSize = 8
-    offBox.Font = Enum.Font.Code
-    offBox.ZIndex = 16
-    offBox.Parent = switch
-    corner(offBox, 2)
-
-    local onBox = Instance.new("TextLabel")
-    onBox.Name = "OnBox"
-    onBox.Position = UDim2.fromOffset(46, 3)
-    onBox.Size = UDim2.fromOffset(39, 28)
-    onBox.BackgroundColor3 = Theme.AccentDark
-    onBox.BackgroundTransparency = 0.65
-    onBox.BorderSizePixel = 0
-    onBox.Text = "ON"
-    onBox.TextColor3 = Theme.TextMuted
-    onBox.TextSize = 8
-    onBox.Font = Enum.Font.Code
-    onBox.ZIndex = 16
-    onBox.Parent = switch
-    corner(onBox, 2)
+    local knob = Instance.new("Frame")
+    knob.Name = "Knob"
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(0, 13, 0.5, 0)
+    knob.Size = UDim2.fromOffset(18, 18)
+    knob.BackgroundColor3 = Color3.fromRGB(235, 235, 235)
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 16
+    knob.Parent = track
+    corner(knob, 9)
 
     local value = defaultValue == true
     local controller = {}
@@ -1168,17 +1152,15 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
         value = newValue == true
         if settingKey then Settings[settingKey] = value end
 
-        tween(offBox, 0.14, {
-            BackgroundTransparency = value and 0.72 or 0.08,
-            TextColor3 = value and Theme.TextMuted or Theme.Text,
+        tween(track, 0.17, {
+            BackgroundColor3 = value and Color3.fromRGB(245, 245, 245) or Color3.fromRGB(30, 30, 34),
+            BackgroundTransparency = value and 0.02 or 0.18,
         })
-        tween(onBox, 0.14, {
-            BackgroundColor3 = value and Theme.Accent or Theme.AccentDark,
-            BackgroundTransparency = value and 0.02 or 0.65,
-            TextColor3 = value and Theme.BG or Theme.TextMuted,
+        tween(knob, 0.17, {
+            Position = value and UDim2.new(1, -13, 0.5, 0) or UDim2.new(0, 13, 0.5, 0),
+            BackgroundColor3 = value and Color3.fromRGB(8, 8, 10) or Color3.fromRGB(235, 235, 235),
         })
-        local bs = button:FindFirstChildOfClass("UIStroke")
-        if bs then tween(bs, 0.14, {Color = value and Theme.Accent or Theme.Border, Transparency = value and 0.28 or 0.62}) end
+        tween(buttonStroke, 0.17, {Transparency = value and 0.78 or 0.90})
 
         if not silent and callback then
             local ok, err = pcall(callback, value)
@@ -1196,12 +1178,11 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
     button.MouseButton1Click:Connect(function()
         controller.Set(not value, false)
     end)
-
     button.MouseEnter:Connect(function()
-        tween(button, 0.12, {BackgroundColor3 = Theme.CardHover, BackgroundTransparency = 0.34})
+        tween(button, 0.14, {BackgroundTransparency = 0.89})
     end)
     button.MouseLeave:Connect(function()
-        tween(button, 0.12, {BackgroundColor3 = Theme.Panel2, BackgroundTransparency = 0.55})
+        tween(button, 0.14, {BackgroundTransparency = 0.95})
     end)
 
     if settingKey then ToggleControllers[settingKey] = controller end
@@ -1212,84 +1193,73 @@ local SliderControllers = {}
 
 local function makeSlider(parent, text, minValue, maxValue, defaultValue, callback, settingKey)
     local holder = Instance.new("Frame")
-    holder.BackgroundColor3 = Theme.Panel2
-    holder.BackgroundTransparency = 0.64
+    holder.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    holder.BackgroundTransparency = 0.96
     holder.BorderSizePixel = 0
-    holder.Size = UDim2.new(1, 0, 0, 64)
+    holder.Size = UDim2.new(1, 0, 0, 62)
     holder.ZIndex = 14
     holder.Parent = parent
-    corner(holder, 3)
-    stroke(holder, Theme.Border, 0.72, 1)
+    corner(holder, 16)
+    stroke(holder, Color3.fromRGB(255, 255, 255), 0.92, 1)
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(10, 5)
-    label.Size = UDim2.new(1, -92, 0, 22)
-    label.Text = "SLD // " .. string.upper(text)
+    label.Position = UDim2.fromOffset(14, 6)
+    label.Size = UDim2.new(1, -92, 0, 20)
+    label.Text = text
     label.TextColor3 = Theme.TextDim
     label.TextSize = 9
-    label.Font = Enum.Font.Code
+    label.Font = Enum.Font.GothamMedium
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextTruncate = Enum.TextTruncate.AtEnd
     label.ZIndex = 15
     label.Parent = holder
 
     local valueBox = Instance.new("TextBox")
     valueBox.AnchorPoint = Vector2.new(1, 0)
-    valueBox.Position = UDim2.new(1, -7, 0, 5)
-    valueBox.Size = UDim2.fromOffset(72, 23)
-    valueBox.BackgroundColor3 = Theme.Panel3
-    valueBox.BackgroundTransparency = 0.22
+    valueBox.Position = UDim2.new(1, -10, 0, 5)
+    valueBox.Size = UDim2.fromOffset(66, 24)
+    valueBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    valueBox.BackgroundTransparency = 0.90
     valueBox.BorderSizePixel = 0
     valueBox.ClearTextOnFocus = false
-    valueBox.TextColor3 = Theme.Accent
+    valueBox.TextColor3 = Theme.Text
     valueBox.TextSize = 9
-    valueBox.Font = Enum.Font.Code
+    valueBox.Font = Enum.Font.GothamBold
     valueBox.Text = tostring(defaultValue)
     valueBox.ZIndex = 16
     valueBox.Parent = holder
-    corner(valueBox, 2)
-    stroke(valueBox, Theme.AccentSoft, 0.50, 1)
+    corner(valueBox, 12)
 
     local bar = Instance.new("Frame")
-    bar.Position = UDim2.fromOffset(10, 39)
-    bar.Size = UDim2.new(1, -20, 0, 12)
-    bar.BackgroundColor3 = Theme.Panel3
-    bar.BackgroundTransparency = 0.18
+    bar.Position = UDim2.fromOffset(14, 41)
+    bar.Size = UDim2.new(1, -28, 0, 5)
+    bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    bar.BackgroundTransparency = 0.82
     bar.BorderSizePixel = 0
     bar.Active = true
     bar.ZIndex = 15
     bar.Parent = holder
-    corner(bar, 1)
-
-    for i = 1, 9 do
-        local tick = Instance.new("Frame")
-        tick.BackgroundColor3 = Theme.Border
-        tick.BackgroundTransparency = 0.40
-        tick.BorderSizePixel = 0
-        tick.Size = UDim2.fromOffset(1, 6)
-        tick.Position = UDim2.new(i / 10, 0, 0.5, -3)
-        tick.ZIndex = 16
-        tick.Parent = bar
-    end
+    corner(bar, 3)
 
     local fill = Instance.new("Frame")
-    fill.BackgroundColor3 = Theme.Accent
+    fill.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
     fill.BorderSizePixel = 0
     fill.Size = UDim2.new(0, 0, 1, 0)
     fill.ZIndex = 16
     fill.Parent = bar
-    corner(fill, 1)
+    corner(fill, 3)
 
     local knob = Instance.new("Frame")
     knob.AnchorPoint = Vector2.new(0.5, 0.5)
     knob.Position = UDim2.new(0, 0, 0.5, 0)
-    knob.Size = UDim2.fromOffset(10, 20)
-    knob.BackgroundColor3 = Theme.Accent2
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     knob.BorderSizePixel = 0
     knob.ZIndex = 17
     knob.Parent = bar
-    corner(knob, 1)
-    stroke(knob, Theme.Text, 0.50, 1)
+    corner(knob, 8)
+    stroke(knob, Color3.fromRGB(0, 0, 0), 0.48, 1)
 
     local value = defaultValue
     local dragging = false
@@ -1326,14 +1296,18 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
         end
     end)
     bar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
     end)
     trackConnection(UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             applyInput(input)
         end
     end))
-    valueBox.FocusLost:Connect(function() controller.Set(tonumber(valueBox.Text) or value, false) end)
+    valueBox.FocusLost:Connect(function()
+        controller.Set(tonumber(valueBox.Text) or value, false)
+    end)
 
     controller.Set(defaultValue, true)
     if settingKey then SliderControllers[settingKey] = controller end
@@ -1342,37 +1316,23 @@ end
 
 local function makeStat(parent, titleText, valueText)
     local row = Instance.new("Frame")
-    row.BackgroundColor3 = Theme.Panel2
-    row.BackgroundTransparency = 0.60
+    row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    row.BackgroundTransparency = 0.96
     row.BorderSizePixel = 0
-    row.Size = UDim2.new(1, 0, 0, 44)
+    row.Size = UDim2.new(1, 0, 0, 48)
     row.ZIndex = 14
     row.Parent = parent
-    corner(row, 3)
-    stroke(row, Theme.Border, 0.70, 1)
-
-    local code = Instance.new("TextLabel")
-    code.Position = UDim2.fromOffset(6, 6)
-    code.Size = UDim2.fromOffset(34, 32)
-    code.BackgroundColor3 = Theme.Panel3
-    code.BackgroundTransparency = 0.25
-    code.BorderSizePixel = 0
-    code.Text = "SYS"
-    code.TextColor3 = Theme.Accent2
-    code.TextSize = 7
-    code.Font = Enum.Font.Code
-    code.ZIndex = 15
-    code.Parent = row
-    corner(code, 2)
+    corner(row, 16)
+    stroke(row, Color3.fromRGB(255, 255, 255), 0.92, 1)
 
     local name = Instance.new("TextLabel")
     name.BackgroundTransparency = 1
-    name.Position = UDim2.fromOffset(50, 5)
-    name.Size = UDim2.new(0.56, -50, 1, -10)
-    name.Text = string.upper(titleText)
+    name.Position = UDim2.fromOffset(14, 5)
+    name.Size = UDim2.new(0.58, -14, 1, -10)
+    name.Text = titleText
     name.TextColor3 = Theme.TextDim
     name.TextSize = 9
-    name.Font = Enum.Font.Code
+    name.Font = Enum.Font.GothamMedium
     name.TextXAlignment = Enum.TextXAlignment.Left
     name.ZIndex = 15
     name.Parent = row
@@ -1380,12 +1340,12 @@ local function makeStat(parent, titleText, valueText)
     local value = Instance.new("TextLabel")
     value.BackgroundTransparency = 1
     value.AnchorPoint = Vector2.new(1, 0)
-    value.Position = UDim2.new(1, -10, 0, 5)
-    value.Size = UDim2.new(0.44, 0, 1, -10)
+    value.Position = UDim2.new(1, -14, 0, 5)
+    value.Size = UDim2.new(0.42, 0, 1, -10)
     value.Text = valueText or "-"
-    value.TextColor3 = Theme.Accent
-    value.TextSize = 10
-    value.Font = Enum.Font.Code
+    value.TextColor3 = Theme.Text
+    value.TextSize = 11
+    value.Font = Enum.Font.GothamBold
     value.TextXAlignment = Enum.TextXAlignment.Right
     value.ZIndex = 15
     value.Parent = row
@@ -1437,9 +1397,9 @@ end))
 local RestoreOrb = Instance.new("ImageButton")
 RestoreOrb.Name = "RestoreOrb"
 RestoreOrb.Visible = false
-RestoreOrb.Size = UDim2.fromOffset(56, 56)
-RestoreOrb.Position = UDim2.fromOffset(18, 80)
-RestoreOrb.BackgroundColor3 = Color3.fromRGB(8, 8, 8)
+RestoreOrb.Size = UDim2.fromOffset(58, 58)
+RestoreOrb.Position = UDim2.fromOffset(18, 82)
+RestoreOrb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 RestoreOrb.BackgroundTransparency = 1
 RestoreOrb.BorderSizePixel = 0
 RestoreOrb.Image = "rbxassetid://72742584610344"
@@ -1449,7 +1409,7 @@ RestoreOrb.ScaleType = Enum.ScaleType.Fit
 RestoreOrb.AutoButtonColor = false
 RestoreOrb.ZIndex = 200
 RestoreOrb.Parent = ScreenGui
-corner(RestoreOrb, 4)
+corner(RestoreOrb, 18)
 
 local OrbScale = Instance.new("UIScale")
 OrbScale.Scale = 1
@@ -1465,7 +1425,7 @@ RestoreOrb.MouseLeave:Connect(function()
 end)
 
 MinimizeButton.MouseButton1Click:Connect(function()
-    local tw = tween(Main, 0.24, {Size = UDim2.fromOffset(80, 50), BackgroundTransparency = 0.46}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+    local tw = tween(Main, 0.24, {Size = UDim2.fromOffset(80, 50), BackgroundTransparency = 0.64}, Enum.EasingStyle.Back, Enum.EasingDirection.In)
     if tw then
         tw.Completed:Connect(function()
             Main.Visible = false
@@ -1479,8 +1439,8 @@ RestoreOrb.MouseButton1Click:Connect(function()
     Main.Visible = true
     local targetSize = IS_MOBILE and UDim2.fromOffset(600, 378) or UDim2.fromOffset(730, 466)
     Main.Size = UDim2.fromOffset(80, 50)
-    Main.BackgroundTransparency = 0.46
-    tween(Main, 0.28, {Size = targetSize, BackgroundTransparency = 0.32}, Enum.EasingStyle.Back)
+    Main.BackgroundTransparency = 0.64
+    tween(Main, 0.28, {Size = targetSize, BackgroundTransparency = 0.44}, Enum.EasingStyle.Back)
 end)
 
 local function updateResponsive()
@@ -1527,36 +1487,36 @@ MobileLayout.Parent = MobileHud
 
 local function mobileAction(text, callback)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromOffset(56, 44)
-    btn.BackgroundColor3 = Theme.Panel2
-    btn.BackgroundTransparency = 0.46
+    btn.Size = UDim2.fromOffset(58, 44)
+    btn.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    btn.BackgroundTransparency = 0.34
     btn.BorderSizePixel = 0
     btn.Text = text
     btn.TextColor3 = Theme.Text
-    btn.TextSize = 9
-    btn.Font = Enum.Font.Code
+    btn.TextSize = 8
+    btn.Font = Enum.Font.GothamBold
     btn.AutoButtonColor = false
     btn.ZIndex = 221
     btn.Parent = MobileHud
-    corner(btn, 14)
-    stroke(btn, Theme.Accent, 0.58, 1)
+    corner(btn, 16)
+    stroke(btn, Color3.fromRGB(255, 255, 255), 0.78, 1)
 
     local scale = Instance.new("UIScale")
     scale.Scale = 1
     scale.Parent = btn
 
     btn.MouseEnter:Connect(function()
-        tween(btn, 0.14, {BackgroundTransparency = 0.26, BackgroundColor3 = Theme.CardHover})
+        tween(btn, 0.14, {BackgroundTransparency = 0.18})
         tween(scale, 0.14, {Scale = 1.04})
     end)
     btn.MouseLeave:Connect(function()
-        tween(btn, 0.14, {BackgroundTransparency = 0.46, BackgroundColor3 = Theme.Panel2})
+        tween(btn, 0.14, {BackgroundTransparency = 0.34})
         tween(scale, 0.14, {Scale = 1})
     end)
     btn.MouseButton1Click:Connect(function()
         tween(scale, 0.07, {Scale = 0.96})
         task.delay(0.07, function()
-            if scale and scale.Parent then tween(scale, 0.12, {Scale = 1.04}) end
+            if scale and scale.Parent then tween(scale, 0.11, {Scale = 1}) end
         end)
         callback()
     end)
@@ -2296,18 +2256,18 @@ do
 
     local previous = Instance.new("TextButton")
     previous.Size = UDim2.new(0.5, -4, 1, 0)
-    previous.BackgroundColor3 = Theme.Panel2
-    previous.BackgroundTransparency = 0.58
+    previous.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    previous.BackgroundTransparency = 0.93
     previous.BorderSizePixel = 0
     previous.Text = "‹   ANTERIOR"
     previous.TextColor3 = Theme.Text
     previous.TextSize = 9
-    previous.Font = Enum.Font.Code
+    previous.Font = Enum.Font.GothamSemibold
     previous.ZIndex = 15
     previous.AutoButtonColor = false
     previous.Parent = nav
-    corner(previous, 3)
-    stroke(previous, Theme.Accent, 0.50, 1)
+    corner(previous, 15)
+    stroke(previous, Color3.fromRGB(255, 255, 255), 0.88, 1)
 
     local nextButton = previous:Clone()
     nextButton.Position = UDim2.new(0.5, 4, 0, 0)
@@ -2316,10 +2276,10 @@ do
 
     local function navHover(button)
         button.MouseEnter:Connect(function()
-            tween(button, 0.14, {BackgroundColor3 = Theme.CardHover, BackgroundTransparency = 0.26})
+            tween(button, 0.14, {BackgroundTransparency = 0.84})
         end)
         button.MouseLeave:Connect(function()
-            tween(button, 0.14, {BackgroundColor3 = Theme.Panel2, BackgroundTransparency = 0.48})
+            tween(button, 0.14, {BackgroundTransparency = 0.93})
         end)
     end
     navHover(previous)
@@ -2567,11 +2527,21 @@ do
 
     local capturing = nil
 
+    local function setActionButtonLabel(button, value)
+        if not button then return end
+        local visualLabel = button:FindFirstChild("ActionLabel")
+        if visualLabel then
+            visualLabel.Text = string.upper(value)
+        else
+            button.Text = value
+        end
+    end
+
     local function refreshKeyButton(name)
         local button = KeybindButtons[name]
         if not button then return end
         local key = Keybinds[name]
-        button.Text = button:GetAttribute("BaseLabel") .. "  •  " .. (key and key.Name or "SIN TECLA")
+        setActionButtonLabel(button, button:GetAttribute("BaseLabel") .. "  •  " .. (key and key.Name or "SIN TECLA"))
     end
 
     for _, item in ipairs(names) do
@@ -2579,7 +2549,7 @@ do
         local button
         button = makeButton(keyCard, label .. "  •  " .. Keybinds[name].Name, function()
             capturing = name
-            button.Text = label .. "  •  PRESIONA UNA TECLA..."
+            setActionButtonLabel(button, label .. "  •  PRESIONA UNA TECLA...")
         end)
         button:SetAttribute("BaseLabel", label)
         KeybindButtons[name] = button
@@ -2759,9 +2729,9 @@ Main.Size = UDim2.fromOffset(120, 70)
 Main.BackgroundTransparency = 0.40
 tween(Main, 0.38, {
     Size = targetSize,
-    BackgroundTransparency = 0.32,
+    BackgroundTransparency = 0.44,
 }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
-notify("H3X4 // OBBY", "CYBER UI V5 cargada. Layout fijo y categorías completas.", "success")
+notify("H3X4 OBBY", "Interfaz Monochrome Glass cargada. Categorías completas y layout fijo.", "success")
 
-print("[H3X4 OBBY] Cyber UI V5 FIXED cargada.")
+print("[H3X4 OBBY] Monochrome Glass Redesign V7 cargada.")
