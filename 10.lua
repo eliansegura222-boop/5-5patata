@@ -920,7 +920,7 @@ local function createPage(key)
     layout.Parent = page
 
     local function updateCanvas()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 22)
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 40)
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas))
     task.defer(updateCanvas)
@@ -1041,15 +1041,15 @@ local function makeCard(page, titleText, subtitleText)
     card.Parent = page
     corner(card, 18)
     stroke(card, Color3.fromRGB(255, 255, 255), 0.86, 1)
-    padding(card, 14, 14, 10, 10)
+    padding(card, 14, 14, 14, 16)
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 9)
+    layout.Padding = UDim.new(0, 10)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = card
 
     local function updateCardHeight()
-        card.Size = UDim2.new(1, 0, 0, math.max(20, layout.AbsoluteContentSize.Y + 20))
+        card.Size = UDim2.new(1, 0, 0, math.max(58, layout.AbsoluteContentSize.Y + 38))
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardHeight))
     task.defer(updateCardHeight)
@@ -1070,7 +1070,7 @@ end
 
 local function makeButton(parent, text, callback, danger)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 42)
+    button.Size = UDim2.new(1, 0, 0, 46)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.93
     button.BorderSizePixel = 0
@@ -1084,32 +1084,18 @@ local function makeButton(parent, text, callback, danger)
     local actionLabel = Instance.new("TextLabel")
     actionLabel.Name = "ActionLabel"
     actionLabel.BackgroundTransparency = 1
-    actionLabel.Position = UDim2.fromOffset(14, 0)
-    actionLabel.Size = UDim2.new(1, -58, 1, 0)
+    actionLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    actionLabel.Position = UDim2.fromScale(0.5, 0.5)
+    actionLabel.Size = UDim2.new(1, -28, 1, -8)
     actionLabel.Text = text
     actionLabel.TextColor3 = danger and Theme.Danger or Theme.Text
     actionLabel.TextSize = 9
     actionLabel.Font = Enum.Font.GothamSemibold
-    actionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    actionLabel.TextXAlignment = Enum.TextXAlignment.Center
+    actionLabel.TextYAlignment = Enum.TextYAlignment.Center
     actionLabel.TextTruncate = Enum.TextTruncate.AtEnd
     actionLabel.ZIndex = 15
     actionLabel.Parent = button
-
-    local actionIcon = Instance.new("TextLabel")
-    actionIcon.Name = "ActionIcon"
-    actionIcon.AnchorPoint = Vector2.new(1, 0.5)
-    actionIcon.Position = UDim2.new(1, -8, 0.5, 0)
-    actionIcon.Size = UDim2.fromOffset(28, 28)
-    actionIcon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    actionIcon.BackgroundTransparency = danger and 0.93 or 0.08
-    actionIcon.BorderSizePixel = 0
-    actionIcon.Text = danger and "!" or "›"
-    actionIcon.TextColor3 = danger and Theme.Danger or Color3.fromRGB(8, 8, 10)
-    actionIcon.TextSize = 14
-    actionIcon.Font = Enum.Font.GothamBold
-    actionIcon.ZIndex = 15
-    actionIcon.Parent = button
-    corner(actionIcon, 14)
 
     local scale = Instance.new("UIScale")
     scale.Scale = 1
@@ -1117,22 +1103,16 @@ local function makeButton(parent, text, callback, danger)
 
     button.MouseEnter:Connect(function()
         tween(button, 0.14, {BackgroundTransparency = 0.86})
-        tween(scale, 0.14, {Scale = 1.008})
-        if not danger then
-            tween(actionIcon, 0.14, {BackgroundTransparency = 0})
-        end
+        tween(scale, 0.14, {Scale = 1.006})
     end)
     button.MouseLeave:Connect(function()
         tween(button, 0.14, {BackgroundTransparency = 0.93})
         tween(scale, 0.14, {Scale = 1})
-        if not danger then
-            tween(actionIcon, 0.14, {BackgroundTransparency = 0.08})
-        end
     end)
 
     if callback then
         button.MouseButton1Click:Connect(function()
-            tween(scale, 0.07, {Scale = 0.985})
+            tween(scale, 0.07, {Scale = 0.988})
             task.delay(0.07, function()
                 if scale and scale.Parent then tween(scale, 0.10, {Scale = 1}) end
             end)
@@ -1148,7 +1128,7 @@ local ToggleControllers = {}
 
 local function makeToggle(parent, text, defaultValue, callback, settingKey)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 44)
+    button.Size = UDim2.new(1, 0, 0, 46)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.95
     button.BorderSizePixel = 0
@@ -1247,7 +1227,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
     holder.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     holder.BackgroundTransparency = 0.96
     holder.BorderSizePixel = 0
-    holder.Size = UDim2.new(1, 0, 0, 62)
+    holder.Size = UDim2.new(1, 0, 0, 66)
     holder.ZIndex = 14
     holder.Parent = parent
     corner(holder, 16)
@@ -1370,7 +1350,7 @@ local function makeStat(parent, titleText, valueText)
     row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     row.BackgroundTransparency = 0.96
     row.BorderSizePixel = 0
-    row.Size = UDim2.new(1, 0, 0, 48)
+    row.Size = UDim2.new(1, 0, 0, 50)
     row.ZIndex = 14
     row.Parent = parent
     corner(row, 16)
@@ -2655,7 +2635,7 @@ do
     previous.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     previous.BackgroundTransparency = 0.93
     previous.BorderSizePixel = 0
-    previous.Text = "‹   ANTERIOR"
+    previous.Text = "ANTERIOR"
     previous.TextColor3 = Theme.Text
     previous.TextSize = 9
     previous.Font = Enum.Font.GothamSemibold
@@ -2667,7 +2647,7 @@ do
 
     local nextButton = previous:Clone()
     nextButton.Position = UDim2.new(0.5, 4, 0, 0)
-    nextButton.Text = "SIGUIENTE   ›"
+    nextButton.Text = "SIGUIENTE"
     nextButton.Parent = nav
 
     local function navHover(button)
