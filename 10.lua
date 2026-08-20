@@ -587,6 +587,7 @@ Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.ZIndex = 10
 Main.Parent = ScreenGui
+Main.Visible = false
 corner(Main, 24)
 stroke(Main, Color3.fromRGB(255, 255, 255), 0.72, 1)
 
@@ -843,12 +844,12 @@ stroke(PageCount, Color3.fromRGB(255, 255, 255), 0.86, 1)
 
 local CommunityHeaderButton = Instance.new("TextButton")
 CommunityHeaderButton.AnchorPoint = Vector2.new(1, 0.5)
-CommunityHeaderButton.Position = UDim2.new(1, -112, 0.5, 0)
-CommunityHeaderButton.Size = UDim2.fromOffset(92, 28)
+CommunityHeaderButton.Position = UDim2.new(1, -136, 0.5, 0)
+CommunityHeaderButton.Size = UDim2.fromOffset(120, 28)
 CommunityHeaderButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 CommunityHeaderButton.BackgroundTransparency = 0.93
 CommunityHeaderButton.BorderSizePixel = 0
-CommunityHeaderButton.Text = "COMUNIDAD"
+CommunityHeaderButton.Text = "UNIRSE AL DISCORD"
 CommunityHeaderButton.TextColor3 = Theme.TextDim
 CommunityHeaderButton.TextSize = 8
 CommunityHeaderButton.Font = Enum.Font.GothamBold
@@ -878,16 +879,118 @@ local CategoryButtons = {}
 local CurrentCategory = nil
 
 local categories = {
-    {"HOME", "INICIO", "⌂"},
-    {"CHECKPOINTS", "CHECKPOINTS", "⚑"},
-    {"MOVEMENT", "MOVIMIENTO", "➜"},
-    {"SAFETY", "SEGURIDAD", "⛨"},
-    {"VISUALS", "VISUALES", "◉"},
-    {"SPEEDRUN", "SPEEDRUN", "⏱"},
-    {"ROUTES", "RUTAS", "⌖"},
-    {"SYSTEM", "SISTEMA", "⚙"},
-    {"KEYBINDS", "KEYBINDS", "⌨"},
+    {"HOME", "INICIO"},
+    {"CHECKPOINTS", "CHECKPOINTS"},
+    {"MOVEMENT", "MOVIMIENTO"},
+    {"SAFETY", "SEGURIDAD"},
+    {"VISUALS", "VISUALES"},
+    {"SPEEDRUN", "SPEEDRUN"},
+    {"ROUTES", "RUTAS"},
+    {"SYSTEM", "SISTEMA"},
+    {"KEYBINDS", "KEYBINDS"},
 }
+
+local function iconPart(parent, x, y, w, h, fill, round)
+    local part = Instance.new("Frame")
+    part.BackgroundColor3 = fill or Theme.TextMuted
+    part.BorderSizePixel = 0
+    part.Position = UDim2.fromOffset(x, y)
+    part.Size = UDim2.fromOffset(w, h)
+    part.Parent = parent
+    if round then corner(part, round) end
+    return part
+end
+
+local function iconStrokeBox(parent, x, y, w, h, color, round, thick)
+    local box = Instance.new("Frame")
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 0
+    box.Position = UDim2.fromOffset(x, y)
+    box.Size = UDim2.fromOffset(w, h)
+    box.Parent = parent
+    if round then corner(box, round) end
+    stroke(box, color or Theme.TextMuted, 0, thick or 1)
+    return box
+end
+
+local function setCategoryIconColor(iconRoot, color)
+    if not iconRoot then return end
+    for _, d in ipairs(iconRoot:GetDescendants()) do
+        if d:IsA("Frame") and d.BackgroundTransparency < 1 then
+            d.BackgroundColor3 = color
+        elseif d:IsA("UIStroke") then
+            d.Color = color
+        end
+    end
+end
+
+local function createCategoryIcon(parent, key, color)
+    local root = Instance.new("Frame")
+    root.Name = "Icon"
+    root.BackgroundTransparency = 1
+    root.Position = UDim2.fromOffset(12, 9)
+    root.Size = UDim2.fromOffset(22, 22)
+    root.Parent = parent
+
+    if key == "HOME" then
+        iconPart(root, 5, 10, 12, 9, color, 2)
+        local leftRoof = iconPart(root, 4, 7, 9, 2, color, 1)
+        leftRoof.Rotation = -35
+        local rightRoof = iconPart(root, 9, 7, 9, 2, color, 1)
+        rightRoof.Rotation = 35
+        iconPart(root, 9, 13, 4, 6, color, 1)
+    elseif key == "CHECKPOINTS" then
+        iconPart(root, 5, 3, 2, 16, color, 1)
+        iconPart(root, 7, 4, 10, 6, color, 2)
+        iconPart(root, 4, 19, 6, 2, color, 1)
+    elseif key == "MOVEMENT" then
+        iconPart(root, 4, 10, 10, 2, color, 1)
+        local up = iconPart(root, 12, 7, 6, 2, color, 1)
+        up.Rotation = 35
+        local down = iconPart(root, 12, 13, 6, 2, color, 1)
+        down.Rotation = -35
+    elseif key == "SAFETY" then
+        iconStrokeBox(root, 3, 3, 16, 16, color, 8, 1)
+        local check1 = iconPart(root, 6, 11, 4, 2, color, 1)
+        check1.Rotation = 35
+        local check2 = iconPart(root, 9, 10, 6, 2, color, 1)
+        check2.Rotation = -35
+    elseif key == "VISUALS" then
+        iconStrokeBox(root, 2, 6, 18, 10, color, 8, 1)
+        iconPart(root, 8, 8, 6, 6, color, 999)
+        iconPart(root, 10, 10, 2, 2, Color3.fromRGB(8,8,10), 999)
+    elseif key == "SPEEDRUN" then
+        iconStrokeBox(root, 3, 3, 16, 16, color, 8, 1)
+        iconPart(root, 10, 6, 2, 5, color, 1)
+        local hand = iconPart(root, 10, 10, 5, 2, color, 1)
+        hand.Rotation = 35
+        iconPart(root, 8, 1, 6, 2, color, 1)
+    elseif key == "ROUTES" then
+        local n1 = iconPart(root, 3, 14, 5, 5, color, 999)
+        local n2 = iconPart(root, 9, 7, 5, 5, color, 999)
+        local n3 = iconPart(root, 15, 14, 5, 5, color, 999)
+        local l1 = iconPart(root, 6, 12, 6, 2, color, 1)
+        l1.Rotation = -35
+        local l2 = iconPart(root, 12, 12, 6, 2, color, 1)
+        l2.Rotation = 35
+    elseif key == "SYSTEM" then
+        iconStrokeBox(root, 5, 5, 12, 12, color, 999, 1)
+        iconPart(root, 10, 1, 2, 4, color, 1)
+        iconPart(root, 10, 17, 2, 4, color, 1)
+        iconPart(root, 1, 10, 4, 2, color, 1)
+        iconPart(root, 17, 10, 4, 2, color, 1)
+    elseif key == "KEYBINDS" then
+        iconStrokeBox(root, 2, 5, 18, 12, color, 4, 1)
+        for row = 0, 1 do
+            for col = 0, 3 do
+                iconPart(root, 5 + col * 4, 8 + row * 4, 2, 2, color, 1)
+            end
+        end
+        iconPart(root, 7, 16, 8, 1, color, 1)
+    end
+
+    return root
+end
 
 local function createPage(key)
     local page = Instance.new("ScrollingFrame")
@@ -949,7 +1052,7 @@ local function setCategory(key)
     for buttonKey, button in pairs(CategoryButtons) do
         local active = buttonKey == key
         local label = button:FindFirstChild("Label")
-        local iconLabel = button:FindFirstChild("Icon")
+        local iconRoot = button:FindFirstChild("Icon")
         local buttonStroke = button:FindFirstChildOfClass("UIStroke")
 
         tween(button, 0.16, {
@@ -959,8 +1062,8 @@ local function setCategory(key)
         if label then
             tween(label, 0.16, {TextColor3 = active and Color3.fromRGB(5, 5, 6) or Theme.TextDim})
         end
-        if iconLabel then
-            tween(iconLabel, 0.16, {TextColor3 = active and Color3.fromRGB(18, 18, 22) or Theme.TextMuted})
+        if iconRoot then
+            setCategoryIconColor(iconRoot, active and Color3.fromRGB(18, 18, 22) or Theme.TextMuted)
         end
         if buttonStroke then
             tween(buttonStroke, 0.16, {Transparency = active and 1 or 0.90})
@@ -969,7 +1072,7 @@ local function setCategory(key)
 end
 
 for index, definition in ipairs(categories) do
-    local key, labelText, iconText = definition[1], definition[2], definition[3]
+    local key, labelText = definition[1], definition[2]
 
     local button = Instance.new("TextButton")
     button.Name = key
@@ -985,23 +1088,13 @@ for index, definition in ipairs(categories) do
     corner(button, 14)
     stroke(button, Color3.fromRGB(255, 255, 255), 0.92, 1)
 
-    local iconLabel = Instance.new("TextLabel")
-    iconLabel.Name = "Icon"
-    iconLabel.BackgroundTransparency = 1
-    iconLabel.Position = UDim2.fromOffset(12, 0)
-    iconLabel.Size = UDim2.fromOffset(24, 40)
-    iconLabel.Text = iconText
-    iconLabel.TextColor3 = Theme.TextMuted
-    iconLabel.TextSize = 12
-    iconLabel.Font = Enum.Font.GothamBold
-    iconLabel.ZIndex = 14
-    iconLabel.Parent = button
+    local iconRoot = createCategoryIcon(button, key, Theme.TextMuted)
 
     local label = Instance.new("TextLabel")
     label.Name = "Label"
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(40, 0)
-    label.Size = UDim2.new(1, -50, 1, 0)
+    label.Position = UDim2.fromOffset(42, 0)
+    label.Size = UDim2.new(1, -52, 1, 0)
     label.Text = labelText
     label.TextColor3 = Theme.TextDim
     label.TextSize = 9
@@ -1014,14 +1107,14 @@ for index, definition in ipairs(categories) do
         if CurrentCategory ~= key then
             tween(button, 0.14, {BackgroundTransparency = 0.94})
             tween(label, 0.14, {TextColor3 = Theme.Text})
-            tween(iconLabel, 0.14, {TextColor3 = Theme.TextDim})
+            setCategoryIconColor(iconRoot, Theme.TextDim)
         end
     end)
     button.MouseLeave:Connect(function()
         if CurrentCategory ~= key then
             tween(button, 0.14, {BackgroundTransparency = 0.965})
             tween(label, 0.14, {TextColor3 = Theme.TextDim})
-            tween(iconLabel, 0.14, {TextColor3 = Theme.TextMuted})
+            setCategoryIconColor(iconRoot, Theme.TextMuted)
         end
     end)
     button.MouseButton1Click:Connect(function()
@@ -1792,7 +1885,7 @@ end
 
 local DeviceModal = buildModal(
     "SELECCIONA TU DISPOSITIVO",
-    "Elige PC, Móvil o Automático. Después de seleccionar, la interfaz se adaptará al dispositivo y luego aparecerá el panel de la comunidad.",
+    "Selecciona el dispositivo que estés usando actualmente. La interfaz se adaptará automáticamente para que te resulte más cómoda.",
     232
 )
 
@@ -1830,7 +1923,23 @@ local function modalButton(parent, text, position, width, callback)
     return btn
 end
 
-local function hideModals()
+local hideModals
+
+local function showMainPanel()
+    hideModals()
+    RestoreOrb.Visible = false
+    local w, h = basePanelSize()
+    local targetSize = UDim2.fromOffset(w, h)
+    Main.Visible = true
+    Main.Size = UDim2.fromOffset(120, 70)
+    Main.BackgroundTransparency = 0.40
+    tween(Main, 0.38, {
+        Size = targetSize,
+        BackgroundTransparency = 0.44,
+    }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+end
+
+hideModals = function()
     ModalOverlay.Visible = false
     DeviceModal.Visible = false
     AutoDeviceModal.Visible = false
@@ -1873,7 +1982,13 @@ local function finishDeviceSelection(profile, rememberAutomatic)
     applyDeviceMode(false)
     updateResponsive()
     hideModals()
-    task.delay(0.12, showDiscordModal)
+    task.delay(0.12, function()
+        if Settings.HideDiscordPrompt then
+            showMainPanel()
+        else
+            showDiscordModal()
+        end
+    end)
 end
 
 modalButton(DeviceModal, "PC", UDim2.fromOffset(18, 148), 104, function()
@@ -1902,16 +2017,17 @@ end)
 
 modalButton(DiscordModal, "COPIAR LINK", UDim2.fromOffset(18, 158), 108, function()
     copyDiscordLink()
+    showMainPanel()
 end)
 
 modalButton(DiscordModal, "CANCELAR", UDim2.fromOffset(136, 158), 100, function()
-    hideModals()
+    showMainPanel()
 end)
 
 modalButton(DiscordModal, "NO MOSTRAR MÁS", UDim2.fromOffset(246, 158), 116, function()
     Settings.HideDiscordPrompt = true
     persistPrefs()
-    hideModals()
+    showMainPanel()
 end)
 
 -- =========================================================
@@ -2619,11 +2735,11 @@ do
     table.insert(TimerLabels.Checkpoint, makeStat(stats, "CHECKPOINT", "0 / 0"))
     table.insert(TimerLabels.Route, makeStat(stats, "RUTA", "0 pts"))
 
-    local community = makeCard(page, "COMUNIDAD", "Únete al Discord oficial de la comunidad H3X4 para novedades, soporte y actualizaciones.")
+    local community = makeCard(page, "UNIRSE AL DISCORD", "Únete al Discord oficial de la comunidad H3X4 para novedades, soporte y actualizaciones.")
     makeButton(community, "COPIAR LINK DEL DISCORD", function()
         copyDiscordLink()
     end)
-    makeButton(community, "MOSTRAR AVISO DE COMUNIDAD", function()
+    makeButton(community, "MOSTRAR PANEL DE DISCORD", function()
         showDiscordModal()
     end)
 
@@ -2922,7 +3038,7 @@ do
         showAutoDeviceModal()
     end)
 
-    local communitySystem = makeCard(page, "COMUNIDAD")
+    local communitySystem = makeCard(page, "UNIRSE AL DISCORD")
     makeButton(communitySystem, "COPIAR LINK DEL DISCORD", copyDiscordLink)
     makeButton(communitySystem, "MOSTRAR AVISO DE DISCORD", showDiscordModal)
 
@@ -3155,30 +3271,27 @@ CloseButton.MouseButton1Click:Connect(function()
 end)
 
 -- =========================================================
--- OPEN ANIMATION
+-- STARTUP FLOW
 -- =========================================================
 
 setCategory("HOME")
-
-local targetSize = Main.Size
-Main.Size = UDim2.fromOffset(120, 70)
-Main.BackgroundTransparency = 0.40
-tween(Main, 0.38, {
-    Size = targetSize,
-    BackgroundTransparency = 0.44,
-}, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-
 notify("H3X4 OBBY", "Interfaz Monochrome Glass cargada. Categorías completas y layout fijo.", "success")
 
 task.delay(0.35, function()
+    Main.Visible = false
+    RestoreOrb.Visible = false
     if Settings.AutoDeviceAlways then
         Settings.DeviceProfile = "AUTO"
         applyDeviceMode(false)
         updateResponsive()
-        showDiscordModal()
+        if Settings.HideDiscordPrompt then
+            showMainPanel()
+        else
+            showDiscordModal()
+        end
     else
         showDeviceModal()
     end
 end)
 
-print("[H3X4 OBBY] Monochrome Glass Redesign V8 cargada.")
+print("[H3X4 OBBY] Device Flow V10 cargada.")
