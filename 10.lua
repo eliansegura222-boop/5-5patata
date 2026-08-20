@@ -886,6 +886,25 @@ local Pages = {}
 local CategoryButtons = {}
 local CurrentCategory = nil
 
+-- Responsive component state. This is updated when the user selects PC/Mobile.
+local LayoutIsMobile = IS_MOBILE
+local ResponsiveCards = {}
+local ResponsiveControls = {}
+
+local function refreshResponsiveComponents()
+    for _, fn in ipairs(ResponsiveControls) do
+        pcall(fn)
+    end
+    for _, fn in ipairs(ResponsiveCards) do
+        pcall(fn)
+    end
+    task.defer(function()
+        for _, fn in ipairs(ResponsiveCards) do
+            pcall(fn)
+        end
+    end)
+end
+
 local categories = {
     {"HOME", "INICIO"},
     {"CHECKPOINTS", "CHECKPOINTS"},
@@ -921,7 +940,7 @@ local function createPage(key)
     layout.Parent = page
 
     local function updateCanvas()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 40)
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + (LayoutIsMobile and 40 or 70))
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas))
     task.defer(updateCanvas)
@@ -1038,13 +1057,13 @@ local function makeCard(page, titleText, subtitleText)
     card.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
     card.BackgroundTransparency = 0.46
     card.BorderSizePixel = 0
-    card.Size = UDim2.new(1, -10, 0, 92)
+    card.Size = UDim2.new(1, -10, 0, 96)
     card.ZIndex = 13
     card.ClipsDescendants = true
     card.Parent = page
     corner(card, 18)
     stroke(card, Color3.fromRGB(255, 255, 255), 0.86, 1)
-    padding(card, 20, 20, 22, 24)
+    local cardPadding = padding(card, 20, 20, 22, 24)
 
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 15)
@@ -1053,9 +1072,36 @@ local function makeCard(page, titleText, subtitleText)
     layout.Parent = card
 
     local function updateCardHeight()
-        card.Size = UDim2.new(1, -10, 0, math.max(92, layout.AbsoluteContentSize.Y + 62))
+        if not card.Parent then return end
+        if LayoutIsMobile then
+            card.Size = UDim2.new(1, -10, 0, math.max(96, layout.AbsoluteContentSize.Y + 70))
+        else
+            -- PC needs extra breathing room because larger controls and text can
+            -- otherwise be clipped by ClipsDescendants at the bottom edge.
+            card.Size = UDim2.new(1, -18, 0, math.max(112, layout.AbsoluteContentSize.Y + 98))
+        end
     end
+
+    local function applyCardMetrics()
+        if LayoutIsMobile then
+            cardPadding.PaddingLeft = UDim.new(0, 20)
+            cardPadding.PaddingRight = UDim.new(0, 20)
+            cardPadding.PaddingTop = UDim.new(0, 22)
+            cardPadding.PaddingBottom = UDim.new(0, 24)
+            layout.Padding = UDim.new(0, 15)
+        else
+            cardPadding.PaddingLeft = UDim.new(0, 26)
+            cardPadding.PaddingRight = UDim.new(0, 26)
+            cardPadding.PaddingTop = UDim.new(0, 26)
+            cardPadding.PaddingBottom = UDim.new(0, 30)
+            layout.Padding = UDim.new(0, 18)
+        end
+        updateCardHeight()
+    end
+
+    table.insert(ResponsiveCards, applyCardMetrics)
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardHeight))
+    applyCardMetrics()
     task.defer(updateCardHeight)
 
     return card
@@ -1074,7 +1120,7 @@ end
 
 local function makeButton(parent, text, callback, danger)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -18, 0, 50)
+    button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 50) or UDim2.new(1, -34, 0, 56)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.93
     button.BorderSizePixel = 0
@@ -1125,6 +1171,12 @@ local function makeButton(parent, text, callback, danger)
         end)
     end
 
+    table.insert(ResponsiveControls, function()
+        if button and button.Parent then
+            button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 50) or UDim2.new(1, -34, 0, 56)
+        end
+    end)
+
     return button
 end
 
@@ -1132,7 +1184,7 @@ local ToggleControllers = {}
 
 local function makeToggle(parent, text, defaultValue, callback, settingKey)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -18, 0, 52)
+    button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 52) or UDim2.new(1, -34, 0, 58)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.95
     button.BorderSizePixel = 0
@@ -1220,6 +1272,12 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
         tween(button, 0.14, {BackgroundTransparency = 0.95})
     end)
 
+    table.insert(ResponsiveControls, function()
+        if button and button.Parent then
+            button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 52) or UDim2.new(1, -34, 0, 58)
+        end
+    end)
+
     if settingKey then ToggleControllers[settingKey] = controller end
     return controller
 end
@@ -1231,7 +1289,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
     holder.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     holder.BackgroundTransparency = 0.96
     holder.BorderSizePixel = 0
-    holder.Size = UDim2.new(1, -18, 0, 76)
+    holder.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 76) or UDim2.new(1, -34, 0, 84)
     holder.ZIndex = 14
     holder.Parent = parent
     corner(holder, 16)
@@ -1344,6 +1402,12 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
         controller.Set(tonumber(valueBox.Text) or value, false)
     end)
 
+    table.insert(ResponsiveControls, function()
+        if holder and holder.Parent then
+            holder.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 76) or UDim2.new(1, -34, 0, 84)
+        end
+    end)
+
     controller.Set(defaultValue, true)
     if settingKey then SliderControllers[settingKey] = controller end
     return controller
@@ -1354,7 +1418,7 @@ local function makeStat(parent, titleText, valueText)
     row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     row.BackgroundTransparency = 0.96
     row.BorderSizePixel = 0
-    row.Size = UDim2.new(1, -18, 0, 54)
+    row.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 54) or UDim2.new(1, -34, 0, 58)
     row.ZIndex = 14
     row.Parent = parent
     corner(row, 16)
@@ -1384,6 +1448,12 @@ local function makeStat(parent, titleText, valueText)
     value.TextXAlignment = Enum.TextXAlignment.Right
     value.ZIndex = 15
     value.Parent = row
+
+    table.insert(ResponsiveControls, function()
+        if row and row.Parent then
+            row.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 54) or UDim2.new(1, -34, 0, 58)
+        end
+    end)
 
     return value
 end
@@ -1540,6 +1610,7 @@ local MobileHud
 
 local function applyDeviceMode(skipResize)
     local mobile = usingMobileLayout()
+    LayoutIsMobile = mobile
     StatusText.Text = mobile and "MOBILE" or "DESKTOP"
 
     -- En móvil, KEYBINDS no se muestra en la navegación.
@@ -1588,6 +1659,8 @@ local function applyDeviceMode(skipResize)
         local w, h = basePanelSize()
         Main.Size = UDim2.fromOffset(w, h)
     end
+
+    refreshResponsiveComponents()
 
     if updateCategoryCanvas then
         task.defer(updateCategoryCanvas)
@@ -2630,9 +2703,14 @@ do
 
     local nav = Instance.new("Frame")
     nav.BackgroundTransparency = 1
-    nav.Size = UDim2.new(1, -18, 0, 46)
+    nav.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 46) or UDim2.new(1, -34, 0, 56)
     nav.ZIndex = 14
     nav.Parent = card
+    table.insert(ResponsiveControls, function()
+        if nav and nav.Parent then
+            nav.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 46) or UDim2.new(1, -34, 0, 56)
+        end
+    end)
 
     local previous = Instance.new("TextButton")
     previous.Size = UDim2.new(0.5, -7, 1, 0)
