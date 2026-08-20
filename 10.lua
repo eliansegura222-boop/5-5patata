@@ -588,20 +588,22 @@ Main.ClipsDescendants = true
 Main.ZIndex = 10
 Main.Parent = ScreenGui
 Main.Visible = false
-corner(Main, 32)
-stroke(Main, Color3.fromRGB(255, 255, 255), 0.72, 1)
+corner(Main, 28)
+local MainStroke = stroke(Main, Color3.fromRGB(255, 255, 255), 0.70, 1.2)
+pcall(function() MainStroke.LineJoinMode = Enum.LineJoinMode.Round end)
 
 local BackgroundImage = Instance.new("ImageLabel")
 BackgroundImage.Name = "BackgroundImage"
 BackgroundImage.BackgroundTransparency = 1
-BackgroundImage.Size = UDim2.fromScale(1, 1)
+BackgroundImage.Position = UDim2.fromOffset(1, 1)
+BackgroundImage.Size = UDim2.new(1, -2, 1, -2)
 BackgroundImage.Image = "rbxassetid://110238194996163"
 BackgroundImage.ImageColor3 = Color3.fromRGB(235, 235, 235)
 BackgroundImage.ImageTransparency = 0.42
 BackgroundImage.ScaleType = Enum.ScaleType.Crop
 BackgroundImage.ZIndex = 10
 BackgroundImage.Parent = Main
-corner(BackgroundImage, 32)
+corner(BackgroundImage, 28)
 
 local BackgroundSoftLayer = BackgroundImage:Clone()
 BackgroundSoftLayer.Name = "BackgroundSoftLayer"
@@ -611,17 +613,19 @@ BackgroundSoftLayer.ImageColor3 = Color3.fromRGB(105, 105, 110)
 BackgroundSoftLayer.ImageTransparency = 0.84
 BackgroundSoftLayer.ZIndex = 10
 BackgroundSoftLayer.Parent = Main
-corner(BackgroundSoftLayer, 32)
+local SoftCorner = BackgroundSoftLayer:FindFirstChildOfClass("UICorner")
+if SoftCorner then SoftCorner.CornerRadius = UDim.new(0, 26) end
 
 local GlassOverlay = Instance.new("Frame")
 GlassOverlay.Name = "GlassOverlay"
 GlassOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 GlassOverlay.BackgroundTransparency = 0.64
 GlassOverlay.BorderSizePixel = 0
-GlassOverlay.Size = UDim2.fromScale(1, 1)
+GlassOverlay.Position = UDim2.fromOffset(1, 1)
+GlassOverlay.Size = UDim2.new(1, -2, 1, -2)
 GlassOverlay.ZIndex = 10
 GlassOverlay.Parent = Main
-corner(GlassOverlay, 24)
+corner(GlassOverlay, 28)
 
 local UIScale = Instance.new("UIScale")
 UIScale.Scale = 1
@@ -636,9 +640,11 @@ Top.Name = "TopBar"
 Top.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
 Top.BackgroundTransparency = 0.42
 Top.BorderSizePixel = 0
-Top.Size = UDim2.new(1, 0, 0, 70)
+Top.Position = UDim2.fromOffset(2, 2)
+Top.Size = UDim2.new(1, -4, 0, 68)
 Top.ZIndex = 11
 Top.Parent = Main
+corner(Top, 24)
 
 local Logo = Instance.new("ImageLabel")
 Logo.Name = "BrandLogo"
@@ -3173,4 +3179,3 @@ task.delay(0.35, function()
     end
 end)
 
-print("[H3X4 OBBY] Device Flow V10 cargada.")
