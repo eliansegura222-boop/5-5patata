@@ -931,7 +931,7 @@ local function createPage(key)
     page.Visible = false
     page.ZIndex = 12
     page.Parent = Content
-    padding(page, 14, 14, 10, 24)
+    padding(page, 0, 0, 10, 24)
 
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 16)
@@ -940,7 +940,7 @@ local function createPage(key)
     layout.Parent = page
 
     local function updateCanvas()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + (LayoutIsMobile and 40 or 70))
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + (LayoutIsMobile and 44 or 86))
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas))
     task.defer(updateCanvas)
@@ -1045,66 +1045,68 @@ end
 
 -- =========================================================
 -- COMPONENT FACTORY
--- V11: larger cards, centered inset controls, wider safety margins.
+-- V12: true inner-card layout; controls cannot cross card borders.
 -- IMPORTANT: cards calculate their own height explicitly so controls never
 -- disappear because of AutomaticSize/AutomaticCanvasSize inconsistencies.
 -- =========================================================
 
 local function makeCard(page, titleText, subtitleText)
-    -- Los títulos y descripciones de las tarjetas se omiten intencionalmente.
-    -- La tarjeta contiene únicamente sus controles/funciones.
+    -- Outer visual card. Controls are placed inside a dedicated inner container,
+    -- so they can never overlap the card borders horizontally.
     local card = Instance.new("Frame")
+    card.Name = "Card"
     card.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
     card.BackgroundTransparency = 0.46
     card.BorderSizePixel = 0
-    card.Size = UDim2.new(1, -10, 0, 96)
+    card.Size = UDim2.new(1, -24, 0, 120)
     card.ZIndex = 13
-    card.ClipsDescendants = true
+    card.ClipsDescendants = false
     card.Parent = page
     corner(card, 18)
     stroke(card, Color3.fromRGB(255, 255, 255), 0.86, 1)
-    local cardPadding = padding(card, 20, 20, 22, 24)
+
+    local inner = Instance.new("Frame")
+    inner.Name = "CardContent"
+    inner.BackgroundTransparency = 1
+    inner.BorderSizePixel = 0
+    inner.Position = UDim2.fromOffset(24, 26)
+    inner.Size = UDim2.new(1, -48, 0, 60)
+    inner.ZIndex = 14
+    inner.ClipsDescendants = false
+    inner.Parent = card
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 15)
+    layout.Padding = UDim.new(0, 18)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    layout.Parent = card
+    layout.Parent = inner
 
     local function updateCardHeight()
-        if not card.Parent then return end
-        if LayoutIsMobile then
-            card.Size = UDim2.new(1, -10, 0, math.max(96, layout.AbsoluteContentSize.Y + 70))
-        else
-            -- PC needs extra breathing room because larger controls and text can
-            -- otherwise be clipped by ClipsDescendants at the bottom edge.
-            card.Size = UDim2.new(1, -18, 0, math.max(112, layout.AbsoluteContentSize.Y + 98))
-        end
+        if not card.Parent or not inner.Parent then return end
+
+        local side = LayoutIsMobile and 20 or 26
+        local top = LayoutIsMobile and 20 or 28
+        local bottom = LayoutIsMobile and 24 or 32
+        local gap = LayoutIsMobile and 14 or 18
+        local cardInset = LayoutIsMobile and 18 or 24
+
+        layout.Padding = UDim.new(0, gap)
+        inner.Position = UDim2.fromOffset(side, top)
+        inner.Size = UDim2.new(1, -(side * 2), 0, math.max(1, layout.AbsoluteContentSize.Y))
+
+        -- The outer card height is the real content height + explicit top/bottom margins.
+        -- No guessed "safety" values and no clipping dependency.
+        local contentHeight = math.max(1, layout.AbsoluteContentSize.Y)
+        card.Size = UDim2.new(1, -cardInset, 0, contentHeight + top + bottom)
     end
 
-    local function applyCardMetrics()
-        if LayoutIsMobile then
-            cardPadding.PaddingLeft = UDim.new(0, 20)
-            cardPadding.PaddingRight = UDim.new(0, 20)
-            cardPadding.PaddingTop = UDim.new(0, 22)
-            cardPadding.PaddingBottom = UDim.new(0, 24)
-            layout.Padding = UDim.new(0, 15)
-        else
-            cardPadding.PaddingLeft = UDim.new(0, 26)
-            cardPadding.PaddingRight = UDim.new(0, 26)
-            cardPadding.PaddingTop = UDim.new(0, 26)
-            cardPadding.PaddingBottom = UDim.new(0, 30)
-            layout.Padding = UDim.new(0, 18)
-        end
-        updateCardHeight()
-    end
-
-    table.insert(ResponsiveCards, applyCardMetrics)
+    table.insert(ResponsiveCards, updateCardHeight)
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardHeight))
-    applyCardMetrics()
     task.defer(updateCardHeight)
 
-    return card
+    -- Return the inner container: every control is sized against the actual usable area,
+    -- not against the outer card plus padding.
+    return inner
 end
 
 local function makeDivider(parent)
@@ -1112,7 +1114,7 @@ local function makeDivider(parent)
     line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     line.BackgroundTransparency = 0.90
     line.BorderSizePixel = 0
-    line.Size = UDim2.new(1, -18, 0, 1)
+    line.Size = UDim2.new(1, 0, 0, 1)
     line.ZIndex = 14
     line.Parent = parent
     return line
@@ -1120,7 +1122,7 @@ end
 
 local function makeButton(parent, text, callback, danger)
     local button = Instance.new("TextButton")
-    button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 50) or UDim2.new(1, -34, 0, 56)
+    button.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 50) or UDim2.new(1, 0, 0, 60)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.93
     button.BorderSizePixel = 0
@@ -1143,7 +1145,7 @@ local function makeButton(parent, text, callback, danger)
     actionLabel.Font = Enum.Font.GothamSemibold
     actionLabel.TextXAlignment = Enum.TextXAlignment.Center
     actionLabel.TextYAlignment = Enum.TextYAlignment.Center
-    actionLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    actionLabel.TextWrapped = true
     actionLabel.ZIndex = 15
     actionLabel.Parent = button
 
@@ -1173,7 +1175,7 @@ local function makeButton(parent, text, callback, danger)
 
     table.insert(ResponsiveControls, function()
         if button and button.Parent then
-            button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 50) or UDim2.new(1, -34, 0, 56)
+            button.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 50) or UDim2.new(1, 0, 0, 60)
         end
     end)
 
@@ -1184,7 +1186,7 @@ local ToggleControllers = {}
 
 local function makeToggle(parent, text, defaultValue, callback, settingKey)
     local button = Instance.new("TextButton")
-    button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 52) or UDim2.new(1, -34, 0, 58)
+    button.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 52) or UDim2.new(1, 0, 0, 62)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.95
     button.BorderSizePixel = 0
@@ -1204,7 +1206,7 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
     label.TextSize = 9
     label.Font = Enum.Font.GothamSemibold
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextTruncate = Enum.TextTruncate.AtEnd
+    label.TextWrapped = true
     label.ZIndex = 15
     label.Parent = button
 
@@ -1274,7 +1276,7 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
 
     table.insert(ResponsiveControls, function()
         if button and button.Parent then
-            button.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 52) or UDim2.new(1, -34, 0, 58)
+            button.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 52) or UDim2.new(1, 0, 0, 62)
         end
     end)
 
@@ -1289,7 +1291,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
     holder.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     holder.BackgroundTransparency = 0.96
     holder.BorderSizePixel = 0
-    holder.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 76) or UDim2.new(1, -34, 0, 84)
+    holder.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 76) or UDim2.new(1, 0, 0, 88)
     holder.ZIndex = 14
     holder.Parent = parent
     corner(holder, 16)
@@ -1304,7 +1306,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
     label.TextSize = 9
     label.Font = Enum.Font.GothamMedium
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextTruncate = Enum.TextTruncate.AtEnd
+    label.TextWrapped = true
     label.ZIndex = 15
     label.Parent = holder
 
@@ -1404,7 +1406,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
 
     table.insert(ResponsiveControls, function()
         if holder and holder.Parent then
-            holder.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 76) or UDim2.new(1, -34, 0, 84)
+            holder.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 76) or UDim2.new(1, 0, 0, 88)
         end
     end)
 
@@ -1418,7 +1420,7 @@ local function makeStat(parent, titleText, valueText)
     row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     row.BackgroundTransparency = 0.96
     row.BorderSizePixel = 0
-    row.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 54) or UDim2.new(1, -34, 0, 58)
+    row.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 54) or UDim2.new(1, 0, 0, 62)
     row.ZIndex = 14
     row.Parent = parent
     corner(row, 16)
@@ -1451,7 +1453,7 @@ local function makeStat(parent, titleText, valueText)
 
     table.insert(ResponsiveControls, function()
         if row and row.Parent then
-            row.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 54) or UDim2.new(1, -34, 0, 58)
+            row.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 54) or UDim2.new(1, 0, 0, 62)
         end
     end)
 
@@ -2703,12 +2705,12 @@ do
 
     local nav = Instance.new("Frame")
     nav.BackgroundTransparency = 1
-    nav.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 46) or UDim2.new(1, -34, 0, 56)
+    nav.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 46) or UDim2.new(1, 0, 0, 60)
     nav.ZIndex = 14
     nav.Parent = card
     table.insert(ResponsiveControls, function()
         if nav and nav.Parent then
-            nav.Size = LayoutIsMobile and UDim2.new(1, -18, 0, 46) or UDim2.new(1, -34, 0, 56)
+            nav.Size = LayoutIsMobile and UDim2.new(1, 0, 0, 46) or UDim2.new(1, 0, 0, 60)
         end
     end)
 
