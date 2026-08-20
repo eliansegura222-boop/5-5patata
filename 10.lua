@@ -101,6 +101,8 @@ local Theme = {
 }
 local IS_MOBILE = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 local CONFIG_FILE = ("H3X4_OBBY_%d.json"):format(LocalPlayer.UserId)
+local PREF_FILE = ("H3X4_OBBY_PREFS_%d.json"):format(LocalPlayer.UserId)
+local DISCORD_URL = "https://discord.gg/sewRzHAG5J"
 
 local State = {
     Alive = true,
@@ -182,7 +184,11 @@ local Settings = {
     ObjectiveScanDistance = 600,
 
     MobileHud = IS_MOBILE,
+    DeviceProfile = "AUTO",
+    HideDiscordPrompt = false,
 }
+
+local ActiveKeybindCapture = nil
 
 local Keybinds = {
     ToggleUI = Enum.KeyCode.RightShift,
@@ -283,6 +289,51 @@ local function formatTime(seconds)
     local minutes = math.floor(seconds / 60)
     local remaining = seconds - minutes * 60
     return string.format("%02d:%05.2f", minutes, remaining)
+end
+
+local function copyText(value)
+    local ok = false
+    if type(setclipboard) == "function" then
+        ok = pcall(setclipboard, value)
+    elseif type(toclipboard) == "function" then
+        ok = pcall(toclipboard, value)
+    elseif type(toclipboard) == "function" then
+        ok = pcall(toclipboard, value)
+    end
+    return ok
+end
+
+local function loadPrefsFile()
+    if type(readfile) ~= "function" or type(isfile) ~= "function" then return nil end
+    if not isfile(PREF_FILE) then return nil end
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(readfile(PREF_FILE))
+    end)
+    if ok and type(data) == "table" then return data end
+    return nil
+end
+
+local function savePrefsFile(data)
+    if type(writefile) ~= "function" then return false end
+    local ok, payload = pcall(function()
+        return HttpService:JSONEncode(data)
+    end)
+    if not ok then return false end
+    return pcall(writefile, PREF_FILE, payload)
+end
+
+local PrefsData = loadPrefsFile() or {}
+if PrefsData.DeviceProfile and type(PrefsData.DeviceProfile) == "string" then
+    Settings.DeviceProfile = PrefsData.DeviceProfile
+end
+if PrefsData.HideDiscordPrompt ~= nil then
+    Settings.HideDiscordPrompt = PrefsData.HideDiscordPrompt == true
+end
+
+local function persistPrefs()
+    PrefsData.DeviceProfile = Settings.DeviceProfile
+    PrefsData.HideDiscordPrompt = Settings.HideDiscordPrompt == true
+    savePrefsFile(PrefsData)
 end
 
 local function isAlive()
@@ -781,6 +832,30 @@ PageCount.Parent = PageHeader
 corner(PageCount, 13)
 stroke(PageCount, Color3.fromRGB(255, 255, 255), 0.86, 1)
 
+local CommunityHeaderButton = Instance.new("TextButton")
+CommunityHeaderButton.AnchorPoint = Vector2.new(1, 0.5)
+CommunityHeaderButton.Position = UDim2.new(1, -112, 0.5, 0)
+CommunityHeaderButton.Size = UDim2.fromOffset(92, 28)
+CommunityHeaderButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CommunityHeaderButton.BackgroundTransparency = 0.93
+CommunityHeaderButton.BorderSizePixel = 0
+CommunityHeaderButton.Text = "COMUNIDAD"
+CommunityHeaderButton.TextColor3 = Theme.TextDim
+CommunityHeaderButton.TextSize = 8
+CommunityHeaderButton.Font = Enum.Font.GothamBold
+CommunityHeaderButton.ZIndex = 13
+CommunityHeaderButton.AutoButtonColor = false
+CommunityHeaderButton.Parent = PageHeader
+corner(CommunityHeaderButton, 13)
+stroke(CommunityHeaderButton, Color3.fromRGB(255, 255, 255), 0.88, 1)
+CommunityHeaderButton.MouseEnter:Connect(function()
+    tween(CommunityHeaderButton, 0.14, {BackgroundTransparency = 0.88})
+end)
+CommunityHeaderButton.MouseLeave:Connect(function()
+    tween(CommunityHeaderButton, 0.14, {BackgroundTransparency = 0.93})
+end)
+
+
 local Content = Instance.new("Frame")
 Content.Name = "Pages"
 Content.BackgroundTransparency = 1
@@ -794,15 +869,15 @@ local CategoryButtons = {}
 local CurrentCategory = nil
 
 local categories = {
-    {"HOME", "INICIO"},
-    {"CHECKPOINTS", "CHECKPOINTS"},
-    {"MOVEMENT", "MOVIMIENTO"},
-    {"SAFETY", "SEGURIDAD"},
-    {"VISUALS", "VISUALES"},
-    {"SPEEDRUN", "SPEEDRUN"},
-    {"ROUTES", "RUTAS"},
-    {"SYSTEM", "SISTEMA"},
-    {"KEYBINDS", "KEYBINDS"},
+    {"HOME", "INICIO", "⌂"},
+    {"CHECKPOINTS", "CHECKPOINTS", "⚑"},
+    {"MOVEMENT", "MOVIMIENTO", "➜"},
+    {"SAFETY", "SEGURIDAD", "⛨"},
+    {"VISUALS", "VISUALES", "◉"},
+    {"SPEEDRUN", "SPEEDRUN", "⏱"},
+    {"ROUTES", "RUTAS", "⌖"},
+    {"SYSTEM", "SISTEMA", "⚙"},
+    {"KEYBINDS", "KEYBINDS", "⌨"},
 }
 
 local function createPage(key)
@@ -865,18 +940,18 @@ local function setCategory(key)
     for buttonKey, button in pairs(CategoryButtons) do
         local active = buttonKey == key
         local label = button:FindFirstChild("Label")
-        local indexLabel = button:FindFirstChild("Index")
+        local iconLabel = button:FindFirstChild("Icon")
         local buttonStroke = button:FindFirstChildOfClass("UIStroke")
 
         tween(button, 0.16, {
             BackgroundColor3 = active and Color3.fromRGB(245, 245, 245) or Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = active and 0.06 or 0.94,
+            BackgroundTransparency = active and 0.08 or 0.965,
         })
         if label then
             tween(label, 0.16, {TextColor3 = active and Color3.fromRGB(5, 5, 6) or Theme.TextDim})
         end
-        if indexLabel then
-            tween(indexLabel, 0.16, {TextColor3 = active and Color3.fromRGB(75, 75, 80) or Theme.TextMuted})
+        if iconLabel then
+            tween(iconLabel, 0.16, {TextColor3 = active and Color3.fromRGB(18, 18, 22) or Theme.TextMuted})
         end
         if buttonStroke then
             tween(buttonStroke, 0.16, {Transparency = active and 1 or 0.90})
@@ -885,13 +960,13 @@ local function setCategory(key)
 end
 
 for index, definition in ipairs(categories) do
-    local key, labelText = definition[1], definition[2]
+    local key, labelText, iconText = definition[1], definition[2], definition[3]
 
     local button = Instance.new("TextButton")
     button.Name = key
     button.Size = UDim2.new(1, 0, 0, 40)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    button.BackgroundTransparency = 0.94
+    button.BackgroundTransparency = 0.965
     button.BorderSizePixel = 0
     button.Text = ""
     button.AutoButtonColor = false
@@ -899,25 +974,25 @@ for index, definition in ipairs(categories) do
     button.ZIndex = 13
     button.Parent = CategoryScroll
     corner(button, 14)
-    stroke(button, Color3.fromRGB(255, 255, 255), 0.90, 1)
+    stroke(button, Color3.fromRGB(255, 255, 255), 0.92, 1)
 
-    local indexLabel = Instance.new("TextLabel")
-    indexLabel.Name = "Index"
-    indexLabel.BackgroundTransparency = 1
-    indexLabel.Position = UDim2.fromOffset(12, 0)
-    indexLabel.Size = UDim2.fromOffset(24, 40)
-    indexLabel.Text = string.format("%02d", index)
-    indexLabel.TextColor3 = Theme.TextMuted
-    indexLabel.TextSize = 8
-    indexLabel.Font = Enum.Font.GothamBold
-    indexLabel.ZIndex = 14
-    indexLabel.Parent = button
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Name = "Icon"
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Position = UDim2.fromOffset(12, 0)
+    iconLabel.Size = UDim2.fromOffset(24, 40)
+    iconLabel.Text = iconText
+    iconLabel.TextColor3 = Theme.TextMuted
+    iconLabel.TextSize = 12
+    iconLabel.Font = Enum.Font.GothamBold
+    iconLabel.ZIndex = 14
+    iconLabel.Parent = button
 
     local label = Instance.new("TextLabel")
     label.Name = "Label"
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(42, 0)
-    label.Size = UDim2.new(1, -52, 1, 0)
+    label.Position = UDim2.fromOffset(40, 0)
+    label.Size = UDim2.new(1, -50, 1, 0)
     label.Text = labelText
     label.TextColor3 = Theme.TextDim
     label.TextSize = 9
@@ -928,14 +1003,16 @@ for index, definition in ipairs(categories) do
 
     button.MouseEnter:Connect(function()
         if CurrentCategory ~= key then
-            tween(button, 0.14, {BackgroundTransparency = 0.88})
+            tween(button, 0.14, {BackgroundTransparency = 0.94})
             tween(label, 0.14, {TextColor3 = Theme.Text})
+            tween(iconLabel, 0.14, {TextColor3 = Theme.TextDim})
         end
     end)
     button.MouseLeave:Connect(function()
         if CurrentCategory ~= key then
-            tween(button, 0.14, {BackgroundTransparency = 0.94})
+            tween(button, 0.14, {BackgroundTransparency = 0.965})
             tween(label, 0.14, {TextColor3 = Theme.TextDim})
+            tween(iconLabel, 0.14, {TextColor3 = Theme.TextMuted})
         end
     end)
     button.MouseButton1Click:Connect(function()
@@ -1437,25 +1514,67 @@ end)
 RestoreOrb.MouseButton1Click:Connect(function()
     RestoreOrb.Visible = false
     Main.Visible = true
-    local targetSize = IS_MOBILE and UDim2.fromOffset(600, 378) or UDim2.fromOffset(730, 466)
+    local _w, _h = basePanelSize()
+    local targetSize = UDim2.fromOffset(_w, _h)
     Main.Size = UDim2.fromOffset(80, 50)
     Main.BackgroundTransparency = 0.64
     tween(Main, 0.28, {Size = targetSize, BackgroundTransparency = 0.44}, Enum.EasingStyle.Back)
 end)
 
+local function usingMobileLayout()
+    if Settings.DeviceProfile == "MOBILE" then return true end
+    if Settings.DeviceProfile == "PC" then return false end
+    return IS_MOBILE
+end
+
+local function basePanelSize()
+    if usingMobileLayout() then
+        return 600, 378
+    end
+    return 730, 466
+end
+
+local MobileHud
+
+local function applyDeviceMode(skipResize)
+    local mobile = usingMobileLayout()
+    StatusText.Text = mobile and "MOBILE" or "DESKTOP"
+
+    -- En móvil, KEYBINDS no se muestra en la navegación.
+    local keybindCategoryButton = CategoryButtons and CategoryButtons.KEYBINDS
+    if keybindCategoryButton then
+        keybindCategoryButton.Visible = not mobile
+    end
+
+    -- Si el usuario cambia a móvil mientras está dentro de KEYBINDS,
+    -- volver a Inicio para no dejar una página oculta seleccionada.
+    if mobile and CurrentCategory == "KEYBINDS" then
+        setCategory("HOME")
+    end
+
+    if MobileHud then
+        MobileHud.Visible = mobile and Settings.MobileHud
+    end
+    if not skipResize and Main and Main.Visible then
+        local w, h = basePanelSize()
+        Main.Size = UDim2.fromOffset(w, h)
+    end
+
+    if updateCategoryCanvas then
+        task.defer(updateCategoryCanvas)
+    end
+end
+
 local function updateResponsive()
     local camera = Workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
 
-    local baseWidth = IS_MOBILE and 600 or 730
-    local baseHeight = IS_MOBILE and 378 or 466
+    local baseWidth, baseHeight = basePanelSize()
 
     local scaleX = (viewport.X - 12) / baseWidth
     local scaleY = (viewport.Y - 36) / baseHeight
     UIScale.Scale = math.clamp(math.min(scaleX, scaleY, 1), 0.62, 1)
 end
-
-updateResponsive()
 
 if Workspace.CurrentCamera then
     trackConnection(Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsive))
@@ -1469,15 +1588,17 @@ end))
 -- FLOATING MOBILE HUD
 -- =========================================================
 
-local MobileHud = Instance.new("Frame")
+MobileHud = Instance.new("Frame")
 MobileHud.Name = "MobileHud"
-MobileHud.Visible = Settings.MobileHud
+MobileHud.Visible = usingMobileLayout() and Settings.MobileHud
 MobileHud.BackgroundTransparency = 1
 MobileHud.AnchorPoint = Vector2.new(1, 1)
 MobileHud.Position = UDim2.new(1, -14, 1, -90)
 MobileHud.Size = UDim2.fromOffset(180, 46)
 MobileHud.ZIndex = 220
 MobileHud.Parent = ScreenGui
+applyDeviceMode(true)
+updateResponsive()
 
 local MobileLayout = Instance.new("UIListLayout")
 MobileLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -1527,6 +1648,148 @@ end
 local MobileSave = nil
 local MobileReturn = nil
 local MobileRetry = nil
+
+
+local function copyDiscordLink()
+    local ok = copyText(DISCORD_URL)
+    notify("COMUNIDAD", ok and "Link copiado al portapapeles." or ("Servidor: " .. DISCORD_URL), ok and "success" or nil)
+end
+
+CommunityHeaderButton.MouseButton1Click:Connect(copyDiscordLink)
+
+local ModalOverlay = Instance.new("Frame")
+ModalOverlay.Name = "ModalOverlay"
+ModalOverlay.Visible = false
+ModalOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ModalOverlay.BackgroundTransparency = 0.32
+ModalOverlay.BorderSizePixel = 0
+ModalOverlay.Size = UDim2.fromScale(1, 1)
+ModalOverlay.ZIndex = 500
+ModalOverlay.Parent = ScreenGui
+
+local function buildModal(titleText, bodyText)
+    local modal = Instance.new("Frame")
+    modal.Visible = false
+    modal.AnchorPoint = Vector2.new(0.5, 0.5)
+    modal.Position = UDim2.new(0.5, 0, 0.5, 0)
+    modal.Size = UDim2.fromOffset(360, 220)
+    modal.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    modal.BackgroundTransparency = 0.18
+    modal.BorderSizePixel = 0
+    modal.ZIndex = 510
+    modal.Parent = ModalOverlay
+    corner(modal, 18)
+    stroke(modal, Color3.fromRGB(255,255,255), 0.82, 1)
+
+    local title = Instance.new("TextLabel")
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(18, 16)
+    title.Size = UDim2.new(1, -36, 0, 24)
+    title.Text = titleText
+    title.TextColor3 = Theme.Text
+    title.TextSize = 14
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 511
+    title.Parent = modal
+
+    local body = Instance.new("TextLabel")
+    body.BackgroundTransparency = 1
+    body.Position = UDim2.fromOffset(18, 46)
+    body.Size = UDim2.new(1, -36, 0, 56)
+    body.TextWrapped = true
+    body.TextYAlignment = Enum.TextYAlignment.Top
+    body.TextXAlignment = Enum.TextXAlignment.Left
+    body.Text = bodyText
+    body.TextColor3 = Theme.TextDim
+    body.TextSize = 10
+    body.Font = Enum.Font.GothamMedium
+    body.ZIndex = 511
+    body.Parent = modal
+
+    return modal
+end
+
+local DeviceModal = buildModal("SELECCIONA TU DISPOSITIVO", "Elige el modo que te resulte más cómodo. El panel adaptará tamaño y controles automáticamente.")
+local DiscordModal = buildModal("ÚNETE A LA COMUNIDAD", "Únete a nuestro Discord para novedades, soporte y actualizaciones del proyecto H3X4 Obby.")
+
+local function modalButton(parent, text, position, width, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromOffset(width or 100, 36)
+    btn.Position = position
+    btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    btn.BackgroundTransparency = 0.90
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextColor3 = Theme.Text
+    btn.TextSize = 9
+    btn.Font = Enum.Font.GothamBold
+    btn.AutoButtonColor = false
+    btn.ZIndex = 512
+    btn.Parent = parent
+    corner(btn, 12)
+    stroke(btn, Color3.fromRGB(255,255,255), 0.86, 1)
+    btn.MouseEnter:Connect(function() tween(btn, 0.14, {BackgroundTransparency = 0.84}) end)
+    btn.MouseLeave:Connect(function() tween(btn, 0.14, {BackgroundTransparency = 0.90}) end)
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+local function hideModals()
+    ModalOverlay.Visible = false
+    DeviceModal.Visible = false
+    DiscordModal.Visible = false
+end
+
+local function showDiscordModal()
+    if Settings.HideDiscordPrompt then return end
+    ModalOverlay.Visible = true
+    DeviceModal.Visible = false
+    DiscordModal.Visible = true
+end
+
+local function showDeviceModal()
+    ModalOverlay.Visible = true
+    DeviceModal.Visible = true
+    DiscordModal.Visible = false
+end
+
+modalButton(DeviceModal, "PC", UDim2.fromOffset(18, 132), 100, function()
+    Settings.DeviceProfile = "PC"
+    persistPrefs()
+    hideModals()
+    applyDeviceMode(false)
+    updateResponsive()
+    task.delay(0.12, showDiscordModal)
+end)
+modalButton(DeviceModal, "MÓVIL", UDim2.fromOffset(130, 132), 100, function()
+    Settings.DeviceProfile = "MOBILE"
+    persistPrefs()
+    hideModals()
+    applyDeviceMode(false)
+    updateResponsive()
+    task.delay(0.12, showDiscordModal)
+end)
+modalButton(DeviceModal, "AUTO", UDim2.fromOffset(242, 132), 100, function()
+    Settings.DeviceProfile = "AUTO"
+    persistPrefs()
+    hideModals()
+    applyDeviceMode(false)
+    updateResponsive()
+    task.delay(0.12, showDiscordModal)
+end)
+
+modalButton(DiscordModal, "COPIAR LINK", UDim2.fromOffset(18, 158), 104, function()
+    copyDiscordLink()
+end)
+modalButton(DiscordModal, "CANCELAR", UDim2.fromOffset(130, 158), 100, function()
+    hideModals()
+end)
+modalButton(DiscordModal, "NO MOSTRAR MÁS", UDim2.fromOffset(238, 158), 104, function()
+    Settings.HideDiscordPrompt = true
+    persistPrefs()
+    hideModals()
+end)
 
 -- =========================================================
 -- CHARACTER BINDING
@@ -2233,6 +2496,37 @@ do
     table.insert(TimerLabels.Checkpoint, makeStat(stats, "CHECKPOINT", "0 / 0"))
     table.insert(TimerLabels.Route, makeStat(stats, "RUTA", "0 pts"))
 
+    local community = makeCard(page, "COMUNIDAD", "Únete al Discord oficial de la comunidad H3X4 para novedades, soporte y actualizaciones.")
+    makeButton(community, "COPIAR LINK DEL DISCORD", function()
+        copyDiscordLink()
+    end)
+    makeButton(community, "MOSTRAR AVISO DE COMUNIDAD", function()
+        showDiscordModal()
+    end)
+
+    local device = makeCard(page, "DISPOSITIVO", "Elige el dispositivo para adaptar el panel automáticamente y hacerlo más cómodo.")
+    makeButton(device, "USAR MODO PC", function()
+        Settings.DeviceProfile = "PC"
+        persistPrefs()
+        applyDeviceMode(false)
+        updateResponsive()
+        notify("DISPOSITIVO", "Modo PC aplicado.", "success")
+    end)
+    makeButton(device, "USAR MODO MÓVIL", function()
+        Settings.DeviceProfile = "MOBILE"
+        persistPrefs()
+        applyDeviceMode(false)
+        updateResponsive()
+        notify("DISPOSITIVO", "Modo móvil aplicado.", "success")
+    end)
+    makeButton(device, "USAR MODO AUTO", function()
+        Settings.DeviceProfile = "AUTO"
+        persistPrefs()
+        applyDeviceMode(false)
+        updateResponsive()
+        notify("DISPOSITIVO", "Modo automático aplicado.", "success")
+    end)
+
     local help = makeCard(page, "NOTA", "Los detectores de killbricks, checkpoints y metas usan nombres/propiedades comunes. Algunos juegos pueden necesitar módulos específicos.")
 end
 
@@ -2489,7 +2783,7 @@ do
 
         State.BestTime = tonumber(data.bestTime) or State.BestTime
 
-        MobileHud.Visible = Settings.MobileHud and IS_MOBILE
+        MobileHud.Visible = usingMobileLayout() and Settings.MobileHud
         task.spawn(scanKillBricks)
         task.spawn(scanInvisibleParts)
         if Settings.ObjectivePointer then task.spawn(scanObjectives) end
@@ -2498,11 +2792,33 @@ do
         notify("CONFIGURACIÓN", "Configuración cargada.", "success")
     end)
 
-    local mobile = makeCard(page, "MÓVIL")
+    local mobile = makeCard(page, "DISPOSITIVO Y HUD")
     MobileHudToggle = makeToggle(mobile, "HUD FLOTANTE", Settings.MobileHud, function(value)
         Settings.MobileHud = value
-        MobileHud.Visible = value and IS_MOBILE
+        MobileHud.Visible = value and usingMobileLayout()
     end, "MobileHud")
+    makeButton(mobile, "MODO PC", function()
+        Settings.DeviceProfile = "PC"
+        persistPrefs()
+        applyDeviceMode(false)
+        updateResponsive()
+    end)
+    makeButton(mobile, "MODO MÓVIL", function()
+        Settings.DeviceProfile = "MOBILE"
+        persistPrefs()
+        applyDeviceMode(false)
+        updateResponsive()
+    end)
+    makeButton(mobile, "MODO AUTO", function()
+        Settings.DeviceProfile = "AUTO"
+        persistPrefs()
+        applyDeviceMode(false)
+        updateResponsive()
+    end)
+
+    local communitySystem = makeCard(page, "COMUNIDAD")
+    makeButton(communitySystem, "COPIAR LINK DEL DISCORD", copyDiscordLink)
+    makeButton(communitySystem, "MOSTRAR AVISO DE DISCORD", showDiscordModal)
 
     local cleanup = makeCard(page, "PANEL")
     makeButton(cleanup, "RESTAURAR POSICIÓN DEL PANEL", function()
@@ -2526,6 +2842,7 @@ do
     }
 
     local capturing = nil
+    local capturingButton = nil
 
     local function setActionButtonLabel(button, value)
         if not button then return end
@@ -2549,35 +2866,47 @@ do
         local button
         button = makeButton(keyCard, label .. "  •  " .. Keybinds[name].Name, function()
             capturing = name
+            capturingButton = button
+            ActiveKeybindCapture = name
             setActionButtonLabel(button, label .. "  •  PRESIONA UNA TECLA...")
+            notify("KEYBIND", "Presiona una tecla para asignarla. ESC cancela.")
         end)
         button:SetAttribute("BaseLabel", label)
         KeybindButtons[name] = button
     end
 
     trackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
-        if gpe then return end
         if not capturing then return end
+
+        if input.UserInputType ~= Enum.UserInputType.Keyboard then
+            return
+        end
 
         if input.KeyCode == Enum.KeyCode.Escape then
             refreshKeyButton(capturing)
             capturing = nil
+            capturingButton = nil
+            ActiveKeybindCapture = nil
             return
         end
 
         if input.KeyCode ~= Enum.KeyCode.Unknown then
             Keybinds[capturing] = input.KeyCode
             refreshKeyButton(capturing)
-            notify("KEYBIND", "Atajo actualizado.", "success")
+            notify("KEYBIND", "Atajo actualizado a " .. input.KeyCode.Name .. ".", "success")
             capturing = nil
+            capturingButton = nil
+            ActiveKeybindCapture = nil
         end
     end))
 
     task.spawn(function()
         while not State.Destroyed do
             task.wait(0.75)
-            for name in pairs(KeybindButtons) do
-                refreshKeyButton(name)
+            if not capturing then
+                for name in pairs(KeybindButtons) do
+                    refreshKeyButton(name)
+                end
             end
         end
     end)
@@ -2635,6 +2964,7 @@ local function keyEquals(input, key)
 end
 
 trackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
+    if ActiveKeybindCapture then return end
     if gpe then return end
 
     if keyEquals(input, Keybinds.ToggleUI) then
@@ -2734,4 +3064,12 @@ tween(Main, 0.38, {
 
 notify("H3X4 OBBY", "Interfaz Monochrome Glass cargada. Categorías completas y layout fijo.", "success")
 
-print("[H3X4 OBBY] Monochrome Glass Redesign V7 cargada.")
+task.delay(0.35, function()
+    if PrefsData.DeviceProfile == nil then
+        showDeviceModal()
+    elseif not Settings.HideDiscordPrompt then
+        showDiscordModal()
+    end
+end)
+
+print("[H3X4 OBBY] Monochrome Glass Redesign V8 cargada.")
