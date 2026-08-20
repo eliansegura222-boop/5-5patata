@@ -912,11 +912,12 @@ local function createPage(key)
     page.Visible = false
     page.ZIndex = 12
     page.Parent = Content
-    padding(page, 10, 10, 6, 14)
+    padding(page, 14, 14, 10, 24)
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 10)
+    layout.Padding = UDim.new(0, 16)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.Parent = page
 
     local function updateCanvas()
@@ -1025,6 +1026,7 @@ end
 
 -- =========================================================
 -- COMPONENT FACTORY
+-- V11: larger cards, centered inset controls, wider safety margins.
 -- IMPORTANT: cards calculate their own height explicitly so controls never
 -- disappear because of AutomaticSize/AutomaticCanvasSize inconsistencies.
 -- =========================================================
@@ -1036,20 +1038,22 @@ local function makeCard(page, titleText, subtitleText)
     card.BackgroundColor3 = Color3.fromRGB(14, 14, 16)
     card.BackgroundTransparency = 0.46
     card.BorderSizePixel = 0
-    card.Size = UDim2.new(1, 0, 0, 40)
+    card.Size = UDim2.new(1, -10, 0, 92)
     card.ZIndex = 13
+    card.ClipsDescendants = true
     card.Parent = page
     corner(card, 18)
     stroke(card, Color3.fromRGB(255, 255, 255), 0.86, 1)
-    padding(card, 14, 14, 14, 16)
+    padding(card, 20, 20, 22, 24)
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 10)
+    layout.Padding = UDim.new(0, 15)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     layout.Parent = card
 
     local function updateCardHeight()
-        card.Size = UDim2.new(1, 0, 0, math.max(58, layout.AbsoluteContentSize.Y + 38))
+        card.Size = UDim2.new(1, -10, 0, math.max(92, layout.AbsoluteContentSize.Y + 62))
     end
     trackConnection(layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCardHeight))
     task.defer(updateCardHeight)
@@ -1062,7 +1066,7 @@ local function makeDivider(parent)
     line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     line.BackgroundTransparency = 0.90
     line.BorderSizePixel = 0
-    line.Size = UDim2.new(1, 0, 0, 1)
+    line.Size = UDim2.new(1, -18, 0, 1)
     line.ZIndex = 14
     line.Parent = parent
     return line
@@ -1070,7 +1074,7 @@ end
 
 local function makeButton(parent, text, callback, danger)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 46)
+    button.Size = UDim2.new(1, -18, 0, 50)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.93
     button.BorderSizePixel = 0
@@ -1086,10 +1090,10 @@ local function makeButton(parent, text, callback, danger)
     actionLabel.BackgroundTransparency = 1
     actionLabel.AnchorPoint = Vector2.new(0.5, 0.5)
     actionLabel.Position = UDim2.fromScale(0.5, 0.5)
-    actionLabel.Size = UDim2.new(1, -28, 1, -8)
+    actionLabel.Size = UDim2.new(1, -24, 1, -10)
     actionLabel.Text = text
     actionLabel.TextColor3 = danger and Theme.Danger or Theme.Text
-    actionLabel.TextSize = 9
+    actionLabel.TextSize = 10
     actionLabel.Font = Enum.Font.GothamSemibold
     actionLabel.TextXAlignment = Enum.TextXAlignment.Center
     actionLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -1128,7 +1132,7 @@ local ToggleControllers = {}
 
 local function makeToggle(parent, text, defaultValue, callback, settingKey)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 46)
+    button.Size = UDim2.new(1, -18, 0, 52)
     button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     button.BackgroundTransparency = 0.95
     button.BorderSizePixel = 0
@@ -1141,8 +1145,8 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(14, 0)
-    label.Size = UDim2.new(1, -82, 1, 0)
+    label.Position = UDim2.fromOffset(18, 0)
+    label.Size = UDim2.new(1, -96, 1, 0)
     label.Text = text
     label.TextColor3 = Theme.Text
     label.TextSize = 9
@@ -1155,7 +1159,7 @@ local function makeToggle(parent, text, defaultValue, callback, settingKey)
     local track = Instance.new("Frame")
     track.Name = "ToggleTrack"
     track.AnchorPoint = Vector2.new(1, 0.5)
-    track.Position = UDim2.new(1, -10, 0.5, 0)
+    track.Position = UDim2.new(1, -14, 0.5, 0)
     track.Size = UDim2.fromOffset(48, 26)
     track.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
     track.BackgroundTransparency = 0.18
@@ -1227,7 +1231,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
     holder.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     holder.BackgroundTransparency = 0.96
     holder.BorderSizePixel = 0
-    holder.Size = UDim2.new(1, 0, 0, 66)
+    holder.Size = UDim2.new(1, -18, 0, 76)
     holder.ZIndex = 14
     holder.Parent = parent
     corner(holder, 16)
@@ -1235,8 +1239,8 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Position = UDim2.fromOffset(14, 6)
-    label.Size = UDim2.new(1, -92, 0, 20)
+    label.Position = UDim2.fromOffset(18, 8)
+    label.Size = UDim2.new(1, -108, 0, 22)
     label.Text = text
     label.TextColor3 = Theme.TextDim
     label.TextSize = 9
@@ -1248,7 +1252,7 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
 
     local valueBox = Instance.new("TextBox")
     valueBox.AnchorPoint = Vector2.new(1, 0)
-    valueBox.Position = UDim2.new(1, -10, 0, 5)
+    valueBox.Position = UDim2.new(1, -14, 0, 7)
     valueBox.Size = UDim2.fromOffset(66, 24)
     valueBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     valueBox.BackgroundTransparency = 0.90
@@ -1263,8 +1267,8 @@ local function makeSlider(parent, text, minValue, maxValue, defaultValue, callba
     corner(valueBox, 12)
 
     local bar = Instance.new("Frame")
-    bar.Position = UDim2.fromOffset(14, 41)
-    bar.Size = UDim2.new(1, -28, 0, 5)
+    bar.Position = UDim2.fromOffset(18, 50)
+    bar.Size = UDim2.new(1, -36, 0, 5)
     bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     bar.BackgroundTransparency = 0.82
     bar.BorderSizePixel = 0
@@ -1350,7 +1354,7 @@ local function makeStat(parent, titleText, valueText)
     row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     row.BackgroundTransparency = 0.96
     row.BorderSizePixel = 0
-    row.Size = UDim2.new(1, 0, 0, 50)
+    row.Size = UDim2.new(1, -18, 0, 54)
     row.ZIndex = 14
     row.Parent = parent
     corner(row, 16)
@@ -1358,7 +1362,7 @@ local function makeStat(parent, titleText, valueText)
 
     local name = Instance.new("TextLabel")
     name.BackgroundTransparency = 1
-    name.Position = UDim2.fromOffset(14, 5)
+    name.Position = UDim2.fromOffset(18, 5)
     name.Size = UDim2.new(0.58, -14, 1, -10)
     name.Text = titleText
     name.TextColor3 = Theme.TextDim
@@ -1371,7 +1375,7 @@ local function makeStat(parent, titleText, valueText)
     local value = Instance.new("TextLabel")
     value.BackgroundTransparency = 1
     value.AnchorPoint = Vector2.new(1, 0)
-    value.Position = UDim2.new(1, -14, 0, 5)
+    value.Position = UDim2.new(1, -18, 0, 5)
     value.Size = UDim2.new(0.42, 0, 1, -10)
     value.Text = valueText or "-"
     value.TextColor3 = Theme.Text
@@ -2626,12 +2630,12 @@ do
 
     local nav = Instance.new("Frame")
     nav.BackgroundTransparency = 1
-    nav.Size = UDim2.new(1, 0, 0, 36)
+    nav.Size = UDim2.new(1, -18, 0, 46)
     nav.ZIndex = 14
     nav.Parent = card
 
     local previous = Instance.new("TextButton")
-    previous.Size = UDim2.new(0.5, -4, 1, 0)
+    previous.Size = UDim2.new(0.5, -7, 1, 0)
     previous.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     previous.BackgroundTransparency = 0.93
     previous.BorderSizePixel = 0
@@ -2646,7 +2650,7 @@ do
     stroke(previous, Color3.fromRGB(255, 255, 255), 0.88, 1)
 
     local nextButton = previous:Clone()
-    nextButton.Position = UDim2.new(0.5, 4, 0, 0)
+    nextButton.Position = UDim2.new(0.5, 7, 0, 0)
     nextButton.Text = "SIGUIENTE"
     nextButton.Parent = nav
 
