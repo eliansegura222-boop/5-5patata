@@ -59,8 +59,28 @@ local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
 
 local LocalPlayer = __BootstrapPlayer
+
+-- Sonido de apertura: se reproduce una sola vez al ejecutar H3X4 X.
+task.defer(function()
+	pcall(function()
+		local openingSound = Instance.new("Sound")
+		openingSound.Name = "H3X4_X_OpeningSound"
+		openingSound.SoundId = "rbxassetid://139738199515248"
+		openingSound.Volume = 1
+		openingSound.Looped = false
+		openingSound.Parent = SoundService
+		openingSound.Ended:Connect(function()
+			if openingSound and openingSound.Parent then openingSound:Destroy() end
+		end)
+		openingSound:Play()
+		task.delay(60, function()
+			if openingSound and openingSound.Parent then openingSound:Destroy() end
+		end)
+	end)
+end)
 
 local RemoteVipState = (function()
 	local VIP_RAW_URL = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/hx4v1p.lua"
@@ -2408,7 +2428,7 @@ MainFrameBackground.BackgroundTransparency = 1
 MainFrameBackground.BorderSizePixel = 0
 MainFrameBackground.Position = UDim2.new(0, 0, 0, 0)
 MainFrameBackground.Size = UDim2.new(1, 0, 1, 0)
-MainFrameBackground.Image = "rbxassetid://107783907606737"
+MainFrameBackground.Image = "rbxassetid://130733111574559"
 MainFrameBackground.ImageColor3 = Color3.fromRGB(255, 255, 255)
 MainFrameBackground.ImageTransparency = 0.10
 MainFrameBackground.ScaleType = Enum.ScaleType.Crop
@@ -5848,12 +5868,28 @@ ConfigManager:BindToggle(noclipButton, function()
 	end
 end)
 
+-- Recomienda un keybind únicamente cuando realmente hace falta:
+-- PC + función recién activada + todavía sin tecla asignada.
+local function recommendKeybindFor(button, featureEs, featureEn)
+	if MOBILE_DEVICE or not button then return end
+	if KeybindManager and KeybindManager:HasBindingForButton(button) then return end
+	showSystemNotification(
+		"KEYBIND RECOMENDADO",
+		"Te recomendamos asignar una tecla a " .. featureEs .. " desde KEYBINDS para usarlo más rápido.",
+		"KEYBIND RECOMMENDED",
+		"We recommend assigning a key to " .. featureEn .. " from KEYBINDS for quicker access."
+	)
+end
+
 ConfigManager:BindToggle(autoAimHeadButton, function()
 	autoAimHeadActive = not autoAimHeadActive
 	if autoAimHeadActive then MobileAim.PreferredHead = true end
 	setActive(autoAimHeadButton, autoAimHeadActive)
 	if autoAimHeadActive and autoAimBodyActive then autoAimBodyActive = false; setActive(autoAimBodyButton, false) end
 	if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee = nil end
+	if autoAimHeadActive then
+		recommendKeybindFor(autoAimHeadButton, "AIMBOT (CABEZA)", "AIMBOT (HEAD)")
+	end
 	MobileAim:Refresh()
 end)
 ConfigManager:BindToggle(autoAimBodyButton, function()
@@ -5862,6 +5898,9 @@ ConfigManager:BindToggle(autoAimBodyButton, function()
 	setActive(autoAimBodyButton, autoAimBodyActive)
 	if autoAimBodyActive and autoAimHeadActive then autoAimHeadActive = false; setActive(autoAimHeadButton, false) end
 	if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee = nil end
+	if autoAimBodyActive then
+		recommendKeybindFor(autoAimBodyButton, "AIMBOT (CUERPO)", "AIMBOT (BODY)")
+	end
 	MobileAim:Refresh()
 end)
 ConfigManager:BindToggle(MobileAim.OptionButton, function()
@@ -7537,7 +7576,11 @@ task.spawn(function()
 		end)
 		bindToggle(WeaponLockButton, "WeaponLock", function(enabled)
 			Runtime.weaponLockEnabled = enabled == true
-			if not Runtime.weaponLockEnabled then Runtime.releaseWeaponLockInput(true) end
+			if Runtime.weaponLockEnabled then
+				recommendKeybindFor(WeaponLockButton, "BLOQUEO DE ARMA", "WEAPON LOCK")
+			else
+				Runtime.releaseWeaponLockInput(true)
+			end
 		end)
 
 
