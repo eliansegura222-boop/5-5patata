@@ -1615,7 +1615,7 @@ CÍRCULO FOV
 Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
 
 MOVIMIENTO Y FÍSICA
-Controla el vuelo, la velocidad, el salto, la gravedad, la caminata aérea y la colisión. En celular, el vuelo incluye botones para subir y bajar.
+Controla el vuelo, la velocidad, el salto, la gravedad, la caminata aérea y la colisión. En celular, pulsa el pequeño botón FLOT. situado a la derecha de una función compatible para mostrar u ocultar su botón flotante. El vuelo también incluye botones para subir y bajar.
 
 VISUALES ESP
 Muestra esqueletos o líneas hacia otros jugadores y permite limitar la distancia.
@@ -1634,7 +1634,7 @@ FOV CIRCLE
 Limits the area where targets are selected. Enable USE FOV CIRCLE and adjust its radius.
 
 MOVEMENT AND PHYSICS
-Controls flight, speed, jumping, gravity, air walk and collision. On mobile, flight includes buttons to move up and down.
+Controls flight, speed, jumping, gravity, air walk and collision. On mobile, tap the small FLOAT button to the right of a compatible feature to show or hide its floating button. Flight also includes buttons to move up and down.
 
 ESP VISUALS
 Displays skeletons or lines toward other players and lets you limit the distance.
@@ -2554,7 +2554,6 @@ local CategoryUI = {
 		{Key = "PERFORMANCE", Label = "RENDIMIENTO"},
 		{Key = "INFO", Label = "INFORMACIÓN"},
 		{Key = "SYSTEM", Label = "SISTEMA"},
-		{Key = "FLOATING", Label = "BOTONES FLOTANTES"},
 		{Key = "CUSTOMIZE", Label = "PERSONALIZAR"},
 	},
 }
@@ -3597,6 +3596,8 @@ local function restoreCardLayout(card, units)
 		if originalPosition then setGuiPosition(unit, originalPosition) end
 		if unit:GetAttribute("HexaInlineKeybind") == true then
 			setGuiVisible(unit, not MOBILE_DEVICE)
+		elseif unit:GetAttribute("HexaInlineFloating") == true then
+			setGuiVisible(unit, MOBILE_DEVICE)
 		else
 			setGuiVisible(unit, true)
 		end
@@ -3612,6 +3613,7 @@ local function showVipUnits(card, units)
 		for _, unit in ipairs(row.Units) do
 			local include = unitIsVip(unit)
 			if unit:GetAttribute("HexaInlineKeybind") == true and MOBILE_DEVICE then include = false end
+			if unit:GetAttribute("HexaInlineFloating") == true and not MOBILE_DEVICE then include = false end
 			setGuiVisible(unit, include)
 			if include then rowVisible = true end
 		end
@@ -4293,25 +4295,22 @@ AllSliders.TrackConnection(UserInputService.WindowFocusReleased:Connect(function
 	table.clear(KeybindManager.Held)
 end))
 
--- Categoría exclusiva de CELULAR para construir un HUD flotante a gusto del
--- usuario. Cada opción solo controla la visibilidad del botón flotante; el botón
--- flotante ejecuta exactamente el toggle original mediante ConfigManager.
+-- En CELULAR, los controles para crear botones flotantes aparecen directamente
+-- junto a cada función compatible. No existe una categoría independiente.
 FloatingButtonManager = {
-	Card = sectionCard(96),
-	Rows = 0,
+	Card = nil,
 	Targets = {},
 	Entries = {},
+	OriginalSizes = {},
 	FloatingCount = 0,
 	DragEntry = nil,
 	DragInput = nil,
 	DragStart = nil,
 	DragPosition = nil,
 	DragMoved = false,
+	InlineGap = 7,
+	InlineWidth = 52,
 }
-FloatingButtonManager.Card.LayoutOrder = 96
-FloatingButtonManager.Card:SetAttribute("HexaCategoryOverride", "FLOATING")
-FloatingButtonManager.Card:SetAttribute("HexaMobileOnly", true)
-sectionTitle(FloatingButtonManager.Card, "BOTONES FLOTANTES", UDim2.new(0, 16, 0, 14))
 
 function FloatingButtonManager:IsEligible(targetButton)
 	if not targetButton or not targetButton.Parent then return false end
@@ -4326,47 +4325,19 @@ function FloatingButtonManager:IsEligible(targetButton)
 		or category == "TELEPORT" or category == "PLAYER"
 end
 
-function FloatingButtonManager:AllocateRow()
-	self.Rows += 1
-	local y = 44 + (self.Rows - 1) * 46
-	self.Card.Size = UDim2.new(1, 0, 0, math.max(96, y + 50))
-	self.Card:SetAttribute("HexaMobileBaseHeight", self.Card.Size.Y.Offset)
-	return y
-end
-
-function FloatingButtonManager:CreateSpecialOption(label)
-	local option = createToggleButton(self.Card, label, UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, self:AllocateRow()))
-	option:SetAttribute("HexaNoKeybind", true)
-	option:SetAttribute("HexaNoFloating", true)
-	option:SetAttribute("HexaNoFavorite", true)
-	-- Se actualiza manualmente desde RefreshEntry para respetar dispositivo + idioma.
-	option:SetAttribute("HexaNoTranslate", true)
-	return option
-end
-
 function FloatingButtonManager:GetTargetLabel(target)
-	-- Usa primero el texto específico del dispositivo. Esto evita que los
-	-- controles flotantes de móvil conserven nombres creados para PC.
 	local devicePrefix = MOBILE_DEVICE and "HexaDeviceMobile" or "HexaDeviceDesktop"
 	local languageSuffix = Lang.Current == "EN" and "EN" or "ES"
 	local deviceText = target:GetAttribute(devicePrefix .. languageSuffix)
-	if typeof(deviceText) == "string" and deviceText ~= "" then
-		return deviceText
-	end
-
-	local spanish = target:GetAttribute("HexaSpanishBaseText")
-		or target:GetAttribute("BaseText")
-		or target.Text
-		or "FUNCIÓN"
+	if typeof(deviceText) == "string" and deviceText ~= "" then return deviceText end
+	local spanish = target:GetAttribute("HexaSpanishBaseText") or target:GetAttribute("BaseText") or target.Text or "FUNCIÓN"
 	spanish = tostring(spanish)
 	return Lang.Current == "EN" and Lang.ToEnglish(spanish) or spanish
 end
 
 function FloatingButtonManager:GetSpanishTargetLabel(target)
 	local deviceText = target:GetAttribute(MOBILE_DEVICE and "HexaDeviceMobileES" or "HexaDeviceDesktopES")
-	if typeof(deviceText) == "string" and deviceText ~= "" then
-		return deviceText
-	end
+	if typeof(deviceText) == "string" and deviceText ~= "" then return deviceText end
 	return tostring(target:GetAttribute("HexaSpanishBaseText") or target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
 end
 
@@ -4379,28 +4350,89 @@ function FloatingButtonManager:DefaultPosition(index)
 	return UDim2.new(rightSide and 1 or 0, rightSide and -xOffset or xOffset, yScale, 0)
 end
 
+function FloatingButtonManager:ApplyInlineLayout(id)
+	local entry = self.Entries[id]
+	local targetButton = self.Targets[id]
+	local option = entry and entry.Option
+	local originalSize = (KeybindManager and KeybindManager.OriginalSizes and KeybindManager.OriginalSizes[id]) or self.OriginalSizes[id]
+	if not targetButton or not targetButton.Parent or not option or not option.Parent or not originalSize then return end
+
+	if not MOBILE_DEVICE then
+		option.Visible = false
+		-- En PC, devolver el control de tamaño al administrador de keybinds.
+		if KeybindManager and KeybindManager.Targets and KeybindManager.Targets[id] then
+			KeybindManager:ApplyInlineLayout(id)
+		else
+			targetButton.Size = originalSize
+		end
+		return
+	end
+
+	local reserve = self.InlineWidth + self.InlineGap
+	targetButton.Size = UDim2.new(
+		originalSize.X.Scale,
+		originalSize.X.Offset - reserve,
+		originalSize.Y.Scale,
+		originalSize.Y.Offset
+	)
+	option.AnchorPoint = Vector2.new(1, 0)
+	option.Position = UDim2.new(1, -16, targetButton.Position.Y.Scale, targetButton.Position.Y.Offset)
+	option.Size = UDim2.new(0, self.InlineWidth, originalSize.Y.Scale, originalSize.Y.Offset)
+	option.Visible = true
+end
+
+function FloatingButtonManager:CreateSpecialOption(label)
+	-- Compatibilidad con el antiguo botón AIM flotante. Se mantiene oculto porque
+	-- AIMBOT (CABEZA/CUERPO) ahora puede crear su propio botón flotante inline.
+	local option = Instance.new("TextButton")
+	option.Name = "HexaLegacyFloatingOption"
+	option.Size = UDim2.fromOffset(1, 1)
+	option.Position = UDim2.fromOffset(-100, -100)
+	option.BackgroundTransparency = 1
+	option.TextTransparency = 1
+	option.BorderSizePixel = 0
+	option.AutoButtonColor = false
+	option.Visible = false
+	option.Text = label
+	option:SetAttribute("BaseText", label)
+	option:SetAttribute("IsActive", false)
+	option:SetAttribute("HexaNoKeybind", true)
+	option:SetAttribute("HexaNoFloating", true)
+	option:SetAttribute("HexaNoFavorite", true)
+	option:SetAttribute("HexaNoSearch", true)
+	option:SetAttribute("HexaNoTranslate", true)
+	option.Parent = ScreenGui
+	return option
+end
+
 function FloatingButtonManager:RefreshEntry(id)
 	local entry = self.Entries[id]
 	if not entry then return end
 	local target = entry.Target
 	local button = entry.Button
-	if not target or not target.Parent or not button or not button.Parent then return end
+	local option = entry.Option
+	if not target or not target.Parent or not button or not button.Parent or not option or not option.Parent then return end
+
+	self:ApplyInlineLayout(id)
 	local active = target:GetAttribute("IsActive") == true
 	local allowed = target:GetAttribute("HexaVipOnly") ~= true or HEXA_IS_VIP
 	button.Visible = MOBILE_DEVICE and entry.Enabled == true and allowed
-	local currentLabel = self:GetTargetLabel(target)
-	button.Text = currentLabel
+	button.Text = self:GetTargetLabel(target)
 
-	-- El nombre de la opción dentro de BOTONES FLOTANTES también debe seguir
-	-- el perfil/idioma actual (p. ej. Ratón -> Toque al elegir celular).
-	if entry.Option and entry.Option.Parent then
-		local prefix = Lang.Current == "EN" and "FLOATING BUTTON: " or "BOTÓN FLOTANTE: "
-		local optionText = prefix .. currentLabel
-		Lang.Updating[entry.Option] = true
-		entry.Option.Text = optionText
-		entry.Option:SetAttribute("BaseText", optionText)
-		entry.Option:SetAttribute("HexaSpanishBaseText", "BOTÓN FLOTANTE: " .. self:GetSpanishTargetLabel(target))
-		Lang.Updating[entry.Option] = nil
+	local locked = not allowed
+	local compactText = Lang.Current == "EN" and "FLOAT" or "FLOT."
+	option.Text = compactText
+	option:SetAttribute("BaseText", compactText)
+	option:SetAttribute("IsActive", entry.Enabled == true)
+	if locked then
+		option.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+		option.TextColor3 = Color3.fromRGB(145, 145, 145)
+	elseif entry.Enabled then
+		option.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+		option.TextColor3 = Color3.fromRGB(12, 12, 12)
+	else
+		option.BackgroundColor3 = Theme.PurpleDeep
+		option.TextColor3 = BUTTON_TEXT_COLOR
 	end
 
 	button.BackgroundColor3 = active and Color3.fromRGB(42, 42, 42) or Color3.fromRGB(12, 12, 12)
@@ -4430,18 +4462,32 @@ function FloatingButtonManager:RegisterToggleButton(targetButton)
 	local id = targetButton:GetAttribute("HexaConfigId")
 	if type(id) ~= "string" or self.Targets[id] then return end
 	self.Targets[id] = targetButton
+	self.OriginalSizes[id] = (KeybindManager and KeybindManager.OriginalSizes and KeybindManager.OriginalSizes[id]) or targetButton.Size
 	self.FloatingCount += 1
 
 	local spanishLabel = self:GetSpanishTargetLabel(targetButton)
-	local option = createToggleButton(
-		self.Card,
-		"BOTÓN FLOTANTE: " .. spanishLabel,
-		UDim2.new(1, -32, 0, 38),
-		UDim2.new(0, 16, 0, self:AllocateRow())
+	local option = neonButton(
+		targetButton.Parent,
+		Lang.Current == "EN" and "FLOAT" or "FLOT.",
+		UDim2.fromOffset(self.InlineWidth, math.max(28, targetButton.Size.Y.Offset)),
+		UDim2.new(1, -16, targetButton.Position.Y.Scale, targetButton.Position.Y.Offset)
 	)
+	option.Name = "HexaInlineFloating"
+	option.AnchorPoint = Vector2.new(1, 0)
+	option.TextXAlignment = Enum.TextXAlignment.Center
+	option.TextSize = 9
+	option.TextScaled = true
 	option:SetAttribute("HexaNoKeybind", true)
 	option:SetAttribute("HexaNoFloating", true)
 	option:SetAttribute("HexaNoFavorite", true)
+	option:SetAttribute("HexaNoSearch", true)
+	option:SetAttribute("HexaNoTranslate", true)
+	option:SetAttribute("HexaInlineFloating", true)
+	local textLimit = Instance.new("UITextSizeConstraint")
+	textLimit.MinTextSize = 7
+	textLimit.MaxTextSize = 9
+	textLimit.Parent = option
+	ConfigManager:RegisterToggle(option, targetButton.Parent, "BOTÓN FLOTANTE: " .. spanishLabel)
 
 	local floatButton = Instance.new("TextButton")
 	floatButton.Name = "HexaFloatingAction_" .. tostring(self.FloatingCount)
@@ -4473,27 +4519,31 @@ function FloatingButtonManager:RegisterToggleButton(targetButton)
 		Enabled = false,
 	}
 	self.Entries[id] = entry
+	self:ApplyInlineLayout(id)
 
-	local function applyVipState()
-		if targetButton:GetAttribute("HexaVipOnly") == true and option:GetAttribute("HexaVipOnly") ~= true then
-			markVipControl(option)
-		end
+	local function syncVipState()
+		local vipOnly = targetButton:GetAttribute("HexaVipOnly") == true
+		option:SetAttribute("HexaVipOnly", vipOnly)
+		if vipOnly and not HEXA_IS_VIP and entry.Enabled then entry.Enabled = false end
 		self:RefreshEntry(id)
 	end
-	applyVipState()
-	targetButton:GetAttributeChangedSignal("HexaVipOnly"):Connect(applyVipState)
+	syncVipState()
+	addVipStateListener(function()
+		if option and option.Parent then syncVipState() end
+	end)
+	targetButton:GetAttributeChangedSignal("HexaVipOnly"):Connect(syncVipState)
 	targetButton:GetAttributeChangedSignal("BaseText"):Connect(function() self:RefreshEntry(id) end)
 	targetButton:GetAttributeChangedSignal("IsActive"):Connect(function() self:RefreshEntry(id) end)
 
 	ConfigManager:BindToggle(option, function()
 		if targetButton:GetAttribute("HexaVipOnly") == true and not requireVip() then
 			entry.Enabled = false
-			setActive(option, false)
+			option:SetAttribute("IsActive", false)
 			self:RefreshEntry(id)
 			return
 		end
 		entry.Enabled = not entry.Enabled
-		setActive(option, entry.Enabled)
+		option:SetAttribute("IsActive", entry.Enabled)
 		self:RefreshEntry(id)
 	end)
 
@@ -4555,7 +4605,7 @@ addVipStateListener(function(isVip)
 		for _, entry in pairs(FloatingButtonManager.Entries) do
 			if entry.Target and entry.Target:GetAttribute("HexaVipOnly") == true then
 				entry.Enabled = false
-				setActive(entry.Option, false)
+				if entry.Option then entry.Option:SetAttribute("IsActive", false) end
 			end
 		end
 	end
@@ -4839,9 +4889,7 @@ local autoAimBodyButton = createToggleButton(CombatCard, "AIMBOT (CUERPO)", UDim
 -- el funcionamiento normal de activar/desactivar manualmente.
 autoAimHeadButton:SetAttribute("HexaKeybindMode", "Hold")
 autoAimBodyButton:SetAttribute("HexaKeybindMode", "Hold")
--- En móvil ambos modos comparten el BOTÓN AIM FLOTANTE especial.
-autoAimHeadButton:SetAttribute("HexaNoFloating", true)
-autoAimBodyButton:SetAttribute("HexaNoFloating", true)
+-- En móvil, cada modo de AIMBOT dispone también de su propio botón FLOT. inline.
 local ignoreFriendsButton = createToggleButton(CombatCard, "IGNORAR AMIGOS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 234))
 local fovButton = createToggleButton(CombatCard, "USAR CÍRCULO FOV", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 280))
 local fovSlider = createSlider(CombatCard, "Radio del FOV", 30, 800, fovRadius, 326, function(v)
@@ -4861,7 +4909,7 @@ local MobileAim = {
 }
 MobileAim.OptionButton = FloatingButtonManager:CreateSpecialOption("BOTÓN DE MIRA FLOTANTE")
 registerDeviceText(MobileAim.OptionButton, "BOTÓN DE MIRA FLOTANTE", "BOTÓN DE MIRA FLOTANTE", "FLOATING AIM BUTTON", "FLOATING AIM BUTTON")
-MobileAim.OptionButton.Visible = true
+MobileAim.OptionButton.Visible = false
 
 MobileAim.Button = Instance.new("TextButton")
 MobileAim.Button.Name = "HexaMobileAimButton"
@@ -8415,7 +8463,7 @@ local function applyDeviceProfile(mode)
 	for _, definition in ipairs(CategoryUI.Definitions) do
 		local button = CategoryUI.Buttons[definition.Key]
 		if button then
-            local hiddenForDevice = ((not MOBILE_DEVICE) and definition.Key == "FLOATING")
+            local hiddenForDevice = false
 			button.Visible = not hiddenForDevice
 			button.Size = MOBILE_DEVICE
 				and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 46), 33)
@@ -8424,15 +8472,13 @@ local function applyDeviceProfile(mode)
 			if corner then corner.CornerRadius = UDim.new(0, MOBILE_DEVICE and 15 or 13) end
 		end
 	end
-	if (not MOBILE_DEVICE) and CategoryUI.Active == "FLOATING" then CategoryUI.Active = "ALL" end
 	CategoryUI:RefreshButtons()
 	if KeybindManager then KeybindManager:SetButtonsVisible(not MOBILE_DEVICE) end
-	if FloatingButtonManager and FloatingButtonManager.Card then FloatingButtonManager.Card.Visible = MOBILE_DEVICE end
 	if FloatingButtonManager then FloatingButtonManager:RefreshAll() end
 
 	CombatCard.Size = UDim2.new(1, 0, 0, 394)
 	CombatCard:SetAttribute("HexaMobileBaseHeight", 394)
-	MobileAim.OptionButton.Visible = true
+	MobileAim.OptionButton.Visible = false
 	if not MOBILE_DEVICE then
 		MobileAim.Enabled = false
 		setActive(MobileAim.OptionButton, false)
