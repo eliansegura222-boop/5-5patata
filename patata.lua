@@ -1605,11 +1605,11 @@ local function showSystemNotification(titleEs, textEs, titleEn, textEn)
 end
 
 Lang.Pairs = {
-	{[[PUNTERÍA AUTOMÁTICA
-Activa la puntería a la cabeza o al cuerpo. En PC, usa el pequeño botón KEY situado a la derecha de cada función compatible para asignarle un atajo.
+	{[[AIMBOT
+Activa la puntería a la cabeza o al cuerpo. En PC, usa el pequeño botón TECLA situado a la derecha de cada función compatible para asignarle un atajo.
 
-KEYBINDS
-Pulsa el pequeño botón KEY junto a una función compatible para asignar una tecla o botón del ratón. Pulsa BACKSPACE al editar un atajo para cancelar la asignación o dejarlo sin tecla.
+ATAJOS DE TECLADO
+Pulsa el pequeño botón TECLA junto a una función compatible para asignar una tecla o botón del ratón. Pulsa BACKSPACE al editar un atajo para cancelar la asignación o dejarlo sin tecla.
 
 CÍRCULO FOV
 Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
@@ -1655,7 +1655,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"RENDIMIENTO", "PERFORMANCE"},
 	{"SISTEMA", "SYSTEM"},
 	{"PERSONALIZAR", "CUSTOMIZE"},
-	{"KEYBINDS", "KEYBINDS"},
+	{"ATAJOS DE TECLADO", "KEYBINDS"},
 	{"CONFIGURACIÓN DE USUARIO", "USER CONFIGURATION"},
 	{"GUARDAR CONFIGURACIÓN", "SAVE CONFIGURATION"},
 	{"CARGAR CONFIGURACIÓN", "LOAD CONFIGURATION"},
@@ -1713,8 +1713,8 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"AUMENTO DE VELOCIDAD", "SPEED BOOST"},
 	{"SALTO INFINITO", "INFINITE JUMP"},
 	{"SALTO ALTO", "HIGH JUMP"},
-	{"LONG JUMP", "LONG JUMP"},
-	{"Potencia de Long Jump", "Long Jump power"},
+	{"SALTO LARGO", "LONG JUMP"},
+	{"Potencia de salto largo", "Long Jump power"},
 	{"SIN COLISIÓN", "NOCLIP"},
 	{"COMBATE Y PUNTERÍA", "COMBAT AND AIM"},
 	{"COMBATE AVANZADO", "ADVANCED COMBAT"},
@@ -1742,15 +1742,15 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"SIN DISPERSIÓN", "NO SPREAD"},
 	{"RECARGA AUTOMÁTICA", "AUTO RELOAD"},
 	{"MUNICIÓN INFINITA", "INFINITE AMMO"},
-	{"HITBOX", "HITBOX"},
-	{"EXPANSOR DE HITBOX", "HITBOX EXPANDER"},
-	{"HITBOX DE CABEZA", "HEAD HITBOX"},
-	{"Tamaño del Hitbox", "Hitbox size"},
-	{"COLOR DEL HITBOX: MORADO", "HITBOX COLOR: PURPLE"},
-	{"COLOR DEL HITBOX:", "HITBOX COLOR:"},
-	{"FULLBRIGHT", "FULLBRIGHT"},
+	{"CAJA DE IMPACTO", "HITBOX"},
+	{"EXPANSOR DE CAJA DE IMPACTO", "HITBOX EXPANDER"},
+	{"CAJA DE IMPACTO DE CABEZA", "HEAD HITBOX"},
+	{"Tamaño de la caja de impacto", "Hitbox size"},
+	{"COLOR DE LA CAJA DE IMPACTO: MORADO", "HITBOX COLOR: PURPLE"},
+	{"COLOR DE LA CAJA DE IMPACTO:", "HITBOX COLOR:"},
+	{"ILUMINACIÓN TOTAL", "FULLBRIGHT"},
 	{"X-RAY", "X-RAY"},
-	{"Transparencia X-Ray", "X-Ray transparency"},
+	{"Transparencia de X-Ray", "X-Ray transparency"},
 	{"RENDIMIENTO DEL JUEGO", "GAME PERFORMANCE"},
 	{"ANTI LAG", "ANTI LAG"},
 	{"MODO CARTÓN", "CARDBOARD MODE"},
@@ -1764,19 +1764,19 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"CALIDAD MÍNIMA", "MINIMUM QUALITY"},
 	{"DESACTIVAR REFLEJOS", "DISABLE REFLECTIONS"},
 	{"FUNCIONES ESENCIALES", "ESSENTIAL FEATURES"},
-	{"INSTANT HIT", "INSTANT HIT"},
+	{"IMPACTO INSTANTÁNEO", "INSTANT HIT"},
 	{"MODO JESÚS (CAMINAR SOBRE AGUA)", "JESUS MODE (WALK ON WATER)"},
 	{"CÁMARA LIBRE", "FREE CAMERA"},
 	{"Velocidad de la cámara libre", "Free camera speed"},
-	{"SPIN", "SPIN"},
-	{"Velocidad del Spin", "Spin speed"},
+	{"GIRO", "SPIN"},
+	{"Velocidad de giro", "Spin speed"},
 	{"ANTI ATURDIMIENTO", "ANTI STUN"},
-	{"ANTI RAGDOLL", "ANTI RAGDOLL"},
+	{"ANTI DERRIBO", "ANTI RAGDOLL"},
 	{"ESP AVANZADO", "ADVANCED ESP"},
 	{"CAJA ESP", "BOX ESP"},
 	{"NOMBRE ESP", "NAME ESP"},
 	{"BARRA DE VIDA ESP", "HEALTH BAR ESP"},
-	{"ESP HIGHLIGHT", "ESP HIGHLIGHT"},
+	{"RESALTADO ESP", "ESP HIGHLIGHT"},
 	{"IGNORAR AMIGOS", "IGNORE FRIENDS"},
 	{"USAR CÍRCULO FOV", "USE FOV CIRCLE"},
 	{"Radio del FOV", "FOV radius"},
@@ -1840,7 +1840,7 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"EXPLOSIÓN", "BURST"},
 	{"H3X4 X - SISTEMA DE CLAVE", "H3X4 X - KEY SYSTEM"},
 	{"Escribe la clave aquí...", "Enter the key here..."},
-	{"Escribe la key", "Enter the key"},
+	{"Escribe la clave", "Enter the key"},
 	{"Verificar clave", "Check key"},
 	{"Obtener clave (Discord)", "Get key (Discord)"},
 	{"¡Clave incorrecta!", "Incorrect key!"},
@@ -1867,17 +1867,18 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"RELOJ", "CLOCK"},
 	{"VUELO", "FLY"},
 	{"HERRAMIENTAS DEL JUGADOR", "PLAYER TOOLS"},
+	{"ACOPLAR PERSONAJE", "CHARACTER ATTACH"},
 	{"SEGUIR AL JUGADOR", "FOLLOW PLAYER"},
 	{"Distancia de seguimiento", "Follow distance"},
-	{"ANTI VOID", "ANTI VOID"},
+	{"ANTI VACÍO", "ANTI VOID"},
 	{"ESPECTAR JUGADOR", "SPECTATE PLAYER"},
-	{"BOTÓN AIM FLOTANTE", "FLOATING AIM BUTTON"},
+	{"BOTÓN DE MIRA FLOTANTE", "FLOATING AIM BUTTON"},
 	{"BOTONES FLOTANTES", "FLOATING BUTTONS"},
 	{"BOTÓN FLOTANTE:", "FLOATING BUTTON:"},
 	{"PRESIONA OTRA TECLA...", "PRESS ANOTHER KEY..."},
-	{"RESETEAR TODOS LOS KEYBINDS", "RESET ALL KEYBINDS"},
-	{"KEYBINDS RESETEADOS", "KEYBINDS RESET"},
-	{"Todos los keybinds fueron eliminados.", "All keybinds were removed."},
+	{"RESTABLECER TODOS LOS ATAJOS", "RESET ALL KEYBINDS"},
+	{"ATAJOS RESTABLECIDOS", "KEYBINDS RESET"},
+	{"Todos los atajos fueron eliminados.", "All keybinds were removed."},
 	{"PERSISTENCIA DE OBJETIVO", "TARGET PERSISTENCE"},
 	{"ELIGE TU DISPOSITIVO", "CHOOSE YOUR DEVICE"},
 	{"Selecciona el dispositivo que estás usando. El panel y los controles se adaptarán a esa elección.", "Select the device you are using. The panel and controls will adapt to that choice."},
@@ -2217,7 +2218,7 @@ KeyBox.BackgroundTransparency = 1
 KeyBox.Size = UDim2.new(1, -20, 1, 0)
 KeyBox.Position = UDim2.new(0, 10, 0, 0)
 KeyBox.Text = ""
-KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la key"
+KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la clave"
 KeyBox.TextColor3 = Theme.TextOff
 KeyBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
 KeyBox.TextSize = 14
@@ -3917,7 +3918,7 @@ function KeybindManager:RefreshButton(id)
 	if not keyButton or not target then return end
 
 	local binding = self.Bindings[id]
-	local compact = "KEY"
+	local compact = Lang.Current == "EN" and "KEY" or "TECLA"
 	if typeof(binding) == "EnumItem" then
 		if binding.EnumType == Enum.UserInputType then
 			if binding == Enum.UserInputType.MouseButton1 then compact = "M1"
@@ -3983,7 +3984,7 @@ function KeybindManager:SetBinding(id, binding, silentDuplicate)
 			local ownerLabel = tostring(owner and (owner:GetAttribute("BaseText") or owner.Text) or "OTRA FUNCIÓN")
 			local keyLabel = self:FormatBinding(binding)
 			showSystemNotification(
-				"KEYBIND REPETIDO",
+				"ATAJO REPETIDO",
 				keyLabel .. " ya está asignada a " .. ownerLabel .. ". Elige otra tecla.",
 				"DUPLICATE KEYBIND",
 				keyLabel .. " is already assigned to " .. ownerLabel .. ". Choose another key."
@@ -4050,7 +4051,7 @@ function KeybindManager:RegisterToggleButton(targetButton)
 
 	local keyButton = neonButton(
 		targetButton.Parent,
-		"KEY",
+		Lang.Current == "EN" and "KEY" or "TECLA",
 		UDim2.fromOffset(self.InlineWidth, math.max(28, targetButton.Size.Y.Offset)),
 		UDim2.new(1, -16, targetButton.Position.Y.Scale, targetButton.Position.Y.Offset)
 	)
@@ -4112,8 +4113,8 @@ function KeybindManager:RegisterToggleButton(targetButton)
 		self.ReadyAt = os.clock() + 0.12
 		keyButton.Text = "..."
 		showSystemNotification(
-			"ASIGNAR KEYBIND",
-			"Presiona una tecla o un botón del ratón para asignarlo. Presiona BACKSPACE para cancelar la asignación o borrar la tecla actual.",
+			"ASIGNAR ATAJO",
+			"Presiona una tecla o un botón del ratón para asignarlo. Presiona BACKSPACE para cancelar la asignación o borrar el atajo actual.",
 			"ASSIGN KEYBIND",
 			"Press a keyboard key or mouse button to assign it. Press BACKSPACE to cancel or clear the current bind."
 		)
@@ -4662,8 +4663,8 @@ local noclipButton = createToggleButton(MoveCard, "SIN COLISIÓN", UDim2.new(1, 
 -- persistentes al bloque principal. FREE: 200 máximo. VIP: 500 máximo.
 ConfigManager.LongJumpActive = false
 ConfigManager.LongJumpPower = 120
-ConfigManager.LongJumpButton = createToggleButton(MoveCard, "LONG JUMP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 440))
-ConfigManager.LongJumpSlider = createSlider(MoveCard, "Potencia de Long Jump", 20, 500, ConfigManager.LongJumpPower, 487, function(v)
+ConfigManager.LongJumpButton = createToggleButton(MoveCard, "SALTO LARGO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 440))
+ConfigManager.LongJumpSlider = createSlider(MoveCard, "Potencia de salto largo", 20, 500, ConfigManager.LongJumpPower, 487, function(v)
 	ConfigManager.LongJumpPower = v
 end, false, 200)
 
@@ -4858,7 +4859,8 @@ local MobileAim = {
 	DragPosition = nil,
 	DragMoved = false,
 }
-MobileAim.OptionButton = FloatingButtonManager:CreateSpecialOption("BOTÓN AIM FLOTANTE")
+MobileAim.OptionButton = FloatingButtonManager:CreateSpecialOption("BOTÓN DE MIRA FLOTANTE")
+registerDeviceText(MobileAim.OptionButton, "BOTÓN DE MIRA FLOTANTE", "BOTÓN DE MIRA FLOTANTE", "FLOATING AIM BUTTON", "FLOATING AIM BUTTON")
 MobileAim.OptionButton.Visible = true
 
 MobileAim.Button = Instance.new("TextButton")
@@ -4869,7 +4871,7 @@ MobileAim.Button.Size = UDim2.fromOffset(68, 68)
 MobileAim.Button.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 MobileAim.Button.BackgroundTransparency = 0.08
 MobileAim.Button.BorderSizePixel = 0
-MobileAim.Button.Text = "AIM"
+MobileAim.Button.Text = Lang.Current == "EN" and "AIM" or "MIRA"
 MobileAim.Button.TextColor3 = Color3.fromRGB(245, 245, 245)
 MobileAim.Button.TextSize = 15
 MobileAim.Button.Font = Enum.Font.GothamBold
@@ -4886,9 +4888,16 @@ function MobileAim:Refresh()
 	local shouldShow = MOBILE_DEVICE and self.Enabled
 	local aimActive = autoAimHeadActive or autoAimBodyActive
 	self.Button.Visible = shouldShow
-	self.Button.Text = aimActive and "AIM • ON" or "AIM"
+	self.Button.Text = aimActive and (Lang.Current == "EN" and "AIM • ON" or "MIRA • ACTIVO") or (Lang.Current == "EN" and "AIM" or "MIRA")
 	self.Button.BackgroundColor3 = aimActive and Color3.fromRGB(42, 42, 42) or Color3.fromRGB(12, 12, 12)
 	self.Stroke.Transparency = aimActive and 0 or 0.15
+end
+
+if Lang.MainButton then
+	Lang.MainButton.MouseButton1Click:Connect(function() task.defer(function() MobileAim:Refresh() end) end)
+end
+if Lang.Button then
+	Lang.Button.MouseButton1Click:Connect(function() task.defer(function() MobileAim:Refresh() end) end)
 end
 
 MobileAim.Button.InputBegan:Connect(function(input)
@@ -6124,11 +6133,9 @@ task.spawn(function()
 		local CombatAdvancedCard = sectionCard(678)
 		CombatAdvancedCard.LayoutOrder = 21
 		sectionTitle(CombatAdvancedCard, "COMBATE AVANZADO", UDim2.new(0, 16, 0, 14))
-		local WallButton = createToggleButton(CombatAdvancedCard, "WALL CHECK", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
-		WallButton:SetAttribute("HexaNoTranslate", true)
+		local WallButton = createToggleButton(CombatAdvancedCard, "COMPROBAR PAREDES", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 		local TeamButton = createToggleButton(CombatAdvancedCard, "COMPROBAR EQUIPOS", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
-		local PredictionButton = createToggleButton(CombatAdvancedCard, "TARGET PREDICTION", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
-		PredictionButton:SetAttribute("HexaNoTranslate", true)
+		local PredictionButton = createToggleButton(CombatAdvancedCard, "PREDICCIÓN DEL OBJETIVO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
 		local TargetSwitchDelayButton = createToggleButton(CombatAdvancedCard, "RETARDO AL CAMBIAR OBJETIVO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
 		createSlider(CombatAdvancedCard, "Retardo de cambio de objetivo (ms)", 50, 2000, Settings.TargetSwitchDelayMs, 228, function(value)
 			Settings.TargetSwitchDelayMs = math.clamp(math.floor(value + 0.5), 50, 2000)
@@ -6146,7 +6153,7 @@ task.spawn(function()
 		local AutoReloadButton = createToggleButton(CombatAdvancedCard, "RECARGA AUTOMÁTICA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 486))
 		local InfiniteAmmoButton = createToggleButton(CombatAdvancedCard, "MUNICIÓN INFINITA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 532))
 		markVipControl(InfiniteAmmoButton)
-		local FullbrightButton = createToggleButton(CombatAdvancedCard, "FULLBRIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
+		local FullbrightButton = createToggleButton(CombatAdvancedCard, "ILUMINACIÓN TOTAL", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 578))
 		local TargetPersistenceButton = createToggleButton(CombatAdvancedCard, "PERSISTENCIA DE OBJETIVO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 624))
 
 		local WeaponLockCard = sectionCard(96)
@@ -6180,13 +6187,13 @@ task.spawn(function()
 
 		local HitboxCard = sectionCard(250)
 		HitboxCard.LayoutOrder = 23
-		sectionTitle(HitboxCard, "HITBOX", UDim2.new(0, 16, 0, 14))
-		local HitboxButton = createToggleButton(HitboxCard, "EXPANSOR DE HITBOX", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
-		local HeadHitboxButton = createToggleButton(HitboxCard, "HITBOX DE CABEZA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
-		createSlider(HitboxCard, "Tamaño del Hitbox", 2, 25, Settings.HitboxSize, 136, function(value)
+		sectionTitle(HitboxCard, "CAJA DE IMPACTO", UDim2.new(0, 16, 0, 14))
+		local HitboxButton = createToggleButton(HitboxCard, "EXPANSOR DE CAJA DE IMPACTO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
+		local HeadHitboxButton = createToggleButton(HitboxCard, "CAJA DE IMPACTO DE CABEZA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
+		createSlider(HitboxCard, "Tamaño de la caja de impacto", 2, 25, Settings.HitboxSize, 136, function(value)
 			Settings.HitboxSize = math.floor(value + 0.5)
 		end, false, 15)
-		local HitboxColorButton = neonButton(HitboxCard, "COLOR DEL HITBOX: MORADO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 196))
+		local HitboxColorButton = neonButton(HitboxCard, "COLOR DE LA CAJA DE IMPACTO: MORADO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 196))
 
 		local EspAdvancedCard = sectionCard(340)
 		EspAdvancedCard.LayoutOrder = 31
@@ -6194,12 +6201,10 @@ task.spawn(function()
 		local BoxButton = createToggleButton(EspAdvancedCard, "CAJA ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 		local NameButton = createToggleButton(EspAdvancedCard, "NOMBRE ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 		local HealthButton = createToggleButton(EspAdvancedCard, "BARRA DE VIDA ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
-		local HighlightButton = createToggleButton(EspAdvancedCard, "ESP HIGHLIGHT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
-		HighlightButton:SetAttribute("HexaNoTranslate", true)
+		local HighlightButton = createToggleButton(EspAdvancedCard, "RESALTADO ESP", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
 		local XRayButton = createToggleButton(EspAdvancedCard, "X-RAY", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 228))
-		XRayButton:SetAttribute("HexaNoTranslate", true)
 		markVipControl(XRayButton)
-		createSlider(EspAdvancedCard, "Transparencia X-Ray", 0, 100, Settings.XRayTransparency, 274, function(value)
+		createSlider(EspAdvancedCard, "Transparencia de X-Ray", 0, 100, Settings.XRayTransparency, 274, function(value)
 			Settings.XRayTransparency = value
 			if Settings.XRay then
 				local transparency = math.clamp(value / 100, 0, 1)
@@ -6219,8 +6224,8 @@ task.spawn(function()
 		createSlider(CameraMovementCard, "Velocidad de la cámara libre", 10, 300, Settings.DroneSpeed, 90, function(value)
 			Settings.DroneSpeed = value
 		end, true)
-		local SpinButton = createToggleButton(CameraMovementCard, "SPIN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 150))
-		createSlider(CameraMovementCard, "Velocidad del Spin", 10, 400, Settings.SpinSpeed, 196, function(value)
+		local SpinButton = createToggleButton(CameraMovementCard, "GIRO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 150))
+		createSlider(CameraMovementCard, "Velocidad de giro", 10, 400, Settings.SpinSpeed, 196, function(value)
 			Settings.SpinSpeed = value
 		end)
 		local CameraFovButton = createToggleButton(CameraMovementCard, "AMPLIAR FOV", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 256))
@@ -6237,7 +6242,7 @@ task.spawn(function()
 		ProtectionCard.LayoutOrder = 36
 		sectionTitle(ProtectionCard, "PROTECCIÓN DEL PERSONAJE", UDim2.new(0, 16, 0, 14))
 		local AntiStunButton = createToggleButton(ProtectionCard, "ANTI ATURDIMIENTO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
-		local AntiRagdollButton = createToggleButton(ProtectionCard, "ANTI RAGDOLL", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
+		local AntiRagdollButton = createToggleButton(ProtectionCard, "ANTI DERRIBO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 
 		local Buttons = {
 			WallCheck = WallButton,
@@ -7547,7 +7552,7 @@ task.spawn(function()
 		end
 
 		local function refreshHitboxColorButton()
-			local spanishText = "COLOR DEL HITBOX: " .. HitboxColorNames[Settings.HitboxColorIndex]
+			local spanishText = "COLOR DE LA CAJA DE IMPACTO: " .. HitboxColorNames[Settings.HitboxColorIndex]
 			HitboxColorButton:SetAttribute("HexaSpanishText", spanishText)
 			HitboxColorButton:SetAttribute("HexaSpanishBaseText", spanishText)
 			HitboxColorButton:SetAttribute("BaseText", spanishText)
@@ -7930,7 +7935,7 @@ task.spawn(function()
 		EssentialsCard.LayoutOrder = 22
 		sectionTitle(EssentialsCard, "FUNCIONES ESENCIALES", UDim2.new(0, 16, 0, 14))
 
-		local InstantHitButton = createToggleButton(EssentialsCard, "INSTANT HIT", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
+		local InstantHitButton = createToggleButton(EssentialsCard, "IMPACTO INSTANTÁNEO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 		markVipControl(InstantHitButton)
 		local JesusButton = createToggleButton(EssentialsCard, "MODO JESÚS (CAMINAR SOBRE AGUA)", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
 
@@ -8548,7 +8553,7 @@ CheckKeyBtn.MouseButton1Click:Connect(function()
 		KeyBox.Text = ""
 		KeyBox.PlaceholderText = "¡Clave incorrecta!"
 		task.delay(1.5, function()
-			KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la key"
+			KeyBox.PlaceholderText = Lang.Current == "EN" and "Enter the key" or "Escribe la clave"
 		end)
 	end
 end)
@@ -9238,7 +9243,7 @@ task.spawn(function()
 			self.BunnyHopButton = createToggleButton(self.MoveExtraCard, "SALTO DE CONEJO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 187))
 			self.NoFallButton = createToggleButton(self.MoveExtraCard, "SIN DAÑO POR CAÍDA", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 233))
 			markVipControl(self.NoFallButton)
-			self.AntiVoidButton = createToggleButton(self.MoveExtraCard, "ANTI VOID", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 279))
+			self.AntiVoidButton = createToggleButton(self.MoveExtraCard, "ANTI VACÍO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 279))
 
 			self:connect(self.ResetGravityButton.MouseButton1Click, function()
 				workspace.Gravity = self.GravityDefault
@@ -9498,7 +9503,7 @@ task.spawn(function()
 			self.PlayerToolsTitle = TpTitle
 			-- CHARACTER ATTACH usa createToggleButton: el propio constructor lo registra en KeybindManager
 			-- cuando TELETRANSPORTE es una categoría elegible. No duplicar ese registro.
-			self.CharacterAttachButton = createToggleButton(self.PlayerToolsCard, "CHARACTER ATTACH", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
+			self.CharacterAttachButton = createToggleButton(self.PlayerToolsCard, "ACOPLAR PERSONAJE", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
 			self.SpectateButton = createToggleButton(self.PlayerToolsCard, "ESPECTAR JUGADOR", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 182))
 			markVipControl(self.SpectateButton)
 			self.InspectorButton = createToggleButton(self.PlayerToolsCard, "INSPECTOR DE JUGADOR", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 228))
