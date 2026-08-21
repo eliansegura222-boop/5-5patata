@@ -6,7 +6,7 @@ if not __BootstrapPlayer then
 end
 local __BootstrapPlayerGui = __BootstrapPlayer:WaitForChild("PlayerGui")
 local __BootstrapGui = Instance.new("ScreenGui")
-__BootstrapGui.Name = "H4SK_Bootstrap"
+__BootstrapGui.Name = "H3X4_X_Bootstrap"
 __BootstrapGui.IgnoreGuiInset = true
 __BootstrapGui.ResetOnSpawn = false
 __BootstrapGui.DisplayOrder = 2147483647
@@ -162,7 +162,7 @@ local RemoteVipState = (function()
 		}
 		return true
 	end
-	pcall(function() __BootstrapText.Text = "Verificando acceso VIP..." end)
+	pcall(function() __BootstrapText.Text = "Preparando H3X4 X..." end)
 	state:Refresh()
 	return state
 end)()
@@ -669,7 +669,7 @@ local TargetParent = PlayerGui
 local function destroyExistingHexa(parent)
 	if not parent then return end
 	pcall(function()
-		for _, guiName in ipairs({"H4SK", "HexaX", "H4SK_PreMainDim"}) do
+		for _, guiName in ipairs({"H3X4_X", "HexaX", "H3X4_X_PreMainDim"}) do
 			local existing = parent:FindFirstChild(guiName)
 			if existing then existing:Destroy() end
 		end
@@ -762,9 +762,6 @@ local Lang = {Current = "ES"}
 local UI_READY = false
 local PERFORMANCE_MODE = false
 local refreshCategoryView = function() end
-local refreshFavoritesCard = function() end
-local registerFunctionButton = function() end
-local registerAllFunctionButtons = function() end
 
 local function mkCorner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -896,11 +893,6 @@ local function neonButton(parent: Instance, text: string, size: UDim2, pos: UDim
 	btn:SetAttribute("BaseText", text)
 	btn:SetAttribute("IsActive", false)
 	addHover(btn, Theme.PurpleDeep, Theme.PurpleDark, Theme.Active)
-	if UI_READY then
-		task.defer(function()
-			if btn and btn.Parent then registerFunctionButton(btn) end
-		end)
-	end
 	return btn, stroke
 end
 
@@ -959,11 +951,6 @@ local function createToggleButton(parent: Instance, text: string, size: UDim2, p
 	end) end
 	
 	addHover(btn, Theme.PurpleDeep, Theme.PurpleDark, Theme.Active)
-	if UI_READY then
-		task.defer(function()
-			if btn and btn.Parent then registerFunctionButton(btn) end
-		end)
-	end
 	return btn
 end
 
@@ -1361,7 +1348,7 @@ local function createSlider(parent: Instance, title: string, minVal: number, max
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "H4SK"
+ScreenGui.Name = "H3X4_X"
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 2147483647
@@ -1415,7 +1402,7 @@ TargetParent = ScreenGui.Parent
 -- Se guarda dentro de ConfigManager para no aumentar la cantidad de variables locales
 -- activas del bloque principal (este script ya está muy cerca del límite de Luau).
 ConfigManager.PreMainDimGui = Instance.new("ScreenGui")
-ConfigManager.PreMainDimGui.Name = "H4SK_PreMainDim"
+ConfigManager.PreMainDimGui.Name = "H3X4_X_PreMainDim"
 ConfigManager.PreMainDimGui.IgnoreGuiInset = true
 ConfigManager.PreMainDimGui.ResetOnSpawn = false
 ConfigManager.PreMainDimGui.DisplayOrder = 2147483646
@@ -1608,7 +1595,7 @@ Lang.Pairs = {
 	{[[AIMBOT
 Activa la puntería a la cabeza o al cuerpo. En PC, usa el pequeño botón TECLA situado a la derecha de cada función compatible para asignarle un atajo.
 
-ATAJOS DE TECLADO
+TECLAS RÁPIDAS
 Pulsa el pequeño botón TECLA junto a una función compatible para asignar una tecla o botón del ratón. Pulsa BACKSPACE al editar un atajo para cancelar la asignación o dejarlo sin tecla.
 
 CÍRCULO FOV
@@ -1627,7 +1614,7 @@ FUNCIONES VIP
 Las opciones que muestran la etiqueta VIP requieren una clave VIP activa.]], [[AUTO AIM
 Enable aiming at the head or body. On PC, use the small KEY button to the right of each compatible feature to assign a shortcut.
 
-KEYBINDS
+SHORTCUT KEYS
 Press the small KEY button beside a compatible feature to assign a keyboard key or mouse button. Press BACKSPACE while editing a bind to cancel the assignment or leave it unbound.
 
 FOV CIRCLE
@@ -1655,12 +1642,9 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"RENDIMIENTO", "PERFORMANCE"},
 	{"SISTEMA", "SYSTEM"},
 	{"PERSONALIZAR", "CUSTOMIZE"},
-	{"ATAJOS DE TECLADO", "KEYBINDS"},
 	{"CONFIGURACIÓN DE USUARIO", "USER CONFIGURATION"},
 	{"GUARDAR CONFIGURACIÓN", "SAVE CONFIGURATION"},
 	{"CARGAR CONFIGURACIÓN", "LOAD CONFIGURATION"},
-	{"FAVORITOS", "FAVORITES"},
-	{"NO TIENES FUNCIONES FAVORITAS", "YOU HAVE NO FAVORITE FEATURES"},
 	{"TELETRANSPORTARSE AL TOQUE", "TELEPORT TO TOUCH"},
 	{"AUTO TOQUES", "AUTO TAP"},
 	{"Toques por segundo", "Taps per second"},
@@ -1872,13 +1856,8 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"Distancia de seguimiento", "Follow distance"},
 	{"ANTI VACÍO", "ANTI VOID"},
 	{"ESPECTAR JUGADOR", "SPECTATE PLAYER"},
-	{"BOTÓN DE MIRA FLOTANTE", "FLOATING AIM BUTTON"},
-	{"BOTONES FLOTANTES", "FLOATING BUTTONS"},
 	{"BOTÓN FLOTANTE:", "FLOATING BUTTON:"},
 	{"PRESIONA OTRA TECLA...", "PRESS ANOTHER KEY..."},
-	{"RESTABLECER TODOS LOS ATAJOS", "RESET ALL KEYBINDS"},
-	{"ATAJOS RESTABLECIDOS", "KEYBINDS RESET"},
-	{"Todos los atajos fueron eliminados.", "All keybinds were removed."},
 	{"PERSISTENCIA DE OBJETIVO", "TARGET PERSISTENCE"},
 	{"ELIGE TU DISPOSITIVO", "CHOOSE YOUR DEVICE"},
 	{"Selecciona el dispositivo que estás usando. El panel y los controles se adaptarán a esa elección.", "Select the device you are using. The panel and controls will adapt to that choice."},
@@ -2157,7 +2136,6 @@ function Lang.Set(language)
 	if KeybindManager and languageChanged then KeybindManager:RefreshAll() end
 	if languageChanged then
 		task.defer(function()
-			refreshFavoritesCard()
 			refreshCategoryView()
 		end)
 	end
@@ -2499,8 +2477,6 @@ CloseButton.BackgroundColor3 = Theme.PurpleDeep
 local MinButton = neonButton(Header, "-", UDim2.new(0, 36, 0, 34), UDim2.new(1, -90, 0, 12), 4)
 MinButton.TextColor3 = BUTTON_TEXT_COLOR
 MinButton.BackgroundColor3 = Theme.PurpleDeep
-MinButton:SetAttribute("HexaNoFavorite", true)
-CloseButton:SetAttribute("HexaNoFavorite", true)
 
 local TutorialBtn = neonButton(Header, "INFO", UDim2.new(0, 54, 0, 34), UDim2.new(1, -150, 0, 12), 4)
 TutorialBtn.TextColor3 = Theme.TextOff
@@ -2509,13 +2485,11 @@ TutorialBtn:SetAttribute("HexaKeepBackgroundOnHover", true)
 TutorialBtn.TextSize = 11
 TutorialBtn.Font = Enum.Font.GothamBold
 TutorialBtn:SetAttribute("HexaNoTranslate", true)
-TutorialBtn:SetAttribute("HexaNoFavorite", true)
 
 Lang.MainButton = neonButton(Header, "ES", UDim2.new(0, 44, 0, 34), UDim2.new(1, -200, 0, 12), 4)
 Lang.MainButton.TextColor3 = BUTTON_TEXT_COLOR
 Lang.MainButton.BackgroundColor3 = Theme.PurpleDeep
 Lang.MainButton:SetAttribute("HexaNoTranslate", true)
-Lang.MainButton:SetAttribute("HexaNoFavorite", true)
 Lang.MainButton.MouseButton1Click:Connect(function()
 	Lang.Set(Lang.Current == "ES" and "EN" or "ES")
 end)
@@ -2712,15 +2686,6 @@ local function createCategoryIcon(parent, categoryKey)
 		line("GearBottom", 7, 12, 2, 4, 0)
 		line("GearLeft", 0, 7, 4, 2, 0)
 		line("GearRight", 12, 7, 4, 2, 0)
-	elseif categoryKey == "KEYBINDS" then
-		part("KeyLeft", 1, 4, 4, 4, 0, 2, true)
-		part("KeyMid", 6, 4, 4, 4, 0, 2, true)
-		part("KeyRight", 11, 4, 4, 4, 0, 2, true)
-		part("Space", 3, 10, 10, 4, 0, 2, true)
-	elseif categoryKey == "FLOATING" then
-		part("FloatOne", 1, 2, 6, 5, 0, 2, true)
-		part("FloatTwo", 9, 2, 6, 5, 0, 2, true)
-		part("FloatThree", 5, 9, 6, 5, 0, 2, true)
 	elseif categoryKey == "CUSTOMIZE" then
 		line("SliderTop", 1, 3, 14, 2, 0)
 		line("SliderMiddle", 1, 7, 14, 2, 0)
@@ -2735,7 +2700,6 @@ end
 
 function CategoryUI:GetCardCategory(card)
 	if not card or not card:IsA("Frame") then return "ALL" end
-	if card.Name == "HexaFavoritesCard" then return "HOME" end
 	local override = card:GetAttribute("HexaCategoryOverride")
 	if type(override) == "string" and override ~= "" then return override end
 	local order = tonumber(card.LayoutOrder) or 0
@@ -2817,7 +2781,6 @@ for index, definition in ipairs(CategoryUI.Definitions) do
 	button.AutoButtonColor = false
 	button.ZIndex = 5
 	button.Parent = CategoryUI.Scroll
-	button:SetAttribute("HexaNoFavorite", true)
 	button:SetAttribute("HexaNoTranslate", true)
 	mkCorner(button, MOBILE_DEVICE and 15 or 13)
 	local stroke = mkStroke(button, Theme.Purple, 0.62, 1)
@@ -2959,7 +2922,6 @@ CategoryUI.Search.Close.Font = Enum.Font.GothamBold
 CategoryUI.Search.Close.AutoButtonColor = false
 CategoryUI.Search.Close.ZIndex = 73
 CategoryUI.Search.Close.Parent = CategoryUI.Search.Panel
-CategoryUI.Search.Close:SetAttribute("HexaNoFavorite", true)
 CategoryUI.Search.Close:SetAttribute("HexaNoSearch", true)
 mkCorner(CategoryUI.Search.Close, 8)
 mkStroke(CategoryUI.Search.Close, Theme.Accent, 0.42, 1)
@@ -3057,7 +3019,7 @@ function CategoryUI:CollectSearchTargets()
 		if card:IsA("Frame") and card:GetAttribute("HexaContentCard") == true then
 			local category = self:GetCardCategory(card)
 			local blockedByDevice = (MOBILE_DEVICE and card:GetAttribute("HexaDesktopOnly") == true)
-				or ((not MOBILE_DEVICE) and (card:GetAttribute("HexaMobileOnly") == true or category == "FLOATING"))
+				or ((not MOBILE_DEVICE) and card:GetAttribute("HexaMobileOnly") == true)
 			if not blockedByDevice then
 				for _, object in ipairs(card:GetDescendants()) do
 					-- El buscador global debe mostrar únicamente funciones.
@@ -3076,7 +3038,7 @@ function CategoryUI:CollectSearchTargets()
 						and not insidePlayerDropdown
 						and ConfigManager:IsAvailableForCurrentDevice(object) then
 						local spanish = self:GetSearchLabel(object)
-						if spanish ~= "" and object.Name ~= "HexaFavoriteShortcut" then
+						if spanish ~= "" then
 							table.insert(self.Search.Targets, {Button = object, Card = card})
 						end
 					end
@@ -3269,193 +3231,6 @@ CategoryUI.Search.Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect
 end)
 
 do
-local FAVORITES_FILE_NAME = ("HexaX_Favorites_%d.json"):format(LocalPlayer.UserId)
-local FavoriteIds = {}
-local FavoriteRegistry = {}
-local FavoriteStars = {}
-
-local function normalizeFavoriteId(value)
-	local text = string.lower(tostring(value or ""))
-	text = text:gsub("á", "a"):gsub("é", "e"):gsub("í", "i"):gsub("ó", "o"):gsub("ú", "u"):gsub("ü", "u"):gsub("ñ", "n")
-	text = text:gsub("%s+", " ")
-	return text:gsub("^%s+", ""):gsub("%s+$", "")
-end
-
-local function loadFavorites()
-	if type(isfile) ~= "function" or type(readfile) ~= "function" then return end
-	local ok, raw = pcall(function()
-		if isfile(FAVORITES_FILE_NAME) then return readfile(FAVORITES_FILE_NAME) end
-	end)
-	if not ok or type(raw) ~= "string" or raw == "" then return end
-	local decodedOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-	if decodedOk and type(decoded) == "table" then
-		for _, id in ipairs(decoded) do FavoriteIds[tostring(id)] = true end
-	end
-end
-
-local function saveFavorites()
-	if type(writefile) ~= "function" then return end
-	local values = {}
-	for id, enabled in pairs(FavoriteIds) do
-		if enabled then table.insert(values, id) end
-	end
-	table.sort(values)
-	pcall(function() writefile(FAVORITES_FILE_NAME, HttpService:JSONEncode(values)) end)
-end
-
-loadFavorites()
-
-local FavoritesCard = Instance.new("Frame")
-FavoritesCard.Name = "HexaFavoritesCard"
-FavoritesCard.LayoutOrder = 0
-FavoritesCard.Size = UDim2.new(1, 0, 0, 60)
-FavoritesCard.BackgroundColor3 = Theme.Panel
-FavoritesCard.BackgroundTransparency = 0.24
-FavoritesCard.BorderSizePixel = 0
-FavoritesCard.ClipsDescendants = true
-FavoritesCard.Visible = false
-FavoritesCard.Parent = Content
-FavoritesCard:SetAttribute("HexaContentCard", true)
-mkCorner(FavoritesCard, 16)
-mkStroke(FavoritesCard, Theme.VipGold, 0.18, 1)
-
-local FavoritesTitle = sectionTitle(FavoritesCard, "FAVORITOS", UDim2.new(0, 16, 0, 14))
-FavoritesTitle.TextColor3 = Theme.VipGold
-local FavoritesEmpty = Instance.new("TextLabel")
-FavoritesEmpty.BackgroundTransparency = 1
-FavoritesEmpty.Position = UDim2.new(0, 16, 0, 38)
-FavoritesEmpty.Size = UDim2.new(1, -32, 0, 26)
-FavoritesEmpty.Text = "NO TIENES FUNCIONES FAVORITAS"
-FavoritesEmpty.TextColor3 = Color3.fromRGB(150, 150, 150)
-FavoritesEmpty.TextSize = 11
-FavoritesEmpty.Font = Enum.Font.GothamMedium
-FavoritesEmpty.TextXAlignment = Enum.TextXAlignment.Left
-FavoritesEmpty.Parent = FavoritesCard
-
-local function getCardForButton(button)
-	local current = button.Parent
-	while current and current ~= Content do
-		if current.Parent == Content and current:IsA("Frame") then return current end
-		current = current.Parent
-	end
-	return nil
-end
-
-local function getFavoriteSourceText(button)
-	local base = button:GetAttribute("HexaSpanishBaseText") or button:GetAttribute("BaseText") or button.Text
-	base = Lang.ToSpanish(tostring(base or ""))
-	base = base:gsub("  •  ACTIVO", "")
-	return base
-end
-
-local function getFavoriteId(button)
-	local card = getCardForButton(button)
-	local cardTitle = "GENERAL"
-	if card then
-		for _, child in ipairs(card:GetChildren()) do
-			if child:IsA("TextLabel") and child.Name ~= "HexaVipBadge" then
-				cardTitle = Lang.ToSpanish(child.Text)
-				break
-			end
-		end
-	end
-	return normalizeFavoriteId(cardTitle .. "|" .. getFavoriteSourceText(button))
-end
-
-local function updateFavoriteStars()
-	for id, star in pairs(FavoriteStars) do
-		if star and star.Parent then
-			star.Visible = HEXA_IS_VIP
-			star.Text = FavoriteIds[id] and "★" or "☆"
-			star.TextColor3 = BUTTON_TEXT_COLOR
-		end
-	end
-end
-
-refreshFavoritesCard = function()
-	for _, child in ipairs(FavoritesCard:GetChildren()) do
-		if child:GetAttribute("HexaFavoriteShortcut") == true then child:Destroy() end
-	end
-	local entries = {}
-	for id, enabled in pairs(FavoriteIds) do
-		local entry = enabled and FavoriteRegistry[id] or nil
-		if entry and entry.Button and entry.Button.Parent then
-			table.insert(entries, {id = id, entry = entry, label = getFavoriteSourceText(entry.Button)})
-		end
-	end
-	table.sort(entries, function(a, b) return a.label < b.label end)
-	FavoritesEmpty.Visible = #entries == 0
-	local y = 42
-	for _, item in ipairs(entries) do
-		local shortcut = Instance.new("TextButton")
-		shortcut:SetAttribute("HexaFavoriteShortcut", true)
-		shortcut:SetAttribute("HexaNoFavorite", true)
-		shortcut.Position = UDim2.new(0, 16, 0, y)
-		shortcut.Size = UDim2.new(1, -32, 0, 36)
-		shortcut.BackgroundColor3 = Theme.Panel2
-		shortcut.BackgroundTransparency = 1
-		shortcut.BorderSizePixel = 0
-		shortcut.Text = item.label
-		shortcut.TextColor3 = BUTTON_TEXT_COLOR
-		shortcut.TextSize = 11
-		shortcut.Font = Enum.Font.GothamSemibold
-		shortcut.AutoButtonColor = false
-		shortcut.Parent = FavoritesCard
-		shortcut:SetAttribute("BaseText", item.label)
-		mkCorner(shortcut, 9)
-		mkStroke(shortcut, Theme.VipGold, 0.45, 1)
-		addHover(shortcut, Theme.Panel2, Theme.Accent2, Theme.Active)
-		shortcut.MouseButton1Click:Connect(function()
-			local target = item.entry.Button
-			local targetCard = item.entry.Card
-			if target and target.Parent and targetCard and targetCard.Parent then
-				task.defer(function()
-					local relativeY = targetCard.AbsolutePosition.Y - Content.AbsolutePosition.Y + Content.CanvasPosition.Y
-					Content.CanvasPosition = Vector2.new(0, math.max(0, relativeY - 10))
-					local pulse = target:FindFirstChild("HexaFavoritePulse")
-					if not pulse then
-						pulse = mkStroke(target, Theme.VipGold, 0, 3)
-						pulse.Name = "HexaFavoritePulse"
-					end
-					pulse.Enabled = true
-					task.delay(1.1, function()
-						if pulse and pulse.Parent then pulse.Enabled = false end
-					end)
-				end)
-			end
-		end)
-		y += 42
-	end
-	FavoritesCard.Size = UDim2.new(1, 0, 0, #entries > 0 and (y + 8) or 72)
-	FavoritesCard:SetAttribute("HexaHasFavorites", #entries > 0)
-	FavoritesCard.Visible = HEXA_IS_VIP and #entries > 0
-	updateFavoriteStars()
-end
-
-registerFunctionButton = function(button)
-	-- Favoritos deshabilitados: no crear estrellas ni accesos directos.
-	if button and button:IsA("TextButton") then
-		button:SetAttribute("HexaNoFavorite", true)
-	end
-end
-
-registerAllFunctionButtons = function()
-	if not Content or not Content.Parent then return end
-	-- Solo inspeccionar hijos directos de cada tarjeta. Los botones internos de
-	-- sliders/toggles no necesitan registrarse como favoritos y recorrer todos los
-	-- descendientes aquí era un pico grande después de ofuscar.
-	for _, card in ipairs(Content:GetChildren()) do
-		if card:IsA("GuiObject") then
-			for _, object in ipairs(card:GetChildren()) do
-				if object:IsA("TextButton") then
-					registerFunctionButton(object)
-				end
-			end
-		end
-	end
-	refreshFavoritesCard()
-end
-
 local CardOriginalPositions = setmetatable({}, {__mode = "k"})
 local CardOriginalSizes = setmetatable({}, {__mode = "k"})
 local CardUnitsCache = setmetatable({}, {__mode = "k"})
@@ -3540,7 +3315,7 @@ local function getCardUnits(card)
 	if cached then return cached end
 	local units = {}
 	for _, object in ipairs(card:GetChildren()) do
-		if isCardUnit(object) and object.Name ~= "HexaFavoriteStar" then
+		if isCardUnit(object) then
 			if not CardOriginalPositions[object] then CardOriginalPositions[object] = object.Position end
 			table.insert(units, object)
 		end
@@ -3656,15 +3431,13 @@ refreshCategoryView = function()
 	local vipView = CategoryUI.Active == "VIP"
 
 	for _, card in ipairs(getContentCards()) do
-		local cardCategory = CategoryUI:GetCardCategory(card)
 		local desktopOnly = card:GetAttribute("HexaDesktopOnly") == true
-		local mobileOnly = card:GetAttribute("HexaMobileOnly") == true or cardCategory == "FLOATING"
+		local mobileOnly = card:GetAttribute("HexaMobileOnly") == true
 
 		if (MOBILE_DEVICE and desktopOnly) or ((not MOBILE_DEVICE) and mobileOnly) then
 			setGuiVisible(card, false)
 		else
-			local defaultVisible = card ~= FavoritesCard or (HEXA_IS_VIP and card:GetAttribute("HexaHasFavorites") == true)
-			local normalMatch = (not vipView) and defaultVisible and CategoryUI:Matches(card)
+			local normalMatch = (not vipView) and CategoryUI:Matches(card)
 
 			if not vipView and not normalMatch then
 				setGuiVisible(card, false)
@@ -3716,7 +3489,6 @@ end
 
 Content.DescendantAdded:Connect(function(object)
 	if not UI_READY then return end
-	if object:IsA("TextButton") then pcall(registerFunctionButton, object) end
 	local card = findOwningContentCard(object)
 	if not card then
 		if object:IsA("Frame") and object.Parent == Content and object:GetAttribute("HexaContentCard") == true then
@@ -3745,7 +3517,6 @@ Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 addVipStateListener(function()
-	refreshFavoritesCard()
 	refreshCategoryView()
 end)
 
@@ -4062,7 +3833,6 @@ function KeybindManager:RegisterToggleButton(targetButton)
 	keyButton.TextXAlignment = Enum.TextXAlignment.Center
 	keyButton.TextSize = 10
 	keyButton.TextScaled = true
-	keyButton:SetAttribute("HexaNoFavorite", true)
 	keyButton:SetAttribute("HexaNoSearch", true)
 	keyButton:SetAttribute("HexaNoTranslate", true)
 	keyButton:SetAttribute("HexaInlineKeybind", true)
@@ -4076,7 +3846,6 @@ function KeybindManager:RegisterToggleButton(targetButton)
 	local function syncVipKeybindState()
 		local vipOnly = targetButton:GetAttribute("HexaVipOnly") == true
 		local locked = vipOnly and not HEXA_IS_VIP
-		keyButton:SetAttribute("HexaVipKeybind", vipOnly)
 		keyButton:SetAttribute("HexaVipOnly", vipOnly)
 		keyButton.BackgroundColor3 = locked and Color3.fromRGB(12, 12, 12) or Theme.PurpleDeep
 		keyButton.TextColor3 = locked and Color3.fromRGB(150, 150, 150) or BUTTON_TEXT_COLOR
@@ -4298,7 +4067,6 @@ end))
 -- En CELULAR, los controles para crear botones flotantes aparecen directamente
 -- junto a cada función compatible. No existe una categoría independiente.
 FloatingButtonManager = {
-	Card = nil,
 	Targets = {},
 	Entries = {},
 	OriginalSizes = {},
@@ -4381,33 +4149,13 @@ function FloatingButtonManager:ApplyInlineLayout(id)
 	option.Visible = true
 end
 
-function FloatingButtonManager:CreateSpecialOption(label)
-	-- Compatibilidad con el antiguo botón AIM flotante. Se mantiene oculto porque
-	-- AIMBOT (CABEZA/CUERPO) ahora puede crear su propio botón flotante inline.
-	local option = Instance.new("TextButton")
-	option.Name = "HexaLegacyFloatingOption"
-	option.Size = UDim2.fromOffset(1, 1)
-	option.Position = UDim2.fromOffset(-100, -100)
-	option.BackgroundTransparency = 1
-	option.TextTransparency = 1
-	option.BorderSizePixel = 0
-	option.AutoButtonColor = false
-	option.Visible = false
-	option.Text = label
-	option:SetAttribute("BaseText", label)
-	option:SetAttribute("IsActive", false)
-	option:SetAttribute("HexaNoKeybind", true)
-	option:SetAttribute("HexaNoFloating", true)
-	option:SetAttribute("HexaNoFavorite", true)
-	option:SetAttribute("HexaNoSearch", true)
-	option:SetAttribute("HexaNoTranslate", true)
-	option.Parent = ScreenGui
-	return option
-end
-
 function FloatingButtonManager:RefreshEntry(id)
 	local entry = self.Entries[id]
 	if not entry then return end
+	if not MOBILE_DEVICE and entry.Enabled then
+		entry.Enabled = false
+		if entry.Option then entry.Option:SetAttribute("IsActive", false) end
+	end
 	local target = entry.Target
 	local button = entry.Button
 	local option = entry.Option
@@ -4479,7 +4227,7 @@ function FloatingButtonManager:RegisterToggleButton(targetButton)
 	option.TextScaled = true
 	option:SetAttribute("HexaNoKeybind", true)
 	option:SetAttribute("HexaNoFloating", true)
-	option:SetAttribute("HexaNoFavorite", true)
+	option:SetAttribute("HexaMobileOnly", true)
 	option:SetAttribute("HexaNoSearch", true)
 	option:SetAttribute("HexaNoTranslate", true)
 	option:SetAttribute("HexaInlineFloating", true)
@@ -4507,6 +4255,7 @@ function FloatingButtonManager:RegisterToggleButton(targetButton)
 	floatButton.Active = true
 	floatButton.ZIndex = 175
 	floatButton:SetAttribute("HexaNoTranslate", true)
+	floatButton:SetAttribute("HexaMobileOnly", true)
 	floatButton.Parent = ScreenGui
 	mkCorner(floatButton, 13)
 	local stroke = mkStroke(floatButton, Theme.Purple, 0.18, 2)
@@ -4617,8 +4366,6 @@ ConfigManager.Card.LayoutOrder = 72
 sectionTitle(ConfigManager.Card, "CONFIGURACIÓN DE USUARIO", UDim2.new(0, 16, 0, 14))
 ConfigManager.SaveButton = neonButton(ConfigManager.Card, "GUARDAR CONFIGURACIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 ConfigManager.LoadButton = neonButton(ConfigManager.Card, "CARGAR CONFIGURACIÓN", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
-ConfigManager.SaveButton:SetAttribute("HexaNoFavorite", true)
-ConfigManager.LoadButton:SetAttribute("HexaNoFavorite", true)
 
 function ConfigManager:ShowButtonResult(button, message, baseText)
 	button.Text = message
@@ -4897,102 +4644,6 @@ local fovSlider = createSlider(CombatCard, "Radio del FOV", 30, 800, fovRadius, 
 	FovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
 end)
 
--- Opción exclusiva del perfil CELULAR. El botón flotante se puede arrastrar y
--- funciona como un interruptor rápido del aim usando el último modo cabeza/cuerpo.
-local MobileAim = {
-	Enabled = false,
-	PreferredHead = true,
-	DragInput = nil,
-	DragStart = nil,
-	DragPosition = nil,
-	DragMoved = false,
-}
-MobileAim.OptionButton = FloatingButtonManager:CreateSpecialOption("BOTÓN DE MIRA FLOTANTE")
-registerDeviceText(MobileAim.OptionButton, "BOTÓN DE MIRA FLOTANTE", "BOTÓN DE MIRA FLOTANTE", "FLOATING AIM BUTTON", "FLOATING AIM BUTTON")
-MobileAim.OptionButton.Visible = false
-
-MobileAim.Button = Instance.new("TextButton")
-MobileAim.Button.Name = "HexaMobileAimButton"
-MobileAim.Button.AnchorPoint = Vector2.new(0.5, 0.5)
-MobileAim.Button.Position = UDim2.new(1, -82, 0.62, 0)
-MobileAim.Button.Size = UDim2.fromOffset(68, 68)
-MobileAim.Button.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-MobileAim.Button.BackgroundTransparency = 0.08
-MobileAim.Button.BorderSizePixel = 0
-MobileAim.Button.Text = Lang.Current == "EN" and "AIM" or "MIRA"
-MobileAim.Button.TextColor3 = Color3.fromRGB(245, 245, 245)
-MobileAim.Button.TextSize = 15
-MobileAim.Button.Font = Enum.Font.GothamBold
-MobileAim.Button.AutoButtonColor = false
-MobileAim.Button.Visible = false
-MobileAim.Button.Active = true
-MobileAim.Button.ZIndex = 180
-MobileAim.Button.Parent = ScreenGui
-MobileAim.Button:SetAttribute("HexaNoTranslate", true)
-mkCorner(MobileAim.Button, 34)
-MobileAim.Stroke = mkStroke(MobileAim.Button, Theme.Purple, 0.15, 2)
-
-function MobileAim:Refresh()
-	local shouldShow = MOBILE_DEVICE and self.Enabled
-	local aimActive = autoAimHeadActive or autoAimBodyActive
-	self.Button.Visible = shouldShow
-	self.Button.Text = aimActive and (Lang.Current == "EN" and "AIM • ON" or "MIRA • ACTIVO") or (Lang.Current == "EN" and "AIM" or "MIRA")
-	self.Button.BackgroundColor3 = aimActive and Color3.fromRGB(42, 42, 42) or Color3.fromRGB(12, 12, 12)
-	self.Stroke.Transparency = aimActive and 0 or 0.15
-end
-
-if Lang.MainButton then
-	Lang.MainButton.MouseButton1Click:Connect(function() task.defer(function() MobileAim:Refresh() end) end)
-end
-if Lang.Button then
-	Lang.Button.MouseButton1Click:Connect(function() task.defer(function() MobileAim:Refresh() end) end)
-end
-
-MobileAim.Button.InputBegan:Connect(function(input)
-	if not MOBILE_DEVICE or not MobileAim.Enabled then return end
-	if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-	MobileAim.DragInput = input
-	MobileAim.DragStart = Vector2.new(input.Position.X, input.Position.Y)
-	MobileAim.DragPosition = MobileAim.Button.Position
-	MobileAim.DragMoved = false
-end)
-
-AllSliders.TrackConnection(UserInputService.InputChanged:Connect(function(input)
-	if not MobileAim.DragInput or not MobileAim.DragStart or not MobileAim.DragPosition then return end
-	local validMove = (MobileAim.DragInput.UserInputType == Enum.UserInputType.Touch and input == MobileAim.DragInput)
-		or (MobileAim.DragInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseMovement)
-	if not validMove then return end
-	local current = Vector2.new(input.Position.X, input.Position.Y)
-	local delta = current - MobileAim.DragStart
-	if delta.Magnitude >= 7 then MobileAim.DragMoved = true end
-	local camera = workspace.CurrentCamera
-	local viewport = camera and camera.ViewportSize or GUI_VIEWPORT_SIZE
-	local half = 34
-	local desiredX = math.clamp(MobileAim.DragPosition.X.Scale * viewport.X + MobileAim.DragPosition.X.Offset + delta.X, half + 4, viewport.X - half - 4)
-	local desiredY = math.clamp(MobileAim.DragPosition.Y.Scale * viewport.Y + MobileAim.DragPosition.Y.Offset + delta.Y, half + 4, viewport.Y - half - 4)
-	MobileAim.Button.Position = UDim2.fromOffset(desiredX, desiredY)
-end))
-
-AllSliders.TrackConnection(UserInputService.InputEnded:Connect(function(input)
-	if input ~= MobileAim.DragInput then return end
-	if MOBILE_DEVICE and MobileAim.Enabled and not MobileAim.DragMoved then
-		if autoAimHeadActive then
-			ConfigManager:ActivateToggle(autoAimHeadButton)
-		elseif autoAimBodyActive then
-			ConfigManager:ActivateToggle(autoAimBodyButton)
-		elseif MobileAim.PreferredHead then
-			ConfigManager:ActivateToggle(autoAimHeadButton)
-		else
-			ConfigManager:ActivateToggle(autoAimBodyButton)
-		end
-		task.defer(function() MobileAim:Refresh() end)
-	end
-	MobileAim.DragInput = nil
-	MobileAim.DragStart = nil
-	MobileAim.DragPosition = nil
-	MobileAim.DragMoved = false
-end))
-
 local EspCard = sectionCard(204)
 EspCard.LayoutOrder = 30
 sectionTitle(EspCard, "VISUALES (ESP)", UDim2.new(0, 16, 0, 14))
@@ -5248,7 +4899,6 @@ Tutorial.CloseButton = neonButton(Tutorial.Frame, "CERRAR", UDim2.new(0, 140, 0,
 Tutorial.CloseButton.BackgroundColor3 = Theme.Panel2
 Tutorial.CloseButton.TextColor3 = Theme.TextOff
 Tutorial.CloseButton:SetAttribute("HexaKeepBackgroundOnHover", true)
-Tutorial.CloseButton:SetAttribute("HexaNoFavorite", true)
 registerDeviceText(Tutorial.CloseButton, "CERRAR", "CERRAR", "CLOSE", "CLOSE")
 
 do
@@ -5945,30 +5595,15 @@ end)
 
 ConfigManager:BindToggle(autoAimHeadButton, function()
 	autoAimHeadActive = not autoAimHeadActive
-	if autoAimHeadActive then MobileAim.PreferredHead = true end
 	setActive(autoAimHeadButton, autoAimHeadActive)
 	if autoAimHeadActive and autoAimBodyActive then autoAimBodyActive = false; setActive(autoAimBodyButton, false) end
 	if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee = nil end
-	MobileAim:Refresh()
 end)
 ConfigManager:BindToggle(autoAimBodyButton, function()
 	autoAimBodyActive = not autoAimBodyActive
-	if autoAimBodyActive then MobileAim.PreferredHead = false end
 	setActive(autoAimBodyButton, autoAimBodyActive)
 	if autoAimBodyActive and autoAimHeadActive then autoAimHeadActive = false; setActive(autoAimHeadButton, false) end
 	if not autoAimHeadActive and not autoAimBodyActive then AimHighlight.Adornee = nil end
-	MobileAim:Refresh()
-end)
-ConfigManager:BindToggle(MobileAim.OptionButton, function()
-	if not MOBILE_DEVICE then
-		MobileAim.Enabled = false
-		setActive(MobileAim.OptionButton, false)
-		MobileAim:Refresh()
-		return
-	end
-	MobileAim.Enabled = not MobileAim.Enabled
-	setActive(MobileAim.OptionButton, MobileAim.Enabled)
-	MobileAim:Refresh()
 end)
 ConfigManager:BindToggle(ignoreFriendsButton, function() ignoreFriendsActive = not ignoreFriendsActive; setActive(ignoreFriendsButton, ignoreFriendsActive) end)
 ConfigManager:BindToggle(fovButton, function() fovActive = not fovActive; setActive(fovButton, fovActive); FovCircle.Visible = fovActive end)
@@ -6351,8 +5986,6 @@ task.spawn(function()
 
 			local DroneUp = neonButton(MobileDroneControls, "SUBIR", UDim2.new(1, 0, 0, 42), UDim2.new(0, 0, 0, 0), 131)
 			local DroneDown = neonButton(MobileDroneControls, "BAJAR", UDim2.new(1, 0, 0, 42), UDim2.new(0, 0, 1, -42), 131)
-			DroneUp:SetAttribute("HexaNoFavorite", true)
-			DroneDown:SetAttribute("HexaNoFavorite", true)
 
 			local function bindVertical(button, direction)
 				connect(button.InputBegan, function(input)
@@ -6554,7 +6187,7 @@ task.spawn(function()
 				end
 			end)
 			State.FullbrightApplying = false
-			if not ok then warn("[H4SK / FULLBRIGHT] " .. tostring(applyError)) end
+			if not ok then warn("[H3X4_X / FULLBRIGHT] " .. tostring(applyError)) end
 		end
 
 		local function restoreFullbright()
@@ -7952,7 +7585,7 @@ task.spawn(function()
 	end)
 
 	if not moduleOk then
-		warn("[H4SK / FUNCIONES ADICIONALES] " .. tostring(moduleError))
+		warn("[H3X4_X / FUNCIONES ADICIONALES] " .. tostring(moduleError))
 	end
 end)
 
@@ -8188,7 +7821,7 @@ task.spawn(function()
 	end)
 
 	if not essentialsOk then
-		warn("[H4SK / FUNCIONES ESENCIALES] " .. tostring(essentialsError))
+		warn("[H3X4_X / FUNCIONES ESENCIALES] " .. tostring(essentialsError))
 	end
 end)
 
@@ -8478,17 +8111,12 @@ local function applyDeviceProfile(mode)
 
 	CombatCard.Size = UDim2.new(1, 0, 0, 394)
 	CombatCard:SetAttribute("HexaMobileBaseHeight", 394)
-	MobileAim.OptionButton.Visible = false
 	if not MOBILE_DEVICE then
-		MobileAim.Enabled = false
-		setActive(MobileAim.OptionButton, false)
 		Runtime.mobileAimTouchActive = false
 		Runtime.mobileAimTouchInput = nil
 	end
-	MobileAim:Refresh()
 	setMobileFlyControlsVisible(MOBILE_DEVICE and flyActive)
 	refreshDeviceSpecificTexts()
-	refreshFavoritesCard()
 
 	if Tutorial and Tutorial.Scroll then Tutorial.Scroll.ScrollBarThickness = MOBILE_DEVICE and 6 or 4 end
 	if Tutorial and Tutorial.Text then Tutorial.Text.TextSize = MOBILE_DEVICE and 11 or 12 end
@@ -8961,7 +8589,6 @@ end)
 
 UI_READY = true
 task.defer(function()
-	registerAllFunctionButtons()
 	refreshCategoryView()
 end)
 
@@ -10038,7 +9665,6 @@ task.spawn(function()
 			mkStroke(self.PanicButton, Color3.fromRGB(255, 115, 115), 0.2, 1)
 			self.PanicButton:SetAttribute("BaseText", "ACTIVAR MODO PÁNICO")
 			self.PanicButton:SetAttribute("IsActive", false)
-			self.PanicButton:SetAttribute("HexaNoFavorite", true)
 			addHover(self.PanicButton, Theme.Danger, Color3.fromRGB(238, 70, 70), Color3.fromRGB(185, 35, 35))
 			self:connect(self.PanicButton.MouseButton1Click, function()
 				self:panic()
@@ -10324,7 +9950,7 @@ task.spawn(function()
 			end
 			if contains(MainFrame) or contains(KeyFrame) or contains(ConfirmFrame) or contains(Tutorial.Frame)
 				or contains(RestoreOrb) or contains(self.InfoHud) or contains(self.InspectorFrame)
-				or contains(VipNotification) or contains(MobileFlyControls) or contains(MobileAim and MobileAim.Button) then
+				or contains(VipNotification) or contains(MobileFlyControls) then
 				return true
 			end
 			return FloatingButtonManager and FloatingButtonManager:IsPointerOverAny(point) or false
@@ -10450,13 +10076,12 @@ task.spawn(function()
 		pcall(function() X:setupGlobalConnections() end)
 		Lang.Set(Lang.Current)
 		task.defer(function()
-			registerAllFunctionButtons()
 			refreshCategoryView()
 		end)
 	end)
 
 	if not success then
-		warn("[H4SK] Error al cargar la extensión modular: " .. tostring(errorMessage))
+		warn("[H3X4_X] Error al cargar la extensión modular: " .. tostring(errorMessage))
 	end
 end)
 
@@ -10473,13 +10098,13 @@ if __HexaOk then
 		if __BootstrapGui and __BootstrapGui.Parent then __BootstrapGui:Destroy() end
 	end)
 else
-	warn("[H4SK] Error de inicio: " .. tostring(__HexaError))
+	warn("[H3X4_X] Error de inicio: " .. tostring(__HexaError))
 	pcall(function()
-		local staleDim = __BootstrapPlayerGui and __BootstrapPlayerGui:FindFirstChild("H4SK_PreMainDim")
+		local staleDim = __BootstrapPlayerGui and __BootstrapPlayerGui:FindFirstChild("H3X4_X_PreMainDim")
 		if staleDim then staleDim:Destroy() end
 		if not __BootstrapGui or not __BootstrapGui.Parent then
 			__BootstrapGui = Instance.new("ScreenGui")
-			__BootstrapGui.Name = "H4SK_Bootstrap"
+			__BootstrapGui.Name = "H3X4_X_Bootstrap"
 			__BootstrapGui.IgnoreGuiInset = true
 			__BootstrapGui.ResetOnSpawn = false
 			__BootstrapGui.DisplayOrder = 2147483647
