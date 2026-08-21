@@ -1606,10 +1606,10 @@ end
 
 Lang.Pairs = {
 	{[[PUNTERÍA AUTOMÁTICA
-Activa la puntería a la cabeza o al cuerpo. Los atajos ya no aparecen dentro de las funciones: configúralos desde la categoría KEYBINDS.
+Activa la puntería a la cabeza o al cuerpo. En PC, usa el pequeño botón KEY situado a la derecha de cada función compatible para asignarle un atajo.
 
 KEYBINDS
-Asigna teclas o botones del ratón a las funciones compatibles desde una sola categoría. Pulsa BACKSPACE al editar un atajo para cancelar la asignación o dejarlo sin tecla.
+Pulsa el pequeño botón KEY junto a una función compatible para asignar una tecla o botón del ratón. Pulsa BACKSPACE al editar un atajo para cancelar la asignación o dejarlo sin tecla.
 
 CÍRCULO FOV
 Limita el área en la que se seleccionan objetivos. Activa USAR CÍRCULO FOV y ajusta su radio.
@@ -1625,10 +1625,10 @@ Selecciona un jugador y pulsa IR AL JUGADOR. En computadora puedes usar TP AL RA
 
 FUNCIONES VIP
 Las opciones que muestran la etiqueta VIP requieren una clave VIP activa.]], [[AUTO AIM
-Enable aiming at the head or body. Keybind controls are no longer embedded inside each feature; configure them from the KEYBINDS category.
+Enable aiming at the head or body. On PC, use the small KEY button to the right of each compatible feature to assign a shortcut.
 
 KEYBINDS
-Assign keyboard keys or mouse buttons to compatible features from one category. Press BACKSPACE while editing a bind to cancel the assignment or leave it unbound.
+Press the small KEY button beside a compatible feature to assign a keyboard key or mouse button. Press BACKSPACE while editing a bind to cancel the assignment or leave it unbound.
 
 FOV CIRCLE
 Limits the area where targets are selected. Enable USE FOV CIRCLE and adjust its radius.
@@ -2553,7 +2553,6 @@ local CategoryUI = {
 		{Key = "PERFORMANCE", Label = "RENDIMIENTO"},
 		{Key = "INFO", Label = "INFORMACIÓN"},
 		{Key = "SYSTEM", Label = "SISTEMA"},
-		{Key = "KEYBINDS", Label = "KEYBINDS"},
 		{Key = "FLOATING", Label = "BOTONES FLOTANTES"},
 		{Key = "CUSTOMIZE", Label = "PERSONALIZAR"},
 	},
@@ -3057,7 +3056,7 @@ function CategoryUI:CollectSearchTargets()
 	for _, card in ipairs(Content:GetChildren()) do
 		if card:IsA("Frame") and card:GetAttribute("HexaContentCard") == true then
 			local category = self:GetCardCategory(card)
-			local blockedByDevice = (MOBILE_DEVICE and (card:GetAttribute("HexaDesktopOnly") == true or category == "KEYBINDS"))
+			local blockedByDevice = (MOBILE_DEVICE and card:GetAttribute("HexaDesktopOnly") == true)
 				or ((not MOBILE_DEVICE) and (card:GetAttribute("HexaMobileOnly") == true or category == "FLOATING"))
 			if not blockedByDevice then
 				for _, object in ipairs(card:GetDescendants()) do
@@ -3595,7 +3594,11 @@ local function restoreCardLayout(card, units)
 	for _, unit in ipairs(units) do
 		local originalPosition = CardOriginalPositions[unit]
 		if originalPosition then setGuiPosition(unit, originalPosition) end
-		setGuiVisible(unit, true)
+		if unit:GetAttribute("HexaInlineKeybind") == true then
+			setGuiVisible(unit, not MOBILE_DEVICE)
+		else
+			setGuiVisible(unit, true)
+		end
 	end
 end
 
@@ -3607,6 +3610,7 @@ local function showVipUnits(card, units)
 		local rowVisible = false
 		for _, unit in ipairs(row.Units) do
 			local include = unitIsVip(unit)
+			if unit:GetAttribute("HexaInlineKeybind") == true and MOBILE_DEVICE then include = false end
 			setGuiVisible(unit, include)
 			if include then rowVisible = true end
 		end
@@ -3650,7 +3654,7 @@ refreshCategoryView = function()
 
 	for _, card in ipairs(getContentCards()) do
 		local cardCategory = CategoryUI:GetCardCategory(card)
-		local desktopOnly = card:GetAttribute("HexaDesktopOnly") == true or cardCategory == "KEYBINDS"
+		local desktopOnly = card:GetAttribute("HexaDesktopOnly") == true
 		local mobileOnly = card:GetAttribute("HexaMobileOnly") == true or cardCategory == "FLOATING"
 
 		if (MOBILE_DEVICE and desktopOnly) or ((not MOBILE_DEVICE) and mobileOnly) then
@@ -3759,53 +3763,62 @@ local function sectionCard(height: number)
 	return card
 end
 
--- Categoría independiente para todos los atajos. Los botones originales ya no
--- muestran keybinds a su lado: aquí se centralizan los atajos de funciones de
--- movimiento, combate, visuales, teletransporte y jugador.
+-- Los keybinds se muestran directamente junto a cada función compatible.
+-- No existe una categoría KEYBINDS independiente: el mismo administrador conserva
+-- la lógica de guardado, teclas únicas, VIP y modo HOLD, pero la interfaz es inline.
 KeybindManager = {
-	Card = sectionCard(96),
-	Rows = 0,
 	Bindings = {},
 	ReverseBindings = {},
 	Buttons = {},
 	Targets = {},
+	OriginalSizes = {},
 	Held = {},
 	LastTrigger = {},
 	DecodeCache = {},
 	Capturing = nil,
 	ReadyAt = 0,
+	InlineGap = 8,
+	InlineWidth = 44,
 }
-KeybindManager.Card.LayoutOrder = 95
-KeybindManager.Card:SetAttribute("HexaCategoryOverride", "KEYBINDS")
-KeybindManager.Card:SetAttribute("HexaDesktopOnly", true)
-sectionTitle(KeybindManager.Card, "KEYBINDS", UDim2.new(0, 16, 0, 14))
 
-KeybindManager.ResetAllButton = neonButton(
-	KeybindManager.Card,
-	"RESETEAR TODOS LOS KEYBINDS",
-	UDim2.new(1, -32, 0, 38),
-	UDim2.new(0, 16, 0, 44)
-)
-KeybindManager.ResetAllButton:SetAttribute("HexaNoFavorite", true)
-KeybindManager.ResetAllButton.LayoutOrder = -100
-KeybindManager.Card.Size = UDim2.new(1, 0, 0, 142)
-KeybindManager.Card:SetAttribute("HexaMobileBaseHeight", KeybindManager.Card.Size.Y.Offset)
+function KeybindManager:ApplyInlineLayout(id)
+	local targetButton = self.Targets[id]
+	local keyButton = self.Buttons[id]
+	local originalSize = self.OriginalSizes[id]
+	if not targetButton or not targetButton.Parent or not keyButton or not originalSize then return end
 
-KeybindManager.ResetAllButton.MouseButton1Click:Connect(function()
-	if MOBILE_DEVICE then return end
-	KeybindManager:ClearBindings()
-	showSystemNotification(
-		"KEYBINDS RESETEADOS",
-		"Todos los keybinds fueron eliminados.",
-		"KEYBINDS RESET",
-		"All keybinds were removed."
+	if MOBILE_DEVICE then
+		targetButton.Size = originalSize
+		keyButton.Visible = false
+		return
+	end
+
+	local reserve = self.InlineWidth + self.InlineGap
+	targetButton.Size = UDim2.new(
+		originalSize.X.Scale,
+		originalSize.X.Offset - reserve,
+		originalSize.Y.Scale,
+		originalSize.Y.Offset
 	)
-end)
+	keyButton.AnchorPoint = Vector2.new(1, 0)
+	keyButton.Position = UDim2.new(1, -16, targetButton.Position.Y.Scale, targetButton.Position.Y.Offset)
+	keyButton.Size = UDim2.new(0, self.InlineWidth, originalSize.Y.Scale, originalSize.Y.Offset)
+	keyButton.Visible = true
+end
+
+function KeybindManager:SetButtonsVisible(visible)
+	for id, keyButton in pairs(self.Buttons) do
+		if keyButton and keyButton.Parent then
+			self:ApplyInlineLayout(id)
+			keyButton.Visible = visible == true and not MOBILE_DEVICE
+		end
+	end
+end
 
 function KeybindManager:IsEligible(targetButton)
 	-- Registrar siempre los controles compatibles aunque el perfil todavía no se
-	-- haya elegido o una tarjeta termine de crearse tarde. En móvil la categoría
-	-- simplemente permanece oculta y las teclas no se ejecutan.
+	-- haya elegido o una tarjeta termine de crearse tarde. En móvil los botones
+	-- inline permanecen ocultos y las teclas no se ejecutan.
 	if not targetButton or not targetButton.Parent then return false end
 	if targetButton:GetAttribute("IsToggle") ~= true then return false end
 	if targetButton:GetAttribute("HexaNoKeybind") == true then return false end
@@ -3902,13 +3915,22 @@ function KeybindManager:RefreshButton(id)
 	local keyButton = self.Buttons[id]
 	local target = self.Targets[id]
 	if not keyButton or not target then return end
-	local label = tostring(target:GetAttribute("BaseText") or target.Text or "FUNCIÓN")
-	local suffix = self:FormatBinding(self.Bindings[id])
-	if self:IsHoldTarget(id) and typeof(self.Bindings[id]) == "EnumItem" then
-		suffix = suffix .. (Lang.Current == "EN" and "  •  HOLD" or "  •  MANTENER")
+
+	local binding = self.Bindings[id]
+	local compact = "KEY"
+	if typeof(binding) == "EnumItem" then
+		if binding.EnumType == Enum.UserInputType then
+			if binding == Enum.UserInputType.MouseButton1 then compact = "M1"
+			elseif binding == Enum.UserInputType.MouseButton2 then compact = "M2"
+			elseif binding == Enum.UserInputType.MouseButton3 then compact = "M3"
+			else compact = binding.Name end
+		else
+			compact = binding.Name
+		end
 	end
-	keyButton.Text = label .. "  •  " .. suffix
-	keyButton:SetAttribute("BaseText", keyButton.Text)
+
+	keyButton.Text = compact
+	keyButton:SetAttribute("BaseText", compact)
 end
 
 function KeybindManager:RefreshAll()
@@ -4022,27 +4044,44 @@ function KeybindManager:RegisterToggleButton(targetButton)
 	if not self:IsEligible(targetButton) then return end
 	local id = targetButton:GetAttribute("HexaConfigId")
 	if type(id) ~= "string" or self.Targets[id] then return end
-	self.Rows += 1
-	self.Targets[id] = targetButton
 
-	local y = 90 + (self.Rows - 1) * 46
-	local keyButton = neonButton(self.Card, "", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, y))
+	self.Targets[id] = targetButton
+	self.OriginalSizes[id] = targetButton.Size
+
+	local keyButton = neonButton(
+		targetButton.Parent,
+		"KEY",
+		UDim2.fromOffset(self.InlineWidth, math.max(28, targetButton.Size.Y.Offset)),
+		UDim2.new(1, -16, targetButton.Position.Y.Scale, targetButton.Position.Y.Offset)
+	)
+	keyButton.Name = "HexaInlineKeybind"
+	keyButton.AnchorPoint = Vector2.new(1, 0)
+	keyButton.TextXAlignment = Enum.TextXAlignment.Center
+	keyButton.TextSize = 10
+	keyButton.TextScaled = true
 	keyButton:SetAttribute("HexaNoFavorite", true)
+	keyButton:SetAttribute("HexaNoSearch", true)
 	keyButton:SetAttribute("HexaNoTranslate", true)
-	keyButton.TextXAlignment = Enum.TextXAlignment.Left
-	local pad = keyButton:FindFirstChildOfClass("UIPadding") or Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 14)
-	pad.Parent = keyButton
+	keyButton:SetAttribute("HexaInlineKeybind", true)
+	local textLimit = Instance.new("UITextSizeConstraint")
+	textLimit.MinTextSize = 7
+	textLimit.MaxTextSize = 10
+	textLimit.Parent = keyButton
 	self.Buttons[id] = keyButton
-	self.Card.Size = UDim2.new(1, 0, 0, math.max(142, y + 50))
-	self.Card:SetAttribute("HexaMobileBaseHeight", self.Card.Size.Y.Offset)
+	self:ApplyInlineLayout(id)
+
 	local function syncVipKeybindState()
-		if targetButton:GetAttribute("HexaVipOnly") == true then
-			keyButton:SetAttribute("HexaVipKeybind", true)
-			if keyButton:GetAttribute("HexaVipOnly") ~= true then markVipControl(keyButton) end
-		end
+		local vipOnly = targetButton:GetAttribute("HexaVipOnly") == true
+		local locked = vipOnly and not HEXA_IS_VIP
+		keyButton:SetAttribute("HexaVipKeybind", vipOnly)
+		keyButton:SetAttribute("HexaVipOnly", vipOnly)
+		keyButton.BackgroundColor3 = locked and Color3.fromRGB(12, 12, 12) or Theme.PurpleDeep
+		keyButton.TextColor3 = locked and Color3.fromRGB(150, 150, 150) or BUTTON_TEXT_COLOR
 	end
 	syncVipKeybindState()
+	addVipStateListener(function()
+		if keyButton and keyButton.Parent then syncVipKeybindState() end
+	end)
 	self:RefreshButton(id)
 
 	targetButton:GetAttributeChangedSignal("HexaVipOnly"):Connect(syncVipKeybindState)
@@ -4071,8 +4110,7 @@ function KeybindManager:RegisterToggleButton(targetButton)
 		if targetButton:GetAttribute("HexaVipOnly") == true and not requireVip() then return end
 		self.Capturing = id
 		self.ReadyAt = os.clock() + 0.12
-		local label = tostring(targetButton:GetAttribute("BaseText") or targetButton.Text or "FUNCIÓN")
-		keyButton.Text = label .. "  •  " .. (Lang.Current == "EN" and "PRESS A KEY..." or "PRESIONA UNA TECLA...")
+		keyButton.Text = "..."
 		showSystemNotification(
 			"ASIGNAR KEYBIND",
 			"Presiona una tecla o un botón del ratón para asignarlo. Presiona BACKSPACE para cancelar la asignación o borrar la tecla actual.",
@@ -4774,8 +4812,8 @@ local autoAimBodyActive = false
 local ignoreFriendsActive = false
 local fovActive = false
 
--- Los aimbots ya no tienen controles de keybind incrustados en esta tarjeta.
--- Los atajos se administran desde la categoría KEYBINDS.
+-- En PC, cada función compatible muestra un botón KEY compacto a su derecha.
+-- Los aimbots conservan el modo HOLD cuando tienen una tecla asignada.
 local maxAimDistance = 500
 local fovRadius = 200
 
@@ -8372,8 +8410,7 @@ local function applyDeviceProfile(mode)
 	for _, definition in ipairs(CategoryUI.Definitions) do
 		local button = CategoryUI.Buttons[definition.Key]
 		if button then
-			local hiddenForDevice = (MOBILE_DEVICE and definition.Key == "KEYBINDS")
-				or ((not MOBILE_DEVICE) and definition.Key == "FLOATING")
+            local hiddenForDevice = ((not MOBILE_DEVICE) and definition.Key == "FLOATING")
 			button.Visible = not hiddenForDevice
 			button.Size = MOBILE_DEVICE
 				and UDim2.fromOffset(math.max(92, #definition.Label * 6 + 46), 33)
@@ -8382,10 +8419,9 @@ local function applyDeviceProfile(mode)
 			if corner then corner.CornerRadius = UDim.new(0, MOBILE_DEVICE and 15 or 13) end
 		end
 	end
-	if MOBILE_DEVICE and CategoryUI.Active == "KEYBINDS" then CategoryUI.Active = "ALL" end
 	if (not MOBILE_DEVICE) and CategoryUI.Active == "FLOATING" then CategoryUI.Active = "ALL" end
 	CategoryUI:RefreshButtons()
-	if KeybindManager and KeybindManager.Card then KeybindManager.Card.Visible = not MOBILE_DEVICE end
+	if KeybindManager then KeybindManager:SetButtonsVisible(not MOBILE_DEVICE) end
 	if FloatingButtonManager and FloatingButtonManager.Card then FloatingButtonManager.Card.Visible = MOBILE_DEVICE end
 	if FloatingButtonManager then FloatingButtonManager:RefreshAll() end
 
