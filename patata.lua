@@ -49,6 +49,24 @@ __BootstrapText.Font = Enum.Font.GothamMedium
 __BootstrapText.TextWrapped = true
 __BootstrapText.Parent = __BootstrapFrame
 
+-- Audio de apertura completamente aislado de la carga principal.
+-- Si Roblox/el executor no puede reproducir el asset, el script continúa normalmente.
+pcall(function()
+	local __OpeningSoundService = game:GetService("SoundService")
+	local __OldOpeningSound = __OpeningSoundService:FindFirstChild("H3X4_X_OpeningSound")
+	if __OldOpeningSound then
+		__OldOpeningSound:Destroy()
+	end
+
+	local __OpeningSound = Instance.new("Sound")
+	__OpeningSound.Name = "H3X4_X_OpeningSound"
+	__OpeningSound.SoundId = "rbxassetid://139738199515248"
+	__OpeningSound.Volume = 1
+	__OpeningSound.Looped = false
+	__OpeningSound.Parent = __OpeningSoundService
+	__OpeningSound:Play()
+end)
+
 task.wait()
 
 local __HexaOk, __HexaError = xpcall(function()
@@ -59,28 +77,8 @@ local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
-local SoundService = game:GetService("SoundService")
 
 local LocalPlayer = __BootstrapPlayer
-
--- Sonido de apertura: se reproduce una sola vez al ejecutar H3X4 X.
-task.defer(function()
-	pcall(function()
-		local openingSound = Instance.new("Sound")
-		openingSound.Name = "H3X4_X_OpeningSound"
-		openingSound.SoundId = "rbxassetid://139738199515248"
-		openingSound.Volume = 1
-		openingSound.Looped = false
-		openingSound.Parent = SoundService
-		openingSound.Ended:Connect(function()
-			if openingSound and openingSound.Parent then openingSound:Destroy() end
-		end)
-		openingSound:Play()
-		task.delay(60, function()
-			if openingSound and openingSound.Parent then openingSound:Destroy() end
-		end)
-	end)
-end)
 
 local RemoteVipState = (function()
 	local VIP_RAW_URL = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/hx4v1p.lua"
