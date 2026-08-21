@@ -49,24 +49,6 @@ __BootstrapText.Font = Enum.Font.GothamMedium
 __BootstrapText.TextWrapped = true
 __BootstrapText.Parent = __BootstrapFrame
 
--- Audio de apertura completamente aislado de la carga principal.
--- Si Roblox/el executor no puede reproducir el asset, el script continúa normalmente.
-pcall(function()
-	local __OpeningSoundService = game:GetService("SoundService")
-	local __OldOpeningSound = __OpeningSoundService:FindFirstChild("H3X4_X_OpeningSound")
-	if __OldOpeningSound then
-		__OldOpeningSound:Destroy()
-	end
-
-	local __OpeningSound = Instance.new("Sound")
-	__OpeningSound.Name = "H3X4_X_OpeningSound"
-	__OpeningSound.SoundId = "rbxassetid://139738199515248"
-	__OpeningSound.Volume = 1
-	__OpeningSound.Looped = false
-	__OpeningSound.Parent = __OpeningSoundService
-	__OpeningSound:Play()
-end)
-
 task.wait()
 
 local __HexaOk, __HexaError = xpcall(function()
