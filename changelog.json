@@ -4,9 +4,9 @@
   "durationHours": 0,
   "maxShowsPerUser": 3,
 
-  "titleES": "CHANGELOG · NUEVA ACTUALIZACIÓN",
-  "titleEN": "CHANGELOG · NEW UPDATE",
+  "titleES": "CHANGELOG · NUEVOS CAMBIOS - H3XA X",
+  "titleEN": "CHANGELOG · NEW CHANGES - H3XA X",
 
-  "textES": "• Escribe aquí los cambios en español.\n• Puedes escribir todo lo que quieras.",
-  "textEN": "• Write the changes here in English.\n• You can write whatever you want."
+  "textES": "• Interfaz rediseñada. \n• Botones de Keybinds y botones flotantes han sido puesto al lado de sus botones originales. \n• Tema del panel personalizable (VIP)  ",
+  "textEN": "• Redesigned interface. \n• Keybind and floating buttons have been placed next to their original buttons. \n• Customizable panel theme (VIP)."
 }
