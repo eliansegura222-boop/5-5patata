@@ -1,0 +1,12 @@
+{
+  "id": "2026-08-22-01",
+  "enabled": true,
+  "publishedAt": "2026-08-22T00:00:00Z",
+  "durationDays": 7,
+  "durationHours": 0,
+  "maxShowsPerUser": 3,
+  "titleES": "CHANGELOG · NUEVA ACTUALIZACIÓN",
+  "titleEN": "CHANGELOG · NEW UPDATE",
+  "textES": "• Nuevos temas VIP.\n• Mejoras en la interfaz de celular.\n• Correcciones de errores y optimización.\n• Nuevas opciones de personalización.",
+  "textEN": "• New VIP themes.\n• Mobile interface improvements.\n• Bug fixes and optimization.\n• New customization options."
+}
