@@ -82,27 +82,45 @@ local RemoteVipState = (function()
 	end
 
 	local function downloadRaw()
-		local url = VIP_RAW_URL .. "?hexax=" .. tostring(os.time())
+		-- Algunos executors fallan con query strings en raw.githubusercontent.com.
+		-- Probamos ambos formatos y más de un método antes de considerar que falló.
+		local cacheBustUrl = VIP_RAW_URL .. "?hexax=" .. tostring(os.time())
+		local urls = {cacheBustUrl, VIP_RAW_URL}
 		local requester = nil
 		pcall(function()
 			if type(request) == "function" then requester = request
 			elseif type(http_request) == "function" then requester = http_request
 			elseif type(syn) == "table" and type(syn.request) == "function" then requester = syn.request end
 		end)
+
 		if requester then
-			local ok, response = pcall(requester, {
-				Url = url,
-				Method = "GET",
-				Headers = { ["Cache-Control"] = "no-cache" },
-			})
-			if ok and type(response) == "table" then
-				local statusCode = tonumber(response.StatusCode or response.Status or response.status_code) or 200
-				local body = response.Body or response.body
-				if statusCode >= 200 and statusCode < 300 and type(body) == "string" and body ~= "" then return body end
+			for _, requestUrl in ipairs(urls) do
+				local ok, response = pcall(requester, {
+					Url = requestUrl,
+					Method = "GET",
+					Headers = {
+						["Cache-Control"] = "no-cache, no-store",
+						["Pragma"] = "no-cache",
+					},
+				})
+				if ok and type(response) == "table" then
+					local statusCode = tonumber(response.StatusCode or response.Status or response.status_code) or 200
+					local body = response.Body or response.body
+					if statusCode >= 200 and statusCode < 300 and type(body) == "string" and body ~= "" then
+						return body
+					end
+				end
 			end
 		end
-		local ok, body = pcall(function() return game:HttpGet(url, true) end)
-		return ok and type(body) == "string" and body or nil
+
+		for _, requestUrl in ipairs(urls) do
+			local ok, body = pcall(function() return game:HttpGet(requestUrl, true) end)
+			if ok and type(body) == "string" and body ~= "" then
+				return body
+			end
+		end
+
+		return nil
 	end
 
 	local function parseEntry(body)
@@ -8683,10 +8701,14 @@ end)
 -- mostrar la key para evitar falsos FREE por un fallo temporal de red.
 local startupIsVip = HEXA_IS_VIP
 if not startupIsVip then
-	local refreshed = RemoteVipState:Refresh()
-	if refreshed then
-		syncVipAccessFromGithub()
+	-- Reintento explícito antes de decidir que el usuario es FREE.
+	-- downloadRaw ya prueba request/HttpGet y URL con/sin anti-caché.
+	if RemoteVipState:Refresh() then
+		HEXA_IS_VIP = RemoteVipState:IsActive()
 		startupIsVip = HEXA_IS_VIP
+		if startupIsVip then
+			refreshVipControls()
+		end
 	end
 end
 
@@ -8694,7 +8716,9 @@ MainFrame.Visible = false
 DeviceSelector.Frame.Visible = false
 AutoDevicePanel.Frame.Visible = false
 if startupIsVip then
+	-- VIP válido: jamás mostrar el sistema de key normal.
 	KeyFrame.Visible = false
+	KeyFrame.Size = UDim2.new(0, 0, 0, 0)
 	task.defer(continueAfterAccess)
 else
 	KeyFrame.Visible = true
