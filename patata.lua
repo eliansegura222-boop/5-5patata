@@ -210,6 +210,17 @@ local ConfigManager = {
 	PendingSliders = nil,
 	PendingKeybinds = nil,
 	Loading = false,
+	Changelog = {
+		-- Crea este archivo en GitHub y usa su enlace RAW.
+		RawUrl = "https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/changelog.json",
+		Data = nil,
+		Loaded = false,
+		Shows = 0,
+		VisibleThisSession = false,
+		Card = nil,
+		TitleLabel = nil,
+		TextLabel = nil,
+	},
 }
 
 function ConfigManager:SetDeviceMode(mode)
@@ -227,6 +238,207 @@ end
 function ConfigManager:GetLegacyFileName()
 	return ("H3X4_X_Config_%d.json"):format(LocalPlayer.UserId)
 end
+
+
+-- CHANGELOG REMOTO -----------------------------------------------------------
+-- El RAW se lee como JSON. No ejecuta código remoto.
+function ConfigManager.Changelog:GetCounterFile()
+	return ("H3X4_X_Changelog_%d.json"):format(LocalPlayer.UserId)
+end
+
+function ConfigManager.Changelog:DownloadRaw()
+	local rawUrl = tostring(self.RawUrl or "")
+	if rawUrl == "" then return nil end
+	local separator = string.find(rawUrl, "?", 1, true) and "&" or "?"
+	local urls = {rawUrl .. separator .. "hexax_changelog=" .. tostring(os.time()), rawUrl}
+	local requester = nil
+	pcall(function()
+		if type(request) == "function" then requester = request
+		elseif type(http_request) == "function" then requester = http_request
+		elseif type(syn) == "table" and type(syn.request) == "function" then requester = syn.request end
+	end)
+	if requester then
+		for _, url in ipairs(urls) do
+			local ok, response = pcall(requester, {
+				Url = url,
+				Method = "GET",
+				Headers = { ["Cache-Control"] = "no-cache", ["Pragma"] = "no-cache" },
+			})
+			if ok and type(response) == "table" then
+				local statusCode = tonumber(response.StatusCode or response.Status or response.status_code) or 200
+				local body = response.Body or response.body
+				if statusCode >= 200 and statusCode < 300 and type(body) == "string" and body ~= "" then
+					return body
+				end
+			end
+		end
+	end
+	for _, url in ipairs(urls) do
+		local ok, body = pcall(function() return game:HttpGet(url, true) end)
+		if ok and type(body) == "string" and body ~= "" then return body end
+	end
+	return nil
+end
+
+function ConfigManager.Changelog:ParseTime(value)
+	if type(value) == "number" then return math.floor(value) end
+	local text = tostring(value or "")
+	if text == "" then return nil end
+	local okIso, dateTime = pcall(function() return DateTime.fromIsoDate(text) end)
+	if okIso and dateTime then return math.floor(dateTime.UnixTimestamp) end
+	local year, month, day, hour, minute, second = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[ T](%d%d):(%d%d):(%d%d)")
+	if not year then
+		year, month, day = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+		hour, minute, second = "0", "0", "0"
+	end
+	if not year then return nil end
+	local ok, timestamp = pcall(os.time, {
+		year = tonumber(year), month = tonumber(month), day = tonumber(day),
+		hour = tonumber(hour) or 0, min = tonumber(minute) or 0, sec = tonumber(second) or 0,
+	})
+	return ok and timestamp or nil
+end
+
+function ConfigManager.Changelog:LoadCounter()
+	self.Shows = 0
+	if not self.Data or type(self.Data.id) ~= "string" then return end
+	if type(isfile) ~= "function" or type(readfile) ~= "function" then return end
+	local fileName = self:GetCounterFile()
+	local exists = false
+	pcall(function() exists = isfile(fileName) end)
+	if not exists then return end
+	local ok, saved = pcall(function()
+		return HttpService:JSONDecode(readfile(fileName))
+	end)
+	if not ok or type(saved) ~= "table" then return end
+	if tostring(saved.id or "") ~= self.Data.id then return end
+	if tonumber(saved.userId) ~= LocalPlayer.UserId then return end
+	self.Shows = math.max(0, math.floor(tonumber(saved.shows) or 0))
+end
+
+function ConfigManager.Changelog:SaveCounter()
+	if not self.Data or type(writefile) ~= "function" then return false end
+	local okEncode, encoded = pcall(function()
+		return HttpService:JSONEncode({
+			version = 1,
+			userId = LocalPlayer.UserId,
+			id = self.Data.id,
+			shows = self.Shows,
+		})
+	end)
+	if not okEncode then return false end
+	return pcall(function() writefile(self:GetCounterFile(), encoded) end)
+end
+
+function ConfigManager.Changelog:IsWithinWindow()
+	local data = self.Data
+	if not self.Loaded or type(data) ~= "table" or data.enabled == false then return false end
+	local now = os.time()
+	if tonumber(data.publishedAt) and now < data.publishedAt then return false end
+	if tonumber(data.expiresAt) and data.expiresAt > 0 and now >= data.expiresAt then return false end
+	return true
+end
+
+function ConfigManager.Changelog:CanShow()
+	if not self:IsWithinWindow() then return false end
+	if self.VisibleThisSession then return true end
+	local maximum = math.max(0, math.floor(tonumber(self.Data.maxShowsPerUser) or 0))
+	return maximum == 0 or self.Shows < maximum
+end
+
+function ConfigManager.Changelog:ResizeCard()
+	if not self.Card or not self.TextLabel then return end
+	local width = self.TextLabel.AbsoluteSize.X
+	if width < 80 then width = MOBILE_DEVICE and 250 or 360 end
+	local ok, bounds = pcall(function()
+		return game:GetService("TextService"):GetTextSize(
+			self.TextLabel.Text,
+			self.TextLabel.TextSize,
+			self.TextLabel.Font,
+			Vector2.new(width, 4000)
+		)
+	end)
+	local textHeight = ok and bounds and bounds.Y or 156
+	textHeight = math.clamp(math.ceil(textHeight) + 4, 44, 1800)
+	self.TextLabel.Size = UDim2.new(1, -24, 0, textHeight)
+	self.Card.Size = UDim2.new(1, -24, 0, textHeight + 54)
+end
+
+function ConfigManager.Changelog:ApplyLanguage()
+	if not self.Card or not self.TitleLabel or not self.TextLabel then return end
+	local visible = self:CanShow()
+	self.Card.Visible = visible
+	if not visible then return end
+	local english = Lang.Current == "EN"
+	local title = english and self.Data.titleEN or self.Data.titleES
+	local body = english and self.Data.textEN or self.Data.textES
+	self.TitleLabel.Text = (type(title) == "string" and title ~= "") and title or "CHANGELOG"
+	self.TextLabel.Text = (type(body) == "string" and body ~= "") and body or "—"
+	task.defer(function()
+		if self.Card and self.Card.Parent then self:ResizeCard() end
+	end)
+end
+
+function ConfigManager.Changelog:Refresh()
+	local body = self:DownloadRaw()
+	if not body then
+		self.Loaded = true
+		self.Data = nil
+		if self.Card then self.Card.Visible = false end
+		return false
+	end
+	local okJson, decoded = pcall(function() return HttpService:JSONDecode(body) end)
+	if not okJson or type(decoded) ~= "table" then
+		self.Loaded = true
+		self.Data = nil
+		if self.Card then self.Card.Visible = false end
+		return false
+	end
+	local id = tostring(decoded.id or "")
+	local publishedAt = self:ParseTime(decoded.publishedAt)
+	if id == "" or not publishedAt then
+		self.Loaded = true
+		self.Data = nil
+		if self.Card then self.Card.Visible = false end
+		return false
+	end
+	local previousId = self.Data and self.Data.id or nil
+	local durationHours = math.max(0, tonumber(decoded.durationHours) or 0)
+	local durationDays = math.max(0, tonumber(decoded.durationDays) or 0)
+	local durationSeconds = math.floor(durationHours * 3600 + durationDays * 86400)
+	self.Data = {
+		id = id,
+		enabled = decoded.enabled ~= false,
+		publishedAt = publishedAt,
+		expiresAt = durationSeconds > 0 and (publishedAt + durationSeconds) or 0,
+		maxShowsPerUser = math.max(0, math.floor(tonumber(decoded.maxShowsPerUser) or 0)),
+		titleES = tostring(decoded.titleES or "CHANGELOG"),
+		titleEN = tostring(decoded.titleEN or decoded.titleES or "CHANGELOG"),
+		textES = tostring(decoded.textES or ""),
+		textEN = tostring(decoded.textEN or decoded.textES or ""),
+	}
+	self.Loaded = true
+	if previousId ~= id then self.VisibleThisSession = false end
+	self:LoadCounter()
+	self:ApplyLanguage()
+	return true
+end
+
+function ConfigManager.Changelog:RecordShow()
+	if not self.Loaded then self:Refresh() end
+	if not self:CanShow() then
+		self:ApplyLanguage()
+		return false
+	end
+	if not self.VisibleThisSession then
+		self.VisibleThisSession = true
+		self.Shows += 1
+		self:SaveCounter()
+	end
+	self:ApplyLanguage()
+	return true
+end
+-- FIN CHANGELOG REMOTO -------------------------------------------------------
 
 function ConfigManager:IsAvailableForCurrentDevice(object)
 	local current = object
@@ -2178,6 +2390,7 @@ function Lang.Set(language)
 		refreshDeviceSpecificTexts()
 	end
 	if KeybindManager and languageChanged then KeybindManager:RefreshAll() end
+	if languageChanged and ConfigManager.Changelog then ConfigManager.Changelog:ApplyLanguage() end
 	if languageChanged then
 		task.defer(function()
 			refreshCategoryView()
@@ -4996,6 +5209,102 @@ Tutorial.Image.ScaleType = Enum.ScaleType.Fit
 Tutorial.Image.ZIndex = 62
 Tutorial.Image.Parent = Tutorial.Scroll
 mkCorner(Tutorial.Image, 12)
+
+-- ACERCA DE / ABOUT
+Tutorial.AboutCard = Instance.new("Frame")
+Tutorial.AboutCard.Name = "HexaAboutCard"
+Tutorial.AboutCard.BackgroundColor3 = Theme.Panel
+Tutorial.AboutCard.BackgroundTransparency = 0.18
+Tutorial.AboutCard.BorderSizePixel = 0
+Tutorial.AboutCard.Position = UDim2.new(0, 12, 0, 294)
+Tutorial.AboutCard.Size = UDim2.new(1, -24, 0, 132)
+Tutorial.AboutCard.ZIndex = 62
+Tutorial.AboutCard.Parent = Tutorial.Scroll
+mkCorner(Tutorial.AboutCard, 12)
+mkStroke(Tutorial.AboutCard, Theme.Purple, 0.55, 1)
+
+Tutorial.AboutTitle = Instance.new("TextLabel")
+Tutorial.AboutTitle.BackgroundTransparency = 1
+Tutorial.AboutTitle.Position = UDim2.new(0, 12, 0, 10)
+Tutorial.AboutTitle.Size = UDim2.new(1, -24, 0, 22)
+Tutorial.AboutTitle.Text = "ACERCA DE H3X4 X"
+Tutorial.AboutTitle.TextColor3 = Theme.TextMain
+Tutorial.AboutTitle.TextSize = 12
+Tutorial.AboutTitle.Font = Enum.Font.GothamBold
+Tutorial.AboutTitle.TextXAlignment = Enum.TextXAlignment.Left
+Tutorial.AboutTitle.ZIndex = 63
+Tutorial.AboutTitle.Parent = Tutorial.AboutCard
+registerDeviceText(Tutorial.AboutTitle, "ACERCA DE H3X4 X", "ACERCA DE H3X4 X", "ABOUT H3X4 X", "ABOUT H3X4 X")
+
+Tutorial.AboutText = Instance.new("TextLabel")
+Tutorial.AboutText.BackgroundTransparency = 1
+Tutorial.AboutText.Position = UDim2.new(0, 12, 0, 38)
+Tutorial.AboutText.Size = UDim2.new(1, -24, 0, 82)
+Tutorial.AboutText.Text = "H3X4 X es una interfaz universal para Roblox diseñada para PC y celular. Incluye funciones organizadas por categorías, configuraciones guardables, controles rápidos, acceso VIP y opciones de personalización."
+Tutorial.AboutText.TextColor3 = Theme.TextMain
+Tutorial.AboutText.TextSize = MOBILE_DEVICE and 10 or 11
+Tutorial.AboutText.TextWrapped = true
+Tutorial.AboutText.TextXAlignment = Enum.TextXAlignment.Left
+Tutorial.AboutText.TextYAlignment = Enum.TextYAlignment.Top
+Tutorial.AboutText.Font = Enum.Font.GothamMedium
+Tutorial.AboutText.ZIndex = 63
+Tutorial.AboutText.Parent = Tutorial.AboutCard
+registerDeviceText(
+	Tutorial.AboutText,
+	"H3X4 X es una interfaz universal para Roblox diseñada para PC y celular. Incluye funciones organizadas por categorías, configuraciones guardables, controles rápidos, acceso VIP y opciones de personalización.",
+	"H3X4 X es una interfaz universal para Roblox diseñada para PC y celular. Incluye funciones organizadas por categorías, configuraciones guardables, controles rápidos, acceso VIP y opciones de personalización.",
+	"H3X4 X is a universal Roblox interface designed for PC and mobile. It includes categorized features, saved configurations, quick controls, VIP access, and customization options.",
+	"H3X4 X is a universal Roblox interface designed for PC and mobile. It includes categorized features, saved configurations, quick controls, VIP access, and customization options."
+)
+
+-- CHANGELOG REMOTO
+Tutorial.ChangelogCard = Instance.new("Frame")
+Tutorial.ChangelogCard.Name = "HexaChangelogCard"
+Tutorial.ChangelogCard.BackgroundColor3 = Theme.Panel
+Tutorial.ChangelogCard.BackgroundTransparency = 0.18
+Tutorial.ChangelogCard.BorderSizePixel = 0
+Tutorial.ChangelogCard.Position = UDim2.new(0, 12, 0, 438)
+Tutorial.ChangelogCard.Size = UDim2.new(1, -24, 0, 206)
+Tutorial.ChangelogCard.Visible = false
+Tutorial.ChangelogCard.ZIndex = 62
+Tutorial.ChangelogCard.Parent = Tutorial.Scroll
+mkCorner(Tutorial.ChangelogCard, 12)
+mkStroke(Tutorial.ChangelogCard, Theme.Purple, 0.55, 1)
+
+Tutorial.ChangelogTitle = Instance.new("TextLabel")
+Tutorial.ChangelogTitle.BackgroundTransparency = 1
+Tutorial.ChangelogTitle.Position = UDim2.new(0, 12, 0, 10)
+Tutorial.ChangelogTitle.Size = UDim2.new(1, -24, 0, 22)
+Tutorial.ChangelogTitle.Text = "CHANGELOG"
+Tutorial.ChangelogTitle.TextColor3 = Theme.TextMain
+Tutorial.ChangelogTitle.TextSize = 12
+Tutorial.ChangelogTitle.Font = Enum.Font.GothamBold
+Tutorial.ChangelogTitle.TextXAlignment = Enum.TextXAlignment.Left
+Tutorial.ChangelogTitle.ZIndex = 63
+Tutorial.ChangelogTitle.Parent = Tutorial.ChangelogCard
+Tutorial.ChangelogTitle:SetAttribute("HexaNoTranslate", true)
+
+Tutorial.ChangelogText = Instance.new("TextLabel")
+Tutorial.ChangelogText.BackgroundTransparency = 1
+Tutorial.ChangelogText.Position = UDim2.new(0, 12, 0, 38)
+Tutorial.ChangelogText.Size = UDim2.new(1, -24, 0, 156)
+Tutorial.ChangelogText.Text = ""
+Tutorial.ChangelogText.TextColor3 = Theme.TextMain
+Tutorial.ChangelogText.TextSize = MOBILE_DEVICE and 10 or 11
+Tutorial.ChangelogText.TextWrapped = true
+Tutorial.ChangelogText.TextXAlignment = Enum.TextXAlignment.Left
+Tutorial.ChangelogText.TextYAlignment = Enum.TextYAlignment.Top
+Tutorial.ChangelogText.Font = Enum.Font.GothamMedium
+Tutorial.ChangelogText.ZIndex = 63
+Tutorial.ChangelogText.Parent = Tutorial.ChangelogCard
+Tutorial.ChangelogText:SetAttribute("HexaNoTranslate", true)
+
+ConfigManager.Changelog.Card = Tutorial.ChangelogCard
+ConfigManager.Changelog.TitleLabel = Tutorial.ChangelogTitle
+ConfigManager.Changelog.TextLabel = Tutorial.ChangelogText
+task.spawn(function()
+	ConfigManager.Changelog:Refresh()
+end)
 
 Tutorial.CloseButton = neonButton(Tutorial.Frame, "CERRAR", UDim2.new(0, 140, 0, 38), UDim2.new(0.5, -70, 1, -50), 62)
 Tutorial.CloseButton.BackgroundColor3 = Theme.Panel2
@@ -8751,6 +9060,7 @@ RestoreOrb.MouseButton1Click:Connect(function()
 end)
 
 TutorialBtn.MouseButton1Click:Connect(function()
+	ConfigManager.Changelog:RecordShow()
 	animateOpen(Tutorial.Frame, Tutorial.getTargetSize(), "BACK")
 end)
 
