@@ -216,10 +216,14 @@ local ConfigManager = {
 		Data = nil,
 		Loaded = false,
 		Shows = 0,
-		VisibleThisSession = false,
-		Card = nil,
+		AutoShownThisSession = false,
+		FirstSeen = 0,
+		Overlay = nil,
+		Panel = nil,
 		TitleLabel = nil,
 		TextLabel = nil,
+		Button = nil,
+		CloseButton = nil,
 	},
 }
 
@@ -242,6 +246,8 @@ end
 
 -- CHANGELOG REMOTO -----------------------------------------------------------
 -- El RAW se lee como JSON. No ejecuta código remoto.
+-- No usa publishedAt ni requiere cambiar manualmente un ID:
+-- cualquier cambio en el contenido del RAW crea automáticamente una versión nueva.
 function ConfigManager.Changelog:GetCounterFile()
 	return ("H3X4_X_Changelog_%d.json"):format(LocalPlayer.UserId)
 end
@@ -280,50 +286,51 @@ function ConfigManager.Changelog:DownloadRaw()
 	return nil
 end
 
-function ConfigManager.Changelog:ParseTime(value)
-	if type(value) == "number" then return math.floor(value) end
-	local text = tostring(value or "")
-	if text == "" then return nil end
-	local okIso, dateTime = pcall(function() return DateTime.fromIsoDate(text) end)
-	if okIso and dateTime then return math.floor(dateTime.UnixTimestamp) end
-	local year, month, day, hour, minute, second = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[ T](%d%d):(%d%d):(%d%d)")
-	if not year then
-		year, month, day = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
-		hour, minute, second = "0", "0", "0"
+function ConfigManager.Changelog:MakeSignature(body)
+	body = tostring(body or "")
+	local hash = 5381
+	for index = 1, #body do
+		hash = (hash * 33 + string.byte(body, index)) % 2147483647
 	end
-	if not year then return nil end
-	local ok, timestamp = pcall(os.time, {
-		year = tonumber(year), month = tonumber(month), day = tonumber(day),
-		hour = tonumber(hour) or 0, min = tonumber(minute) or 0, sec = tonumber(second) or 0,
-	})
-	return ok and timestamp or nil
+	return tostring(hash) .. ":" .. tostring(#body)
 end
 
 function ConfigManager.Changelog:LoadCounter()
 	self.Shows = 0
-	if not self.Data or type(self.Data.id) ~= "string" then return end
+	self.FirstSeen = os.time()
+	if not self.Data or type(self.Data.signature) ~= "string" then return end
 	if type(isfile) ~= "function" or type(readfile) ~= "function" then return end
 	local fileName = self:GetCounterFile()
 	local exists = false
 	pcall(function() exists = isfile(fileName) end)
-	if not exists then return end
+	if not exists then
+		self:SaveCounter()
+		return
+	end
 	local ok, saved = pcall(function()
 		return HttpService:JSONDecode(readfile(fileName))
 	end)
-	if not ok or type(saved) ~= "table" then return end
-	if tostring(saved.id or "") ~= self.Data.id then return end
-	if tonumber(saved.userId) ~= LocalPlayer.UserId then return end
+	if not ok or type(saved) ~= "table" then
+		self:SaveCounter()
+		return
+	end
+	if tonumber(saved.userId) ~= LocalPlayer.UserId or tostring(saved.signature or "") ~= self.Data.signature then
+		self:SaveCounter()
+		return
+	end
 	self.Shows = math.max(0, math.floor(tonumber(saved.shows) or 0))
+	self.FirstSeen = math.max(0, math.floor(tonumber(saved.firstSeen) or os.time()))
 end
 
 function ConfigManager.Changelog:SaveCounter()
 	if not self.Data or type(writefile) ~= "function" then return false end
 	local okEncode, encoded = pcall(function()
 		return HttpService:JSONEncode({
-			version = 1,
+			version = 3,
 			userId = LocalPlayer.UserId,
-			id = self.Data.id,
+			signature = self.Data.signature,
 			shows = self.Shows,
+			firstSeen = self.FirstSeen or os.time(),
 		})
 	end)
 	if not okEncode then return false end
@@ -333,84 +340,65 @@ end
 function ConfigManager.Changelog:IsWithinWindow()
 	local data = self.Data
 	if not self.Loaded or type(data) ~= "table" or data.enabled == false then return false end
-	local now = os.time()
-	if tonumber(data.publishedAt) and now < data.publishedAt then return false end
-	if tonumber(data.expiresAt) and data.expiresAt > 0 and now >= data.expiresAt then return false end
+	local durationSeconds = math.max(0, math.floor(tonumber(data.durationSeconds) or 0))
+	if durationSeconds > 0 then
+		local firstSeen = math.max(0, math.floor(tonumber(self.FirstSeen) or os.time()))
+		if os.time() >= firstSeen + durationSeconds then return false end
+	end
 	return true
 end
 
-function ConfigManager.Changelog:CanShow()
-	if not self:IsWithinWindow() then return false end
-	if self.VisibleThisSession then return true end
+function ConfigManager.Changelog:CanAutoShow()
+	if not self:IsWithinWindow() or self.AutoShownThisSession then return false end
 	local maximum = math.max(0, math.floor(tonumber(self.Data.maxShowsPerUser) or 0))
 	return maximum == 0 or self.Shows < maximum
 end
 
-function ConfigManager.Changelog:ResizeCard()
-	if not self.Card or not self.TextLabel then return end
-	local width = self.TextLabel.AbsoluteSize.X
-	if width < 80 then width = MOBILE_DEVICE and 250 or 360 end
-	local ok, bounds = pcall(function()
-		return game:GetService("TextService"):GetTextSize(
-			self.TextLabel.Text,
-			self.TextLabel.TextSize,
-			self.TextLabel.Font,
-			Vector2.new(width, 4000)
-		)
-	end)
-	local textHeight = ok and bounds and bounds.Y or 156
-	textHeight = math.clamp(math.ceil(textHeight) + 4, 44, 1800)
-	self.TextLabel.Size = UDim2.new(1, -24, 0, textHeight)
-	self.Card.Size = UDim2.new(1, -24, 0, textHeight + 54)
+function ConfigManager.Changelog:GetPanelSize()
+	local width = math.max(220, math.min(MOBILE_DEVICE and (MAIN_SIZE.X.Offset - 24) or 430, MAIN_SIZE.X.Offset - 24))
+	local height = math.max(160, math.min(MOBILE_DEVICE and (MAIN_SIZE.Y.Offset - 54) or 300, MAIN_SIZE.Y.Offset - 54))
+	return UDim2.fromOffset(width, height)
 end
 
 function ConfigManager.Changelog:ApplyLanguage()
-	if not self.Card or not self.TitleLabel or not self.TextLabel then return end
-	local visible = self:CanShow()
-	self.Card.Visible = visible
-	if not visible then return end
+	if not self.TitleLabel or not self.TextLabel then return end
+	if type(self.Data) ~= "table" then
+		self.TitleLabel.Text = Lang.Current == "EN" and "CHANGELOG" or "CHANGELOG"
+		self.TextLabel.Text = Lang.Current == "EN" and "No active changelog." or "No hay un changelog activo."
+		return
+	end
 	local english = Lang.Current == "EN"
 	local title = english and self.Data.titleEN or self.Data.titleES
 	local body = english and self.Data.textEN or self.Data.textES
 	self.TitleLabel.Text = (type(title) == "string" and title ~= "") and title or "CHANGELOG"
 	self.TextLabel.Text = (type(body) == "string" and body ~= "") and body or "—"
-	task.defer(function()
-		if self.Card and self.Card.Parent then self:ResizeCard() end
-	end)
 end
 
 function ConfigManager.Changelog:Refresh()
 	local body = self:DownloadRaw()
 	if not body then
+		if not self.Loaded then self.Data = nil end
 		self.Loaded = true
-		self.Data = nil
-		if self.Card then self.Card.Visible = false end
+		self:ApplyLanguage()
 		return false
 	end
 	local okJson, decoded = pcall(function() return HttpService:JSONDecode(body) end)
 	if not okJson or type(decoded) ~= "table" then
+		if not self.Loaded then self.Data = nil end
 		self.Loaded = true
-		self.Data = nil
-		if self.Card then self.Card.Visible = false end
+		self:ApplyLanguage()
 		return false
 	end
-	local id = tostring(decoded.id or "")
-	local publishedAt = self:ParseTime(decoded.publishedAt)
-	if id == "" or not publishedAt then
-		self.Loaded = true
-		self.Data = nil
-		if self.Card then self.Card.Visible = false end
-		return false
-	end
-	local previousId = self.Data and self.Data.id or nil
+
+	local signature = self:MakeSignature(body)
+	local previousSignature = self.Data and self.Data.signature or nil
 	local durationHours = math.max(0, tonumber(decoded.durationHours) or 0)
 	local durationDays = math.max(0, tonumber(decoded.durationDays) or 0)
-	local durationSeconds = math.floor(durationHours * 3600 + durationDays * 86400)
+
 	self.Data = {
-		id = id,
+		signature = signature,
 		enabled = decoded.enabled ~= false,
-		publishedAt = publishedAt,
-		expiresAt = durationSeconds > 0 and (publishedAt + durationSeconds) or 0,
+		durationSeconds = math.floor(durationHours * 3600 + durationDays * 86400),
 		maxShowsPerUser = math.max(0, math.floor(tonumber(decoded.maxShowsPerUser) or 0)),
 		titleES = tostring(decoded.titleES or "CHANGELOG"),
 		titleEN = tostring(decoded.titleEN or decoded.titleES or "CHANGELOG"),
@@ -418,23 +406,8 @@ function ConfigManager.Changelog:Refresh()
 		textEN = tostring(decoded.textEN or decoded.textES or ""),
 	}
 	self.Loaded = true
-	if previousId ~= id then self.VisibleThisSession = false end
+	if previousSignature ~= signature then self.AutoShownThisSession = false end
 	self:LoadCounter()
-	self:ApplyLanguage()
-	return true
-end
-
-function ConfigManager.Changelog:RecordShow()
-	if not self.Loaded then self:Refresh() end
-	if not self:CanShow() then
-		self:ApplyLanguage()
-		return false
-	end
-	if not self.VisibleThisSession then
-		self.VisibleThisSession = true
-		self.Shows += 1
-		self:SaveCounter()
-	end
 	self:ApplyLanguage()
 	return true
 end
@@ -2801,7 +2774,14 @@ TutorialBtn.TextSize = 11
 TutorialBtn.Font = Enum.Font.GothamBold
 TutorialBtn:SetAttribute("HexaNoTranslate", true)
 
-Lang.MainButton = neonButton(Header, "ES", UDim2.new(0, 44, 0, 34), UDim2.new(1, -200, 0, 12), 4)
+ConfigManager.Changelog.Button = neonButton(Header, "LOG", UDim2.new(0, 46, 0, 34), UDim2.new(1, -202, 0, 12), 4)
+ConfigManager.Changelog.Button.TextColor3 = BUTTON_TEXT_COLOR
+ConfigManager.Changelog.Button.BackgroundColor3 = Theme.PurpleDeep
+ConfigManager.Changelog.Button.TextSize = 10
+ConfigManager.Changelog.Button.Font = Enum.Font.GothamBold
+ConfigManager.Changelog.Button:SetAttribute("HexaNoTranslate", true)
+
+Lang.MainButton = neonButton(Header, "ES", UDim2.new(0, 44, 0, 34), UDim2.new(1, -252, 0, 12), 4)
 Lang.MainButton.TextColor3 = BUTTON_TEXT_COLOR
 Lang.MainButton.BackgroundColor3 = Theme.PurpleDeep
 Lang.MainButton:SetAttribute("HexaNoTranslate", true)
@@ -5210,107 +5190,101 @@ Tutorial.Image.ZIndex = 62
 Tutorial.Image.Parent = Tutorial.Scroll
 mkCorner(Tutorial.Image, 12)
 
--- ACERCA DE / ABOUT
-Tutorial.AboutCard = Instance.new("Frame")
-Tutorial.AboutCard.Name = "HexaAboutCard"
-Tutorial.AboutCard.BackgroundColor3 = Theme.Panel
-Tutorial.AboutCard.BackgroundTransparency = 0.18
-Tutorial.AboutCard.BorderSizePixel = 0
-Tutorial.AboutCard.Position = UDim2.new(0, 12, 0, 294)
-Tutorial.AboutCard.Size = UDim2.new(1, -24, 0, 132)
-Tutorial.AboutCard.ZIndex = 62
-Tutorial.AboutCard.Parent = Tutorial.Scroll
-mkCorner(Tutorial.AboutCard, 12)
-mkStroke(Tutorial.AboutCard, Theme.Purple, 0.55, 1)
-
-Tutorial.AboutTitle = Instance.new("TextLabel")
-Tutorial.AboutTitle.BackgroundTransparency = 1
-Tutorial.AboutTitle.Position = UDim2.new(0, 12, 0, 10)
-Tutorial.AboutTitle.Size = UDim2.new(1, -24, 0, 22)
-Tutorial.AboutTitle.Text = "ACERCA DE H3X4 X"
-Tutorial.AboutTitle.TextColor3 = Theme.TextMain
-Tutorial.AboutTitle.TextSize = 12
-Tutorial.AboutTitle.Font = Enum.Font.GothamBold
-Tutorial.AboutTitle.TextXAlignment = Enum.TextXAlignment.Left
-Tutorial.AboutTitle.ZIndex = 63
-Tutorial.AboutTitle.Parent = Tutorial.AboutCard
-registerDeviceText(Tutorial.AboutTitle, "ACERCA DE H3X4 X", "ACERCA DE H3X4 X", "ABOUT H3X4 X", "ABOUT H3X4 X")
-
-Tutorial.AboutText = Instance.new("TextLabel")
-Tutorial.AboutText.BackgroundTransparency = 1
-Tutorial.AboutText.Position = UDim2.new(0, 12, 0, 38)
-Tutorial.AboutText.Size = UDim2.new(1, -24, 0, 82)
-Tutorial.AboutText.Text = "H3X4 X es una interfaz universal para Roblox diseñada para PC y celular. Incluye funciones organizadas por categorías, configuraciones guardables, controles rápidos, acceso VIP y opciones de personalización."
-Tutorial.AboutText.TextColor3 = Theme.TextMain
-Tutorial.AboutText.TextSize = MOBILE_DEVICE and 10 or 11
-Tutorial.AboutText.TextWrapped = true
-Tutorial.AboutText.TextXAlignment = Enum.TextXAlignment.Left
-Tutorial.AboutText.TextYAlignment = Enum.TextYAlignment.Top
-Tutorial.AboutText.Font = Enum.Font.GothamMedium
-Tutorial.AboutText.ZIndex = 63
-Tutorial.AboutText.Parent = Tutorial.AboutCard
-registerDeviceText(
-	Tutorial.AboutText,
-	"H3X4 X es una interfaz universal para Roblox diseñada para PC y celular. Incluye funciones organizadas por categorías, configuraciones guardables, controles rápidos, acceso VIP y opciones de personalización.",
-	"H3X4 X es una interfaz universal para Roblox diseñada para PC y celular. Incluye funciones organizadas por categorías, configuraciones guardables, controles rápidos, acceso VIP y opciones de personalización.",
-	"H3X4 X is a universal Roblox interface designed for PC and mobile. It includes categorized features, saved configurations, quick controls, VIP access, and customization options.",
-	"H3X4 X is a universal Roblox interface designed for PC and mobile. It includes categorized features, saved configurations, quick controls, VIP access, and customization options."
-)
-
--- CHANGELOG REMOTO
-Tutorial.ChangelogCard = Instance.new("Frame")
-Tutorial.ChangelogCard.Name = "HexaChangelogCard"
-Tutorial.ChangelogCard.BackgroundColor3 = Theme.Panel
-Tutorial.ChangelogCard.BackgroundTransparency = 0.18
-Tutorial.ChangelogCard.BorderSizePixel = 0
-Tutorial.ChangelogCard.Position = UDim2.new(0, 12, 0, 438)
-Tutorial.ChangelogCard.Size = UDim2.new(1, -24, 0, 206)
-Tutorial.ChangelogCard.Visible = false
-Tutorial.ChangelogCard.ZIndex = 62
-Tutorial.ChangelogCard.Parent = Tutorial.Scroll
-mkCorner(Tutorial.ChangelogCard, 12)
-mkStroke(Tutorial.ChangelogCard, Theme.Purple, 0.55, 1)
-
-Tutorial.ChangelogTitle = Instance.new("TextLabel")
-Tutorial.ChangelogTitle.BackgroundTransparency = 1
-Tutorial.ChangelogTitle.Position = UDim2.new(0, 12, 0, 10)
-Tutorial.ChangelogTitle.Size = UDim2.new(1, -24, 0, 22)
-Tutorial.ChangelogTitle.Text = "CHANGELOG"
-Tutorial.ChangelogTitle.TextColor3 = Theme.TextMain
-Tutorial.ChangelogTitle.TextSize = 12
-Tutorial.ChangelogTitle.Font = Enum.Font.GothamBold
-Tutorial.ChangelogTitle.TextXAlignment = Enum.TextXAlignment.Left
-Tutorial.ChangelogTitle.ZIndex = 63
-Tutorial.ChangelogTitle.Parent = Tutorial.ChangelogCard
-Tutorial.ChangelogTitle:SetAttribute("HexaNoTranslate", true)
-
-Tutorial.ChangelogText = Instance.new("TextLabel")
-Tutorial.ChangelogText.BackgroundTransparency = 1
-Tutorial.ChangelogText.Position = UDim2.new(0, 12, 0, 38)
-Tutorial.ChangelogText.Size = UDim2.new(1, -24, 0, 156)
-Tutorial.ChangelogText.Text = ""
-Tutorial.ChangelogText.TextColor3 = Theme.TextMain
-Tutorial.ChangelogText.TextSize = MOBILE_DEVICE and 10 or 11
-Tutorial.ChangelogText.TextWrapped = true
-Tutorial.ChangelogText.TextXAlignment = Enum.TextXAlignment.Left
-Tutorial.ChangelogText.TextYAlignment = Enum.TextYAlignment.Top
-Tutorial.ChangelogText.Font = Enum.Font.GothamMedium
-Tutorial.ChangelogText.ZIndex = 63
-Tutorial.ChangelogText.Parent = Tutorial.ChangelogCard
-Tutorial.ChangelogText:SetAttribute("HexaNoTranslate", true)
-
-ConfigManager.Changelog.Card = Tutorial.ChangelogCard
-ConfigManager.Changelog.TitleLabel = Tutorial.ChangelogTitle
-ConfigManager.Changelog.TextLabel = Tutorial.ChangelogText
-task.spawn(function()
-	ConfigManager.Changelog:Refresh()
-end)
-
 Tutorial.CloseButton = neonButton(Tutorial.Frame, "CERRAR", UDim2.new(0, 140, 0, 38), UDim2.new(0.5, -70, 1, -50), 62)
 Tutorial.CloseButton.BackgroundColor3 = Theme.Panel2
 Tutorial.CloseButton.TextColor3 = Theme.TextOff
 Tutorial.CloseButton:SetAttribute("HexaKeepBackgroundOnHover", true)
 registerDeviceText(Tutorial.CloseButton, "CERRAR", "CERRAR", "CLOSE", "CLOSE")
+
+-- Panel independiente de CHANGELOG. Aparece encima del panel principal y puede
+-- volver a abrirse con el botón LOG situado junto a INFO.
+ConfigManager.Changelog.Overlay = Instance.new("Frame")
+ConfigManager.Changelog.Overlay.Name = "HexaChangelogOverlay"
+ConfigManager.Changelog.Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ConfigManager.Changelog.Overlay.BackgroundTransparency = 0.34
+ConfigManager.Changelog.Overlay.BorderSizePixel = 0
+ConfigManager.Changelog.Overlay.Size = UDim2.new(1, 0, 1, 0)
+ConfigManager.Changelog.Overlay.Position = UDim2.new(0, 0, 0, 0)
+ConfigManager.Changelog.Overlay.Visible = false
+ConfigManager.Changelog.Overlay.Active = true
+ConfigManager.Changelog.Overlay.ZIndex = 70
+ConfigManager.Changelog.Overlay.Parent = MainFrame
+mkCorner(ConfigManager.Changelog.Overlay, 18)
+
+ConfigManager.Changelog.Panel = Instance.new("Frame")
+ConfigManager.Changelog.Panel.Name = "HexaChangelogPanel"
+ConfigManager.Changelog.Panel.AnchorPoint = Vector2.new(0.5, 0.5)
+ConfigManager.Changelog.Panel.Position = UDim2.new(0.5, 0, 0.5, 0)
+ConfigManager.Changelog.Panel.Size = UDim2.new(0, 0, 0, 0)
+ConfigManager.Changelog.Panel.BackgroundColor3 = Theme.BG
+ConfigManager.Changelog.Panel.BackgroundTransparency = 0.08
+ConfigManager.Changelog.Panel.BorderSizePixel = 0
+ConfigManager.Changelog.Panel.ClipsDescendants = true
+ConfigManager.Changelog.Panel.ZIndex = 71
+ConfigManager.Changelog.Panel.Parent = ConfigManager.Changelog.Overlay
+mkCorner(ConfigManager.Changelog.Panel, 15)
+mkStroke(ConfigManager.Changelog.Panel, Theme.Purple, 0.18, 2)
+
+ConfigManager.Changelog.TitleLabel = Instance.new("TextLabel")
+ConfigManager.Changelog.TitleLabel.BackgroundTransparency = 1
+ConfigManager.Changelog.TitleLabel.Position = UDim2.new(0, 16, 0, 10)
+ConfigManager.Changelog.TitleLabel.Size = UDim2.new(1, -32, 0, 28)
+ConfigManager.Changelog.TitleLabel.Text = "CHANGELOG"
+ConfigManager.Changelog.TitleLabel.TextColor3 = Theme.TextMain
+ConfigManager.Changelog.TitleLabel.TextSize = 15
+ConfigManager.Changelog.TitleLabel.Font = Enum.Font.GothamBold
+ConfigManager.Changelog.TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+ConfigManager.Changelog.TitleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+ConfigManager.Changelog.TitleLabel.ZIndex = 72
+ConfigManager.Changelog.TitleLabel.Parent = ConfigManager.Changelog.Panel
+ConfigManager.Changelog.TitleLabel:SetAttribute("HexaNoTranslate", true)
+
+ConfigManager.Changelog.Scroll = Instance.new("ScrollingFrame")
+ConfigManager.Changelog.Scroll.BackgroundColor3 = Theme.Panel
+ConfigManager.Changelog.Scroll.BackgroundTransparency = 0.28
+ConfigManager.Changelog.Scroll.BorderSizePixel = 0
+ConfigManager.Changelog.Scroll.Position = UDim2.new(0, 14, 0, 48)
+ConfigManager.Changelog.Scroll.Size = UDim2.new(1, -28, 1, -104)
+ConfigManager.Changelog.Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ConfigManager.Changelog.Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ConfigManager.Changelog.Scroll.ScrollBarThickness = MOBILE_DEVICE and 6 or 4
+ConfigManager.Changelog.Scroll.ScrollBarImageColor3 = Theme.Purple
+ConfigManager.Changelog.Scroll.ScrollBarImageTransparency = 0.28
+ConfigManager.Changelog.Scroll.ZIndex = 72
+ConfigManager.Changelog.Scroll.Parent = ConfigManager.Changelog.Panel
+mkCorner(ConfigManager.Changelog.Scroll, 10)
+mkStroke(ConfigManager.Changelog.Scroll, Theme.Purple, 0.58, 1)
+
+ConfigManager.Changelog.TextLabel = Instance.new("TextLabel")
+ConfigManager.Changelog.TextLabel.BackgroundTransparency = 1
+ConfigManager.Changelog.TextLabel.Position = UDim2.new(0, 12, 0, 12)
+ConfigManager.Changelog.TextLabel.Size = UDim2.new(1, -24, 0, 0)
+ConfigManager.Changelog.TextLabel.AutomaticSize = Enum.AutomaticSize.Y
+ConfigManager.Changelog.TextLabel.Text = ""
+ConfigManager.Changelog.TextLabel.TextColor3 = Theme.TextMain
+ConfigManager.Changelog.TextLabel.TextSize = MOBILE_DEVICE and 11 or 12
+ConfigManager.Changelog.TextLabel.TextWrapped = true
+ConfigManager.Changelog.TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+ConfigManager.Changelog.TextLabel.TextYAlignment = Enum.TextYAlignment.Top
+ConfigManager.Changelog.TextLabel.Font = Enum.Font.GothamMedium
+ConfigManager.Changelog.TextLabel.ZIndex = 73
+ConfigManager.Changelog.TextLabel.Parent = ConfigManager.Changelog.Scroll
+ConfigManager.Changelog.TextLabel:SetAttribute("HexaNoTranslate", true)
+
+ConfigManager.Changelog.CloseButton = neonButton(
+	ConfigManager.Changelog.Panel,
+	"CERRAR",
+	UDim2.new(0, 132, 0, 36),
+	UDim2.new(0.5, -66, 1, -46),
+	73
+)
+ConfigManager.Changelog.CloseButton.BackgroundColor3 = Theme.Panel2
+ConfigManager.Changelog.CloseButton.TextColor3 = Theme.TextOff
+ConfigManager.Changelog.CloseButton:SetAttribute("HexaKeepBackgroundOnHover", true)
+registerDeviceText(ConfigManager.Changelog.CloseButton, "CERRAR", "CERRAR", "CLOSE", "CLOSE")
+
+ConfigManager.Changelog:ApplyLanguage()
+task.spawn(function() ConfigManager.Changelog:Refresh() end)
 
 do
 local function updateResponsiveLayout()
@@ -5321,6 +5295,11 @@ local function updateResponsiveLayout()
 	if MainFrame.Visible and MainFrame.Size.X.Offset > 0 then MainFrame.Size = MAIN_SIZE end
 	if KeyFrame.Visible and KeyFrame.Size.X.Offset > 0 then KeyFrame.Size = KEY_SIZE end
 	if Tutorial.Frame.Visible and Tutorial.Frame.Size.X.Offset > 0 then Tutorial.Frame.Size = Tutorial.getTargetSize() end
+	if ConfigManager.Changelog.Panel and ConfigManager.Changelog.Overlay and ConfigManager.Changelog.Overlay.Visible then
+		ConfigManager.Changelog.Panel.Size = ConfigManager.Changelog:GetPanelSize()
+		if ConfigManager.Changelog.Scroll then ConfigManager.Changelog.Scroll.ScrollBarThickness = MOBILE_DEVICE and 6 or 4 end
+		if ConfigManager.Changelog.TextLabel then ConfigManager.Changelog.TextLabel.TextSize = MOBILE_DEVICE and 11 or 12 end
+	end
 end
 
 local function bindViewportResize()
@@ -8429,8 +8408,48 @@ local function animateOpen(gui: GuiObject, targetSize: UDim2, forcedStyle: strin
 		return tween(scale, TweenInfo.new(0.48, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
 	end
 
-	gui.Size = UDim2.new(0, 0, 0, 0)
+\tgui.Size = UDim2.new(0, 0, 0, 0)
 	return tween(gui, tweenIn, {Size = targetSize})
+end
+
+function ConfigManager.Changelog:OpenPanel()
+	if not self.Overlay or not self.Panel then return false end
+	self:ApplyLanguage()
+	self.Overlay.Visible = true
+	self.Panel.Size = UDim2.new(0, 0, 0, 0)
+	animateOpen(self.Panel, self:GetPanelSize(), "BACK")
+	return true
+end
+
+function ConfigManager.Changelog:ClosePanel()
+	if not self.Overlay or not self.Panel or not self.Overlay.Visible then return end
+	local closeTween = tween(self.Panel, tweenOut, {Size = UDim2.new(0, 0, 0, 0)})
+	closeTween.Completed:Connect(function()
+		if self.Overlay then self.Overlay.Visible = false end
+	end)
+end
+
+function ConfigManager.Changelog:OpenManual()
+	self:Refresh()
+	if not self:IsWithinWindow() then
+		showSystemNotification(
+			"CHANGELOG",
+			"No hay un changelog activo en este momento.",
+			"CHANGELOG",
+			"There is no active changelog right now."
+		)
+		return false
+	end
+	return self:OpenPanel()
+end
+
+function ConfigManager.Changelog:TryAutoShow()
+	self:Refresh()
+	if not self:CanAutoShow() then return false end
+	self.AutoShownThisSession = true
+	self.Shows += 1
+	self:SaveCounter()
+	return self:OpenPanel()
 end
 
 local function applyDeviceProfile(mode)
@@ -8574,9 +8593,13 @@ local function openMainInterface()
 	MainFrame.Visible = true
 	local openingTween = animateOpen(MainFrame, MAIN_SIZE)
 	if openingTween and openingTween.Completed then
-		openingTween.Completed:Connect(function() ConfigManager:FinishPreMainDim() end)
+		openingTween.Completed:Connect(function()
+			ConfigManager:FinishPreMainDim()
+			task.defer(function() ConfigManager.Changelog:TryAutoShow() end)
+		end)
 	else
 		ConfigManager:FinishPreMainDim()
+		task.defer(function() ConfigManager.Changelog:TryAutoShow() end)
 	end
 end
 
@@ -9060,8 +9083,15 @@ RestoreOrb.MouseButton1Click:Connect(function()
 end)
 
 TutorialBtn.MouseButton1Click:Connect(function()
-	ConfigManager.Changelog:RecordShow()
 	animateOpen(Tutorial.Frame, Tutorial.getTargetSize(), "BACK")
+end)
+
+ConfigManager.Changelog.Button.MouseButton1Click:Connect(function()
+	ConfigManager.Changelog:OpenManual()
+end)
+
+ConfigManager.Changelog.CloseButton.MouseButton1Click:Connect(function()
+	ConfigManager.Changelog:ClosePanel()
 end)
 
 Tutorial.CloseButton.MouseButton1Click:Connect(function()
