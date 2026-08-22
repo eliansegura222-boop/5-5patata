@@ -1,6 +1,6 @@
 return {
     ["3108101113"] = { --zen
-        vip = false,
+        vip = true,
         expires = "permanent"
     },
 
