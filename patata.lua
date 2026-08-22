@@ -702,6 +702,74 @@ local Theme = {
 	Danger = Color3.fromRGB(220, 50, 50),
 }
 
+-- Temas visuales del panel. El primero es el tema gratuito/predeterminado;
+-- los demás se seleccionan desde PERSONALIZACIÓN y requieren VIP.
+local ThemePresets = {
+	{
+		Key = "MONO", ES = "BLANCO Y NEGRO", EN = "BLACK & WHITE",
+		BG = Color3.fromRGB(8, 8, 8), Panel = Color3.fromRGB(14, 14, 14),
+		Primary = Color3.fromRGB(245, 245, 245), Bright = Color3.fromRGB(255, 255, 255),
+		Muted = Color3.fromRGB(218, 218, 218), Mid = Color3.fromRGB(165, 165, 165),
+		Deep = Color3.fromRGB(22, 22, 22), SoftText = Color3.fromRGB(235, 235, 235),
+		TextOff = Color3.fromRGB(12, 12, 12), ToggleOff = Color3.fromRGB(95, 95, 95),
+		Gradient = {Color3.fromRGB(8, 8, 10), Color3.fromRGB(10, 25, 31), Color3.fromRGB(8, 68, 90)},
+		ImageTint = Color3.fromRGB(255, 255, 255),
+	},
+	{
+		Key = "GOLD", ES = "DORADO", EN = "GOLD",
+		BG = Color3.fromRGB(12, 9, 4), Panel = Color3.fromRGB(22, 16, 6),
+		Primary = Color3.fromRGB(244, 190, 52), Bright = Color3.fromRGB(255, 215, 92),
+		Muted = Color3.fromRGB(210, 159, 46), Mid = Color3.fromRGB(158, 111, 25),
+		Deep = Color3.fromRGB(39, 28, 8), SoftText = Color3.fromRGB(255, 229, 158),
+		TextOff = Color3.fromRGB(24, 17, 4), ToggleOff = Color3.fromRGB(104, 80, 31),
+		Gradient = {Color3.fromRGB(9, 7, 3), Color3.fromRGB(45, 30, 5), Color3.fromRGB(112, 72, 5)},
+		ImageTint = Color3.fromRGB(255, 236, 185),
+	},
+	{
+		Key = "SKY", ES = "CELESTE", EN = "SKY BLUE",
+		BG = Color3.fromRGB(4, 11, 15), Panel = Color3.fromRGB(7, 20, 27),
+		Primary = Color3.fromRGB(78, 205, 255), Bright = Color3.fromRGB(127, 225, 255),
+		Muted = Color3.fromRGB(62, 166, 207), Mid = Color3.fromRGB(37, 126, 164),
+		Deep = Color3.fromRGB(8, 35, 47), SoftText = Color3.fromRGB(190, 239, 255),
+		TextOff = Color3.fromRGB(4, 20, 28), ToggleOff = Color3.fromRGB(48, 92, 108),
+		Gradient = {Color3.fromRGB(4, 10, 15), Color3.fromRGB(4, 41, 58), Color3.fromRGB(4, 102, 142)},
+		ImageTint = Color3.fromRGB(205, 244, 255),
+	},
+	{
+		Key = "PURPLE", ES = "MORADO", EN = "PURPLE",
+		BG = Color3.fromRGB(10, 5, 15), Panel = Color3.fromRGB(19, 9, 28),
+		Primary = Color3.fromRGB(197, 103, 255), Bright = Color3.fromRGB(220, 148, 255),
+		Muted = Color3.fromRGB(164, 83, 214), Mid = Color3.fromRGB(125, 61, 165),
+		Deep = Color3.fromRGB(38, 17, 55), SoftText = Color3.fromRGB(235, 201, 255),
+		TextOff = Color3.fromRGB(24, 8, 34), ToggleOff = Color3.fromRGB(94, 61, 111),
+		Gradient = {Color3.fromRGB(9, 4, 14), Color3.fromRGB(42, 13, 61), Color3.fromRGB(93, 25, 132)},
+		ImageTint = Color3.fromRGB(237, 211, 255),
+	},
+	{
+		Key = "EMERALD", ES = "ESMERALDA", EN = "EMERALD",
+		BG = Color3.fromRGB(4, 12, 9), Panel = Color3.fromRGB(7, 23, 16),
+		Primary = Color3.fromRGB(73, 232, 158), Bright = Color3.fromRGB(116, 255, 191),
+		Muted = Color3.fromRGB(57, 187, 126), Mid = Color3.fromRGB(35, 137, 90),
+		Deep = Color3.fromRGB(8, 40, 27), SoftText = Color3.fromRGB(190, 255, 224),
+		TextOff = Color3.fromRGB(4, 24, 15), ToggleOff = Color3.fromRGB(47, 100, 75),
+		Gradient = {Color3.fromRGB(3, 11, 7), Color3.fromRGB(5, 46, 29), Color3.fromRGB(7, 105, 66)},
+		ImageTint = Color3.fromRGB(208, 255, 233),
+	},
+	{
+		Key = "CRIMSON", ES = "CARMESÍ", EN = "CRIMSON",
+		BG = Color3.fromRGB(14, 4, 7), Panel = Color3.fromRGB(27, 7, 12),
+		Primary = Color3.fromRGB(247, 75, 105), Bright = Color3.fromRGB(255, 119, 143),
+		Muted = Color3.fromRGB(202, 59, 84), Mid = Color3.fromRGB(157, 41, 62),
+		Deep = Color3.fromRGB(48, 11, 20), SoftText = Color3.fromRGB(255, 199, 210),
+		TextOff = Color3.fromRGB(29, 5, 11), ToggleOff = Color3.fromRGB(112, 52, 65),
+		Gradient = {Color3.fromRGB(13, 3, 6), Color3.fromRGB(55, 7, 17), Color3.fromRGB(122, 13, 35)},
+		ImageTint = Color3.fromRGB(255, 218, 225),
+	},
+}
+
+local CurrentThemeIndex = 1
+local applyPanelTheme = function() end
+
 local DEFAULT_WALK_SPEED = 16
 local DEFAULT_JUMP_POWER = 50
 local GUI_VIEWPORT_SIZE = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
@@ -832,6 +900,22 @@ local function makeDraggable(frame: GuiObject, handle: GuiObject?)
 end
 
 local function addHover(button: TextButton, idleBg: Color3, hoverBg: Color3, activeBg: Color3?)
+	-- Guardar el rol temático, no únicamente el Color3 inicial. Así un botón que ya
+	-- existía no vuelve al tema anterior al pasar el cursor después de cambiar TEMA.
+	local roleOrder = {"BG", "Panel", "Panel2", "Accent", "Accent2", "Purple", "PurpleDark", "PurpleDeep", "PurpleText", "TextMain", "TextOff", "Active", "ActiveText", "ToggleOn", "ToggleOff"}
+	local function roleFor(color)
+		for _, role in ipairs(roleOrder) do
+			if Theme[role] == color then return role end
+		end
+		return nil
+	end
+	local idleRole = roleFor(idleBg)
+	local hoverRole = roleFor(hoverBg)
+	local activeRole = activeBg and roleFor(activeBg) or nil
+	local function resolve(role, fallback)
+		return role and Theme[role] or fallback
+	end
+
 	local ti = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
 	button.MouseEnter:Connect(function()
 		-- Algunos botones destacados deben conservar exactamente su color base al pasar el cursor.
@@ -843,13 +927,14 @@ local function addHover(button: TextButton, idleBg: Color3, hoverBg: Color3, act
 		end
 		local isToggle = button:GetAttribute("IsToggle")
 		local isActive = button:GetAttribute("IsActive") == true
+		local targetHover = resolve(hoverRole, hoverBg)
 		if isToggle then
-			if PERFORMANCE_MODE then button.BackgroundColor3 = hoverBg
-			else tween(button, ti, {BackgroundColor3 = hoverBg}) end
+			if PERFORMANCE_MODE then button.BackgroundColor3 = targetHover
+			else tween(button, ti, {BackgroundColor3 = targetHover}) end
 		else
 			if not isActive then
-				if PERFORMANCE_MODE then button.BackgroundColor3 = hoverBg
-				else tween(button, ti, {BackgroundColor3 = hoverBg}) end
+				if PERFORMANCE_MODE then button.BackgroundColor3 = targetHover
+				else tween(button, ti, {BackgroundColor3 = targetHover}) end
 			end
 		end
 	end)
@@ -863,11 +948,12 @@ local function addHover(button: TextButton, idleBg: Color3, hoverBg: Color3, act
 		end
 		local isToggle = button:GetAttribute("IsToggle")
 		local isActive = button:GetAttribute("IsActive") == true
+		local targetIdle = resolve(idleRole, idleBg)
 		if isToggle then
-			if PERFORMANCE_MODE then button.BackgroundColor3 = idleBg
-			else tween(button, ti, {BackgroundColor3 = idleBg}) end
+			if PERFORMANCE_MODE then button.BackgroundColor3 = targetIdle
+			else tween(button, ti, {BackgroundColor3 = targetIdle}) end
 		else
-			local targetColor = isActive and (activeBg or Theme.Active) or idleBg
+			local targetColor = isActive and resolve(activeRole, activeBg or Theme.Active) or targetIdle
 			if PERFORMANCE_MODE then button.BackgroundColor3 = targetColor
 			else tween(button, ti, {BackgroundColor3 = targetColor}) end
 		end
@@ -1799,6 +1885,12 @@ Options displaying the VIP label require an active VIP key.]]},
 	{"MODO TRANSMISIÓN", "STREAMER MODE"},
 	{"ACTIVAR MODO PÁNICO", "ACTIVATE PANIC MODE"},
 	{"PERSONALIZACIÓN", "CUSTOMIZATION"},
+	{"TEMA: BLANCO Y NEGRO", "THEME: BLACK & WHITE"},
+	{"TEMA: DORADO", "THEME: GOLD"},
+	{"TEMA: CELESTE", "THEME: SKY BLUE"},
+	{"TEMA: MORADO", "THEME: PURPLE"},
+	{"TEMA: ESMERALDA", "THEME: EMERALD"},
+	{"TEMA: CARMESÍ", "THEME: CRIMSON"},
 	{"SUBIR", "UP"},
 	{"BAJAR", "DOWN"},
 	{"ARRIBA DERECHA", "TOP RIGHT"},
@@ -2409,6 +2501,93 @@ bgGradient.Transparency = NumberSequence.new({
 	NumberSequenceKeypoint.new(1, 0.28),
 })
 bgGradient.Parent = MainFrame
+
+local function buildThemePalette(preset)
+	return {
+		BG = preset.BG,
+		Panel = preset.Panel,
+		Panel2 = preset.Primary,
+		Accent = preset.Bright,
+		Accent2 = preset.Muted,
+		Purple = preset.Primary,
+		PurpleDark = preset.Mid,
+		PurpleDeep = preset.Deep,
+		PurpleText = preset.SoftText,
+		TextMain = Color3.fromRGB(245, 245, 245),
+		TextOff = preset.TextOff,
+		Active = preset.Bright,
+		ActiveText = Color3.fromRGB(255, 255, 255),
+		ToggleOn = preset.Primary,
+		ToggleOff = preset.ToggleOff,
+		VipGold = Theme.VipGold,
+		Danger = Theme.Danger,
+	}
+end
+
+local function colorClose(a, b)
+	return typeof(a) == "Color3" and typeof(b) == "Color3"
+		and math.abs(a.R - b.R) < 0.001
+		and math.abs(a.G - b.G) < 0.001
+		and math.abs(a.B - b.B) < 0.001
+end
+
+applyPanelTheme = function(index)
+	index = math.clamp(math.floor(tonumber(index) or 1), 1, #ThemePresets)
+	local preset = ThemePresets[index]
+	if not preset then return false end
+
+	local previous = {}
+	for key, value in pairs(Theme) do previous[key] = value end
+	local nextPalette = buildThemePalette(preset)
+
+	local roleOrder = {"BG", "Panel", "Panel2", "Accent", "Accent2", "Purple", "PurpleDark", "PurpleDeep", "PurpleText", "TextMain", "TextOff", "Active", "ActiveText", "ToggleOn", "ToggleOff"}
+	local function remapColor(color)
+		for _, role in ipairs(roleOrder) do
+			if colorClose(color, previous[role]) then
+				return nextPalette[role]
+			end
+		end
+		return color
+	end
+
+	-- Actualizar primero los objetos ya creados usando la paleta anterior como mapa.
+	for _, object in ipairs(ScreenGui:GetDescendants()) do
+		pcall(function()
+			if object:IsA("GuiObject") then
+				object.BackgroundColor3 = remapColor(object.BackgroundColor3)
+			end
+			if object:IsA("UIStroke") then
+				object.Color = remapColor(object.Color)
+			end
+
+			-- Los controles VIP guardan sus colores originales en atributos. Mantenerlos
+			-- sincronizados evita que un refresh remoto restaure el tema anterior.
+			for _, attributeName in ipairs({"HexaVipOrigBg", "HexaVipOrigStrokeColor"}) do
+				local attributeValue = object:GetAttribute(attributeName)
+				if typeof(attributeValue) == "Color3" then
+					object:SetAttribute(attributeName, remapColor(attributeValue))
+				end
+			end
+		end)
+	end
+
+	for key, value in pairs(nextPalette) do Theme[key] = value end
+	CurrentThemeIndex = index
+
+	MainFrameBackground.ImageColor3 = preset.ImageTint
+	bgGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, preset.Gradient[1]),
+		ColorSequenceKeypoint.new(0.52, preset.Gradient[2]),
+		ColorSequenceKeypoint.new(1, preset.Gradient[3]),
+	})
+
+	-- Asegurar que controles con estados especiales adopten inmediatamente la nueva paleta.
+	for _, slider in ipairs(AllSliders) do
+		pcall(function() if slider and slider.Refresh then slider.Refresh() end end)
+	end
+	pcall(refreshVipControls)
+	return true
+end
 
 local Header = Instance.new("Frame")
 Header.BackgroundColor3 = Theme.Panel
@@ -8734,6 +8913,7 @@ task.spawn(function()
 			BlurBackup = {},
 			AnimationIndex = 1,
 			FontIndex = 1,
+			ThemeIndex = 1,
 			LastInfoUpdate = 0,
 			LastVisualUpdate = 0,
 			LastMovementUpdate = 0,
@@ -9785,7 +9965,7 @@ task.spawn(function()
 		end
 
 		function X:setupPersonalization()
-			self.PersonalCard, self.PersonalTitle = self:makeCard(158, "PERSONALIZACIÓN")
+			self.PersonalCard, self.PersonalTitle = self:makeCard(204, "PERSONALIZACIÓN")
 			self.PersonalCard.LayoutOrder = 80
 			local categoryVipBadge = Instance.new("TextLabel")
 			categoryVipBadge.Name = "HexaVipBadge"
@@ -9818,8 +9998,25 @@ task.spawn(function()
 			}
 			self.AnimationButton = neonButton(self.PersonalCard, "ANIMACIÓN DE APERTURA: RETROCESO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 44))
 			self.FontButton = neonButton(self.PersonalCard, "FUENTE: GOTHAM", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 90))
+			self.ThemeButton = neonButton(self.PersonalCard, "TEMA: BLANCO Y NEGRO", UDim2.new(1, -32, 0, 38), UDim2.new(0, 16, 0, 136))
 			markVipControl(self.AnimationButton)
 			markVipControl(self.FontButton)
+			markVipControl(self.ThemeButton)
+
+			local function refreshThemeButtonText()
+				local preset = ThemePresets[self.ThemeIndex] or ThemePresets[1]
+				registerDeviceText(
+					self.ThemeButton,
+					"TEMA: " .. preset.ES,
+					"TEMA: " .. preset.ES,
+					"THEME: " .. preset.EN,
+					"THEME: " .. preset.EN
+				)
+				refreshDeviceSpecificTexts()
+			end
+			self.RefreshThemeButtonText = refreshThemeButtonText
+			refreshThemeButtonText()
+
 			self:connect(self.AnimationButton.MouseButton1Click, function()
 				if not requireVip() then return end
 				self.AnimationIndex = self.AnimationIndex % #self.AnimationStyles + 1
@@ -9838,6 +10035,19 @@ task.spawn(function()
 				self.FontIndex = self.FontIndex % #self.FontOptions + 1
 				self.FontButton.Text = "FUENTE: " .. self.FontOptions[self.FontIndex].name
 				self:applyFont()
+			end)
+			self:connect(self.ThemeButton.MouseButton1Click, function()
+				if not requireVip() then return end
+				self.ThemeIndex = self.ThemeIndex % #ThemePresets + 1
+				applyPanelTheme(self.ThemeIndex)
+				refreshThemeButtonText()
+				local preset = ThemePresets[self.ThemeIndex]
+				showSystemNotification(
+					"TEMA APLICADO",
+					"Tema " .. preset.ES .. " activado.",
+					"THEME APPLIED",
+					preset.EN .. " theme enabled."
+				)
 			end)
 		end
 
@@ -10055,6 +10265,7 @@ task.spawn(function()
 			X.CrosshairGap = 5
 			X.AnimationIndex = 1
 			X.FontIndex = 1
+			X.ThemeIndex = 1
 			pcall(function() X:toggle(X.NoFallButton, false) end)
 			pcall(function() X:toggle(X.SpectateButton, false) end)
 			pcall(function() X:toggle(X.MouseTeleportButton, false) end)
@@ -10066,6 +10277,8 @@ task.spawn(function()
 			pcall(function() X.CrosshairGapSlider.Set(5) end)
 			pcall(function() X.AnimationButton.Text = "ANIMACIÓN DE APERTURA: RETROCESO" end)
 			pcall(function() X.FontButton.Text = "FUENTE: GOTHAM" end)
+			pcall(function() applyPanelTheme(1) end)
+			pcall(function() if X.RefreshThemeButtonText then X.RefreshThemeButtonText() end end)
 			pcall(function() X:updateCrosshair() end)
 			pcall(function() X:restoreCameraSubject() end)
 			-- Resetear el estilo sin reproducir la animación durante un refresh VIP.
