@@ -542,18 +542,22 @@ local function tween(obj, props, time)
     return tw
 end
 
+local PANEL_W, PANEL_H = 650, 440
+local PANEL_MIN_W, PANEL_MIN_H = 610, 410
+local TOP_H, SIDE_W = 58, 150
+
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(780, 540)
-Main.Position = UDim2.new(0.5, -390, 0.5, -270)
+Main.Size = UDim2.fromOffset(PANEL_W, PANEL_H)
+Main.Position = UDim2.new(0.5, -PANEL_W/2, 0.5, -PANEL_H/2)
 Main.BackgroundColor3 = Theme.bg
 Main.BackgroundTransparency = 0
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.ZIndex = 10
 Main.Parent = Gui
-corner(Main, 8)
-stroke(Main, Theme.accent, 1, 0.48)
+corner(Main, 10)
+stroke(Main, Theme.accent, 1, 0.38)
 
 local InnerBorder = Instance.new("Frame")
 InnerBorder.Name = "InnerBorder"
@@ -563,13 +567,13 @@ InnerBorder.BackgroundTransparency = 1
 InnerBorder.BorderSizePixel = 0
 InnerBorder.ZIndex = Main.ZIndex + 1
 InnerBorder.Parent = Main
-corner(InnerBorder, 6)
-stroke(InnerBorder, Theme.accent, 1, 0.88)
+corner(InnerBorder, 8)
+stroke(InnerBorder, Theme.accent, 1, 0.90)
 
--- Optimized monochrome galaxy: a tiny fixed pool of stars updated at ~12 FPS.
--- No ParticleEmitters and no RenderStepped-per-star connections.
+-- Lightweight animated background: only white dots of different sizes.
+-- Dots drift slowly in random directions and occasionally change direction.
 local StarField = Instance.new("Frame")
-StarField.Name = "GalaxyField"
+StarField.Name = "MovingDotsBackground"
 StarField.Size = UDim2.fromScale(1, 1)
 StarField.BackgroundTransparency = 1
 StarField.BorderSizePixel = 0
@@ -577,28 +581,46 @@ StarField.ClipsDescendants = true
 StarField.ZIndex = Main.ZIndex + 1
 StarField.Parent = Main
 
-local galaxyStars = {}
+local movingDots = {}
 local rng = Random.new(84219)
-for i = 1, 20 do
-    local star = Instance.new("Frame")
-    local size = (i % 7 == 0) and 3 or ((i % 3 == 0) and 2 or 1)
-    star.Size = UDim2.fromOffset(size, size)
-    star.BackgroundColor3 = Theme.text
-    star.BackgroundTransparency = rng:NextNumber(0.18, 0.72)
-    star.BorderSizePixel = 0
-    star.ZIndex = StarField.ZIndex + 1
-    star.Parent = StarField
-    corner(star, size)
+
+for i = 1, 70 do
+    local dot = Instance.new("Frame")
+    local sizeRoll = rng:NextInteger(1, 100)
+    local size
+    if sizeRoll <= 8 then
+        size = 5
+    elseif sizeRoll <= 22 then
+        size = 4
+    elseif sizeRoll <= 45 then
+        size = 3
+    elseif sizeRoll <= 72 then
+        size = 2
+    else
+        size = 1
+    end
+
+    dot.Size = UDim2.fromOffset(size, size)
+    dot.BackgroundColor3 = Color3.new(1, 1, 1)
+    dot.BackgroundTransparency = rng:NextNumber(0.12, 0.68)
+    dot.BorderSizePixel = 0
+    dot.ZIndex = StarField.ZIndex + 1
+    dot.Parent = StarField
+    corner(dot, math.max(1, size))
+
+    local angle = rng:NextNumber(0, math.pi * 2)
+    local speed = rng:NextNumber(0.003, 0.012)
     local data = {
-        object = star,
-        x = rng:NextNumber(),
-        y = rng:NextNumber(),
-        speed = rng:NextNumber(0.010, 0.030),
-        phase = rng:NextNumber(0, math.pi * 2),
-        baseTransparency = star.BackgroundTransparency,
+        object = dot,
+        x = rng:NextNumber(-0.02, 1.02),
+        y = rng:NextNumber(-0.02, 1.02),
+        vx = math.cos(angle) * speed,
+        vy = math.sin(angle) * speed,
+        nextTurn = os.clock() + rng:NextNumber(2.5, 6.5),
     }
-    star.Position = UDim2.fromScale(data.x, data.y)
-    galaxyStars[#galaxyStars + 1] = data
+
+    dot.Position = UDim2.fromScale(data.x, data.y)
+    movingDots[#movingDots + 1] = data
 end
 
 task.spawn(function()
@@ -606,78 +628,91 @@ task.spawn(function()
     while alive do
         if Main.Visible then
             local now = os.clock()
-            local dt = math.min(now - last, 0.2)
+            local dt = math.min(now - last, 0.25)
             last = now
-            for i, data in ipairs(galaxyStars) do
-                data.x += data.speed * dt
-                data.y += data.speed * 0.18 * dt
-                if data.x > 1.015 then data.x = -0.015 end
-                if data.y > 1.015 then data.y = -0.015 end
-                local star = data.object
-                if star and star.Parent then
-                    star.Position = UDim2.fromScale(data.x, data.y)
-                    star.BackgroundTransparency = math.clamp(data.baseTransparency + math.sin(now * 1.35 + data.phase) * 0.12, 0.08, 0.86)
+
+            for _, data in ipairs(movingDots) do
+                if now >= data.nextTurn then
+                    local angle = rng:NextNumber(0, math.pi * 2)
+                    local speed = rng:NextNumber(0.003, 0.012)
+                    data.vx = math.cos(angle) * speed
+                    data.vy = math.sin(angle) * speed
+                    data.nextTurn = now + rng:NextNumber(2.5, 6.5)
+                end
+
+                data.x += data.vx * dt
+                data.y += data.vy * dt
+
+                if data.x > 1.03 then data.x = -0.03 end
+                if data.x < -0.03 then data.x = 1.03 end
+                if data.y > 1.03 then data.y = -0.03 end
+                if data.y < -0.03 then data.y = 1.03 end
+
+                local dot = data.object
+                if dot and dot.Parent then
+                    dot.Position = UDim2.fromScale(data.x, data.y)
                 end
             end
-            task.wait(0.08)
+
+            task.wait(0.12)
         else
             last = os.clock()
-            task.wait(0.35)
+            task.wait(0.40)
         end
     end
 end)
 
 local Top = Instance.new("Frame")
 Top.Name = "TopBar"
-Top.Size = UDim2.new(1, 0, 0, 68)
+Top.Size = UDim2.new(1, 0, 0, TOP_H)
 Top.BackgroundColor3 = Theme.panel
-Top.BackgroundTransparency = 0.14
+Top.BackgroundTransparency = 0.10
 Top.BorderSizePixel = 0
-Top.ZIndex = Main.ZIndex + 2
+Top.ZIndex = Main.ZIndex + 3
 Top.Parent = Main
 
 local Title = Instance.new("TextLabel")
 Title.BackgroundTransparency = 1
-Title.Position = UDim2.fromOffset(22, 10)
-Title.Size = UDim2.new(1, -210, 0, 25)
+Title.Position = UDim2.fromOffset(18, 8)
+Title.Size = UDim2.new(1, -185, 0, 23)
 Title.Font = Enum.Font.GothamBlack
 Title.Text = "VOID // BABFT"
 Title.TextColor3 = Theme.text
-Title.TextSize = 20
+Title.TextSize = 18
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.ZIndex = Top.ZIndex + 1
 Title.Parent = Top
 
 local Sub = Instance.new("TextLabel")
 Sub.BackgroundTransparency = 1
-Sub.Position = UDim2.fromOffset(22, 37)
-Sub.Size = UDim2.new(1, -210, 0, 17)
-Sub.Font = Enum.Font.Gotham
-Sub.Text = "GALACTIC CONTROL SYSTEM  //  BUILD A BOAT FOR TREASURE"
+Sub.Position = UDim2.fromOffset(18, 32)
+Sub.Size = UDim2.new(1, -185, 0, 15)
+Sub.Font = Enum.Font.GothamMedium
+Sub.Text = "GALACTIC CONTROL // BUILD A BOAT"
 Sub.TextColor3 = Theme.muted
-Sub.TextSize = 10
+Sub.TextSize = 9
 Sub.TextXAlignment = Enum.TextXAlignment.Left
 Sub.ZIndex = Top.ZIndex + 1
 Sub.Parent = Top
 
 local HeaderLine = Instance.new("Frame")
-HeaderLine.Position = UDim2.new(0, 18, 1, -1)
-HeaderLine.Size = UDim2.new(1, -36, 0, 1)
+HeaderLine.Position = UDim2.new(0, 14, 1, -1)
+HeaderLine.Size = UDim2.new(1, -28, 0, 1)
 HeaderLine.BackgroundColor3 = Theme.accent
-HeaderLine.BackgroundTransparency = 0.72
+HeaderLine.BackgroundTransparency = 0.68
 HeaderLine.BorderSizePixel = 0
 HeaderLine.ZIndex = Top.ZIndex + 1
 HeaderLine.Parent = Top
 
 local Status = Instance.new("TextLabel")
 Status.AnchorPoint = Vector2.new(1, 0.5)
-Status.Position = UDim2.new(1, -106, 0.5, 0)
-Status.Size = UDim2.fromOffset(92, 24)
+Status.Position = UDim2.new(1, -92, 0.5, 0)
+Status.Size = UDim2.fromOffset(78, 22)
 Status.BackgroundTransparency = 1
 Status.Font = Enum.Font.GothamBold
-Status.Text = "●  ONLINE"
+Status.Text = "● ONLINE"
 Status.TextColor3 = Theme.muted
-Status.TextSize = 9
+Status.TextSize = 8
 Status.TextXAlignment = Enum.TextXAlignment.Right
 Status.ZIndex = Top.ZIndex + 2
 Status.Parent = Top
@@ -686,51 +721,73 @@ local function topButton(text, x, color)
     local b = Instance.new("TextButton")
     b.AnchorPoint = Vector2.new(1, 0.5)
     b.Position = UDim2.new(1, x, 0.5, 0)
-    b.Size = UDim2.fromOffset(34, 34)
+    b.Size = UDim2.fromOffset(30, 30)
     b.BackgroundColor3 = Theme.bg
     b.BorderSizePixel = 0
     b.AutoButtonColor = false
     b.Font = Enum.Font.GothamBold
     b.Text = text
     b.TextColor3 = color or Theme.text
-    b.TextSize = 16
+    b.TextSize = 15
     b.ZIndex = Top.ZIndex + 3
     b.Parent = Top
-    corner(b, 5)
-    stroke(b, Theme.accent, 1, 0.72)
-    track(b.MouseEnter:Connect(function() tween(b, {BackgroundColor3 = Theme.soft}, 0.12) end))
-    track(b.MouseLeave:Connect(function() tween(b, {BackgroundColor3 = Theme.panel2}, 0.12) end))
+    corner(b, 6)
+    stroke(b, Theme.accent, 1, 0.66)
+    track(b.MouseEnter:Connect(function() tween(b, {BackgroundColor3 = Theme.soft}, 0.10) end))
+    track(b.MouseLeave:Connect(function() tween(b, {BackgroundColor3 = Theme.bg}, 0.10) end))
     return b
 end
 
-local Close = topButton("×", -16, Theme.danger)
-local Minimize = topButton("—", -58, Theme.text)
+local Close = topButton("×", -13, Theme.danger)
+local Minimize = topButton("—", -49, Theme.text)
 
 local Sidebar = Instance.new("Frame")
-Sidebar.Position = UDim2.fromOffset(0, 68)
-Sidebar.Size = UDim2.new(0, 172, 1, -68)
+Sidebar.Position = UDim2.fromOffset(0, TOP_H)
+Sidebar.Size = UDim2.new(0, SIDE_W, 1, -TOP_H)
 Sidebar.BackgroundColor3 = Theme.panel
-Sidebar.BackgroundTransparency = 0.20
+Sidebar.BackgroundTransparency = 0.12
 Sidebar.BorderSizePixel = 0
-Sidebar.ZIndex = Main.ZIndex + 1
+Sidebar.ZIndex = Main.ZIndex + 2
 Sidebar.Parent = Main
 
+local SideDivider = Instance.new("Frame")
+SideDivider.AnchorPoint = Vector2.new(1, 0)
+SideDivider.Position = UDim2.new(1, 0, 0, 8)
+SideDivider.Size = UDim2.new(0, 1, 1, -16)
+SideDivider.BackgroundColor3 = Theme.accent
+SideDivider.BackgroundTransparency = 0.80
+SideDivider.BorderSizePixel = 0
+SideDivider.ZIndex = Sidebar.ZIndex + 1
+SideDivider.Parent = Sidebar
+
 local SidePad = Instance.new("UIPadding")
-SidePad.PaddingTop = UDim.new(0, 15)
-SidePad.PaddingLeft = UDim.new(0, 14)
-SidePad.PaddingRight = UDim.new(0, 14)
+SidePad.PaddingTop = UDim.new(0, 10)
+SidePad.PaddingLeft = UDim.new(0, 10)
+SidePad.PaddingRight = UDim.new(0, 10)
 SidePad.Parent = Sidebar
 
 local SideList = Instance.new("UIListLayout")
-SideList.Padding = UDim.new(0, 7)
+SideList.Padding = UDim.new(0, 6)
 SideList.SortOrder = Enum.SortOrder.LayoutOrder
 SideList.Parent = Sidebar
 
+local NavTitle = Instance.new("TextLabel")
+NavTitle.LayoutOrder = -20
+NavTitle.Size = UDim2.new(1, 0, 0, 25)
+NavTitle.BackgroundTransparency = 1
+NavTitle.Font = Enum.Font.GothamBlack
+NavTitle.Text = "NAV // MODULES"
+NavTitle.TextColor3 = Theme.text
+NavTitle.TextSize = 9
+NavTitle.TextXAlignment = Enum.TextXAlignment.Left
+NavTitle.ZIndex = Sidebar.ZIndex + 2
+NavTitle.Parent = Sidebar
+
 local ContentHolder = Instance.new("Frame")
-ContentHolder.Position = UDim2.fromOffset(172, 68)
-ContentHolder.Size = UDim2.new(1, -172, 1, -68)
+ContentHolder.Position = UDim2.fromOffset(SIDE_W, TOP_H)
+ContentHolder.Size = UDim2.new(1, -SIDE_W, 1, -TOP_H)
 ContentHolder.BackgroundTransparency = 1
-ContentHolder.ZIndex = Main.ZIndex + 1
+ContentHolder.ZIndex = Main.ZIndex + 2
 ContentHolder.Parent = Main
 
 local pages = {}
@@ -738,12 +795,12 @@ local categoryButtons = {}
 local currentPage
 
 local categories = {
-    {"FARM", "Farm"},
-    {"BARCO", "Boat"},
-    {"MOVIMIENTO", "Movement"},
-    {"TELEPORT", "Teleport"},
-    {"VISUALES", "Visuals"},
-    {"SERVIDOR", "Server"},
+    {"FARM", "Farm", "01"},
+    {"BARCO", "Boat", "02"},
+    {"MOVIMIENTO", "Movement", "03"},
+    {"TELEPORT", "Teleport", "04"},
+    {"VISUALES", "Visuals", "05"},
+    {"SERVIDOR", "Server", "06"},
 }
 
 local function makePage(key)
@@ -761,14 +818,14 @@ local function makePage(key)
     sc.Parent = ContentHolder
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0, 14)
-    pad.PaddingBottom = UDim.new(0, 18)
-    pad.PaddingLeft = UDim.new(0, 16)
-    pad.PaddingRight = UDim.new(0, 16)
+    pad.PaddingTop = UDim.new(0, 11)
+    pad.PaddingBottom = UDim.new(0, 14)
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
     pad.Parent = sc
 
     local list = Instance.new("UIListLayout")
-    list.Padding = UDim.new(0, 8)
+    list.Padding = UDim.new(0, 7)
     list.SortOrder = Enum.SortOrder.LayoutOrder
     list.Parent = sc
 
@@ -778,49 +835,134 @@ end
 
 for _, item in ipairs(categories) do makePage(item[2]) end
 
+local function renderCategoryButton(key, selected, hovered)
+    local b = categoryButtons[key]
+    if not b then return end
+    local border = b:FindFirstChild("Border")
+    local label = b:FindFirstChild("Label")
+    local indexBadge = b:FindFirstChild("IndexBadge")
+    local indexText = indexBadge and indexBadge:FindFirstChild("IndexText")
+    local arrow = b:FindFirstChild("Arrow")
+    local rail = b:FindFirstChild("Rail")
+
+    if selected then
+        tween(b, {BackgroundColor3 = Theme.accent}, 0.14)
+        if border then border.Transparency = 0.12 end
+        if label then label.TextColor3 = Theme.bg end
+        if indexBadge then tween(indexBadge, {BackgroundColor3 = Theme.bg}, 0.14) end
+        if indexText then indexText.TextColor3 = Theme.text end
+        if arrow then arrow.TextColor3 = Theme.bg end
+        if rail then rail.BackgroundColor3 = Theme.bg; rail.BackgroundTransparency = 0 end
+    else
+        tween(b, {BackgroundColor3 = hovered and Theme.soft or Theme.panel2}, 0.12)
+        if border then border.Transparency = hovered and 0.36 or 0.72 end
+        if label then label.TextColor3 = hovered and Theme.text or Theme.muted end
+        if indexBadge then tween(indexBadge, {BackgroundColor3 = hovered and Color3.fromRGB(35,35,35) or Theme.bg}, 0.12) end
+        if indexText then indexText.TextColor3 = hovered and Theme.text or Theme.muted end
+        if arrow then arrow.TextColor3 = hovered and Theme.text or Theme.muted end
+        if rail then rail.BackgroundColor3 = Theme.accent; rail.BackgroundTransparency = hovered and 0.25 or 0.72 end
+    end
+end
+
 local function selectPage(key)
     if currentPage == key then return end
     currentPage = key
     for k, p in pairs(pages) do p.Visible = (k == key) end
-    for k, b in pairs(categoryButtons) do
-        local selected = k == key
-        tween(b, {BackgroundColor3 = selected and Theme.accent or Theme.bg}, 0.14)
-        b.TextColor3 = selected and Theme.bg or Theme.muted
-        local border = b:FindFirstChild("Border")
-        if border then border.Transparency = selected and 0.08 or 0.78 end
-    end
+    for k in pairs(categoryButtons) do renderCategoryButton(k, k == key, false) end
 end
 
 for i, item in ipairs(categories) do
-    local label, key = item[1], item[2]
+    local label, key, number = item[1], item[2], item[3]
     local b = Instance.new("TextButton")
     b.LayoutOrder = i
-    b.Size = UDim2.new(1, 0, 0, 40)
-    b.BackgroundColor3 = Theme.bg
+    b.Size = UDim2.new(1, 0, 0, 42)
+    b.BackgroundColor3 = Theme.panel2
     b.BorderSizePixel = 0
     b.AutoButtonColor = false
-    b.Font = Enum.Font.GothamBold
-    b.Text = "  //  " .. label
-    b.TextColor3 = Theme.muted
-    b.TextSize = 12
-    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.Text = ""
     b.ZIndex = Sidebar.ZIndex + 2
     b.Parent = Sidebar
-    corner(b, 4)
-    local bs = stroke(b, Theme.accent, 1, 0.78)
+    corner(b, 8)
+    local bs = stroke(b, Theme.accent, 1, 0.72)
     bs.Name = "Border"
-    track(b.Activated:Connect(function() selectPage(key) end))
+
+    local rail = Instance.new("Frame")
+    rail.Name = "Rail"
+    rail.Position = UDim2.fromOffset(0, 8)
+    rail.Size = UDim2.new(0, 3, 1, -16)
+    rail.BackgroundColor3 = Theme.accent
+    rail.BackgroundTransparency = 0.72
+    rail.BorderSizePixel = 0
+    rail.ZIndex = b.ZIndex + 1
+    rail.Parent = b
+    corner(rail, 3)
+
+    local badge = Instance.new("Frame")
+    badge.Name = "IndexBadge"
+    badge.Position = UDim2.fromOffset(9, 8)
+    badge.Size = UDim2.fromOffset(27, 26)
+    badge.BackgroundColor3 = Theme.bg
+    badge.BorderSizePixel = 0
+    badge.ZIndex = b.ZIndex + 1
+    badge.Parent = b
+    corner(badge, 6)
+    stroke(badge, Theme.accent, 1, 0.80)
+
+    local idx = Instance.new("TextLabel")
+    idx.Name = "IndexText"
+    idx.Size = UDim2.fromScale(1, 1)
+    idx.BackgroundTransparency = 1
+    idx.Font = Enum.Font.GothamBlack
+    idx.Text = number
+    idx.TextColor3 = Theme.muted
+    idx.TextSize = 9
+    idx.ZIndex = badge.ZIndex + 1
+    idx.Parent = badge
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Name = "Label"
+    lbl.Position = UDim2.fromOffset(43, 0)
+    lbl.Size = UDim2.new(1, -68, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBold
+    lbl.Text = label
+    lbl.TextColor3 = Theme.muted
+    lbl.TextSize = 10
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = b.ZIndex + 1
+    lbl.Parent = b
+
+    local arrow = Instance.new("TextLabel")
+    arrow.Name = "Arrow"
+    arrow.AnchorPoint = Vector2.new(1, 0.5)
+    arrow.Position = UDim2.new(1, -8, 0.5, 0)
+    arrow.Size = UDim2.fromOffset(16, 20)
+    arrow.BackgroundTransparency = 1
+    arrow.Font = Enum.Font.GothamBlack
+    arrow.Text = ">"
+    arrow.TextColor3 = Theme.muted
+    arrow.TextSize = 10
+    arrow.ZIndex = b.ZIndex + 1
+    arrow.Parent = b
+
     categoryButtons[key] = b
+    track(b.MouseEnter:Connect(function()
+        if currentPage ~= key then renderCategoryButton(key, false, true) end
+    end))
+    track(b.MouseLeave:Connect(function()
+        if currentPage ~= key then renderCategoryButton(key, false, false) end
+    end))
+    track(b.Activated:Connect(function() selectPage(key) end))
 end
 
 local Credit = Instance.new("TextLabel")
 Credit.LayoutOrder = 100
-Credit.Size = UDim2.new(1, 0, 0, 50)
+Credit.Size = UDim2.new(1, 0, 0, 38)
 Credit.BackgroundTransparency = 1
-Credit.Font = Enum.Font.Gotham
-Credit.Text = "VOID BUILD // v3\nOPTIMIZED GALAXY CORE"
-Credit.TextColor3 = Color3.fromRGB(115, 115, 115)
-Credit.TextSize = 10
+Credit.Font = Enum.Font.GothamMedium
+Credit.Text = "VOID BUILD // v3\nGALAXY CORE // LITE"
+Credit.TextColor3 = Color3.fromRGB(105, 105, 105)
+Credit.TextSize = 8
 Credit.TextWrapped = true
 Credit.ZIndex = Sidebar.ZIndex + 1
 Credit.Parent = Sidebar
@@ -1320,9 +1462,9 @@ track(Bubble.Activated:Connect(function()
     if bubbleMoved then return end
     Bubble.Visible = false
     Main.Visible = true
-    Main.Size = UDim2.fromOffset(730, 500)
+    Main.Size = UDim2.fromOffset(PANEL_MIN_W, PANEL_MIN_H)
     Main.BackgroundTransparency = 0.12
-    tween(Main, {Size = UDim2.fromOffset(780, 540), BackgroundTransparency = 0}, 0.18)
+    tween(Main, {Size = UDim2.fromOffset(PANEL_W, PANEL_H), BackgroundTransparency = 0}, 0.18)
 end))
 
 --====================================================
@@ -2825,7 +2967,7 @@ ENV.__BABFT_NIGHTFALL_CLEANUP = cleanup
 
 track(Minimize.Activated:Connect(function()
     closeModal()
-    tween(Main, {Size = UDim2.fromOffset(730, 500), BackgroundTransparency = 0.08}, 0.12)
+    tween(Main, {Size = UDim2.fromOffset(PANEL_MIN_W, PANEL_MIN_H), BackgroundTransparency = 0.08}, 0.12)
     task.delay(0.11, function()
         if alive then
             Main.Visible = false
@@ -2837,8 +2979,8 @@ end))
 track(Close.Activated:Connect(cleanup))
 
 -- Entrance animation
-Main.Size = UDim2.fromOffset(730, 500)
+Main.Size = UDim2.fromOffset(PANEL_MIN_W, PANEL_MIN_H)
 Main.BackgroundTransparency = 0.08
-tween(Main, {Size = UDim2.fromOffset(780, 540), BackgroundTransparency = 0}, 0.22)
+tween(Main, {Size = UDim2.fromOffset(PANEL_W, PANEL_H), BackgroundTransparency = 0}, 0.22)
 
-toast("VOID BABFT optimizado cargado")
+toast("VOID BABFT Galaxy Compact cargado")
