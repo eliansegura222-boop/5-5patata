@@ -406,11 +406,17 @@ local function SetKeybind(emoteId, name, keyStr)
 	KeybindsSet[emoteId] = {name = name, key = keyStr}
 	Keybinds[tostring(emoteId)] = {name = name, key = keyStr}
 	SaveData()
+	if selectedEmote and tostring(selectedEmote.id) == tostring(emoteId) and UpdateSelectedEmoteUI then
+		UpdateSelectedEmoteUI(selectedEmote, selectedCardStroke, selectedCardContainer)
+	end
 end
 local function RemoveKeybind(emoteId)
 	KeybindsSet[emoteId] = nil
 	Keybinds[tostring(emoteId)] = nil
 	SaveData()
+	if selectedEmote and tostring(selectedEmote.id) == tostring(emoteId) and UpdateSelectedEmoteUI then
+		UpdateSelectedEmoteUI(selectedEmote, selectedCardStroke, selectedCardContainer)
+	end
 end
 
 local EmotesById = {}
@@ -464,71 +470,52 @@ local function SafeUtf8Char(code)
 	return UTF8_FALLBACK[code] or ""
 end
 
-local logo = [[
-
-                                                                                  
-                                                                               ▄▄ 
-██  ██ ██████ ██  ██ █████▄  ▄████▄   ▄████▄ ███  ██   ██████ ▄████▄ █████▄    ██ 
-██▄▄██ ██▄▄    ████  ██▄▄██▄ ██  ██   ██  ██ ██ ▀▄██     ██   ██  ██ ██▄▄█▀    ██ 
- ▀██▀  ██▄▄▄▄ ██  ██ ██   ██ ▀████▀   ▀████▀ ██   ██     ██   ▀████▀ ██        ▄▄ 
-                                                                                                                                                                                                            
-]]
-
-print(logo)
+local logo = "UNIVERSAL EMOTES"
 
 -- ===============================================================
 -- THEMES
 -- ===============================================================
 
 local Themes = {
-    -- Redesigned UI palette. Legacy names are kept so saved settings remain compatible.
+    -- Monochrome competitive palette. Legacy theme names remain compatible,
+    -- but every variant stays strictly inside black / white / gray.
     Dark = {
-        primary     = Color3.fromRGB(7, 9, 15),
-        sidebar     = Color3.fromRGB(10, 13, 22),
-        secondary   = Color3.fromRGB(14, 18, 30),
-        tertiary    = Color3.fromRGB(20, 25, 40),
-        accent      = Color3.fromRGB(110, 92, 255),
-        text        = Color3.fromRGB(244, 247, 255),
-        textDim     = Color3.fromRGB(143, 151, 174),
-        stroke      = Color3.fromRGB(43, 51, 75),
-        strokeHover = Color3.fromRGB(91, 111, 172),
-        critical    = Color3.fromRGB(255, 82, 112),
-        success     = Color3.fromRGB(62, 214, 164)
+        primary = Color3.fromRGB(5,5,5), sidebar = Color3.fromRGB(8,8,8), secondary = Color3.fromRGB(13,13,13), tertiary = Color3.fromRGB(20,20,20),
+        accent = Color3.fromRGB(255,255,255), text = Color3.fromRGB(248,248,248), textDim = Color3.fromRGB(145,145,145), stroke = Color3.fromRGB(58,58,58), strokeHover = Color3.fromRGB(225,225,225), critical = Color3.fromRGB(68,68,68), success = Color3.fromRGB(255,255,255)
     },
     Purple = {
-        primary     = Color3.fromRGB(10, 7, 18), sidebar = Color3.fromRGB(15, 10, 27), secondary = Color3.fromRGB(22, 15, 37), tertiary = Color3.fromRGB(31, 21, 51),
-        accent = Color3.fromRGB(174, 92, 255), text = Color3.fromRGB(250, 246, 255), textDim = Color3.fromRGB(169, 149, 189), stroke = Color3.fromRGB(63, 43, 83), strokeHover = Color3.fromRGB(137, 88, 180), critical = Color3.fromRGB(255, 85, 120), success = Color3.fromRGB(69, 220, 165)
+        primary = Color3.fromRGB(4,4,4), sidebar = Color3.fromRGB(7,7,7), secondary = Color3.fromRGB(12,12,12), tertiary = Color3.fromRGB(22,22,22),
+        accent = Color3.fromRGB(245,245,245), text = Color3.fromRGB(250,250,250), textDim = Color3.fromRGB(150,150,150), stroke = Color3.fromRGB(62,62,62), strokeHover = Color3.fromRGB(220,220,220), critical = Color3.fromRGB(72,72,72), success = Color3.fromRGB(250,250,250)
     },
     Blue = {
-        primary = Color3.fromRGB(6, 10, 18), sidebar = Color3.fromRGB(8, 15, 26), secondary = Color3.fromRGB(12, 22, 37), tertiary = Color3.fromRGB(17, 31, 50),
-        accent = Color3.fromRGB(64, 151, 255), text = Color3.fromRGB(241, 248, 255), textDim = Color3.fromRGB(137, 164, 191), stroke = Color3.fromRGB(33, 64, 95), strokeHover = Color3.fromRGB(67, 124, 180), critical = Color3.fromRGB(255, 83, 103), success = Color3.fromRGB(55, 219, 167)
+        primary = Color3.fromRGB(6,6,6), sidebar = Color3.fromRGB(9,9,9), secondary = Color3.fromRGB(15,15,15), tertiary = Color3.fromRGB(24,24,24),
+        accent = Color3.fromRGB(235,235,235), text = Color3.fromRGB(248,248,248), textDim = Color3.fromRGB(142,142,142), stroke = Color3.fromRGB(55,55,55), strokeHover = Color3.fromRGB(210,210,210), critical = Color3.fromRGB(64,64,64), success = Color3.fromRGB(245,245,245)
     },
     Green = {
-        primary = Color3.fromRGB(6, 13, 12), sidebar = Color3.fromRGB(8, 19, 17), secondary = Color3.fromRGB(12, 27, 24), tertiary = Color3.fromRGB(17, 38, 33),
-        accent = Color3.fromRGB(50, 211, 162), text = Color3.fromRGB(240, 255, 250), textDim = Color3.fromRGB(135, 180, 163), stroke = Color3.fromRGB(31, 72, 61), strokeHover = Color3.fromRGB(60, 145, 119), critical = Color3.fromRGB(255, 89, 109), success = Color3.fromRGB(65, 226, 169)
+        primary = Color3.fromRGB(3,3,3), sidebar = Color3.fromRGB(7,7,7), secondary = Color3.fromRGB(14,14,14), tertiary = Color3.fromRGB(26,26,26),
+        accent = Color3.fromRGB(255,255,255), text = Color3.fromRGB(245,245,245), textDim = Color3.fromRGB(138,138,138), stroke = Color3.fromRGB(52,52,52), strokeHover = Color3.fromRGB(215,215,215), critical = Color3.fromRGB(70,70,70), success = Color3.fromRGB(255,255,255)
     },
     Red = {
-        primary = Color3.fromRGB(15, 7, 10), sidebar = Color3.fromRGB(23, 10, 14), secondary = Color3.fromRGB(32, 14, 19), tertiary = Color3.fromRGB(44, 20, 26),
-        accent = Color3.fromRGB(255, 89, 116), text = Color3.fromRGB(255, 244, 247), textDim = Color3.fromRGB(193, 145, 158), stroke = Color3.fromRGB(82, 38, 49), strokeHover = Color3.fromRGB(171, 75, 99), critical = Color3.fromRGB(255, 65, 86), success = Color3.fromRGB(64, 217, 157)
+        primary = Color3.fromRGB(5,5,5), sidebar = Color3.fromRGB(10,10,10), secondary = Color3.fromRGB(16,16,16), tertiary = Color3.fromRGB(28,28,28),
+        accent = Color3.fromRGB(250,250,250), text = Color3.fromRGB(255,255,255), textDim = Color3.fromRGB(148,148,148), stroke = Color3.fromRGB(60,60,60), strokeHover = Color3.fromRGB(230,230,230), critical = Color3.fromRGB(78,78,78), success = Color3.fromRGB(255,255,255)
     },
     Light = {
-        primary = Color3.fromRGB(242, 245, 252), sidebar = Color3.fromRGB(232, 237, 248), secondary = Color3.fromRGB(250, 252, 255), tertiary = Color3.fromRGB(226, 232, 244),
-        accent = Color3.fromRGB(91, 76, 235), text = Color3.fromRGB(25, 30, 44), textDim = Color3.fromRGB(103, 113, 137), stroke = Color3.fromRGB(198, 207, 226), strokeHover = Color3.fromRGB(145, 157, 187), critical = Color3.fromRGB(221, 64, 88), success = Color3.fromRGB(38, 167, 119)
+        primary = Color3.fromRGB(10,10,10), sidebar = Color3.fromRGB(14,14,14), secondary = Color3.fromRGB(20,20,20), tertiary = Color3.fromRGB(31,31,31),
+        accent = Color3.fromRGB(255,255,255), text = Color3.fromRGB(255,255,255), textDim = Color3.fromRGB(165,165,165), stroke = Color3.fromRGB(75,75,75), strokeHover = Color3.fromRGB(235,235,235), critical = Color3.fromRGB(82,82,82), success = Color3.fromRGB(255,255,255)
     },
     MaterialYou = {
-        primary = Color3.fromRGB(8, 10, 17), sidebar = Color3.fromRGB(12, 15, 25), secondary = Color3.fromRGB(17, 21, 34), tertiary = Color3.fromRGB(24, 30, 47),
-        accent = Color3.fromRGB(124, 113, 255), text = Color3.fromRGB(244, 246, 255), textDim = Color3.fromRGB(151, 157, 180), stroke = Color3.fromRGB(48, 56, 80), strokeHover = Color3.fromRGB(100, 111, 165), critical = Color3.fromRGB(255, 90, 115), success = Color3.fromRGB(63, 214, 163)
+        primary = Color3.fromRGB(4,4,4), sidebar = Color3.fromRGB(8,8,8), secondary = Color3.fromRGB(13,13,13), tertiary = Color3.fromRGB(23,23,23),
+        accent = Color3.fromRGB(242,242,242), text = Color3.fromRGB(248,248,248), textDim = Color3.fromRGB(150,150,150), stroke = Color3.fromRGB(59,59,59), strokeHover = Color3.fromRGB(218,218,218), critical = Color3.fromRGB(70,70,70), success = Color3.fromRGB(250,250,250)
     },
     FrostedGlass = {
-        primary = Color3.fromRGB(219, 228, 246), sidebar = Color3.fromRGB(207, 217, 239), secondary = Color3.fromRGB(233, 239, 251), tertiary = Color3.fromRGB(244, 247, 255),
-        accent = Color3.fromRGB(83, 103, 230), text = Color3.fromRGB(28, 34, 52), textDim = Color3.fromRGB(95, 107, 138), stroke = Color3.fromRGB(170, 185, 216), strokeHover = Color3.fromRGB(118, 139, 185), critical = Color3.fromRGB(211, 62, 86), success = Color3.fromRGB(39, 169, 119)
+        primary = Color3.fromRGB(7,7,7), sidebar = Color3.fromRGB(11,11,11), secondary = Color3.fromRGB(18,18,18), tertiary = Color3.fromRGB(29,29,29),
+        accent = Color3.fromRGB(255,255,255), text = Color3.fromRGB(252,252,252), textDim = Color3.fromRGB(158,158,158), stroke = Color3.fromRGB(72,72,72), strokeHover = Color3.fromRGB(225,225,225), critical = Color3.fromRGB(76,76,76), success = Color3.fromRGB(255,255,255)
     },
     DarkGlass = {
-        primary = Color3.fromRGB(8, 10, 17), sidebar = Color3.fromRGB(12, 15, 25), secondary = Color3.fromRGB(17, 21, 34), tertiary = Color3.fromRGB(24, 30, 47),
-        accent = Color3.fromRGB(100, 113, 255), text = Color3.fromRGB(243, 246, 255), textDim = Color3.fromRGB(142, 151, 176), stroke = Color3.fromRGB(46, 55, 82), strokeHover = Color3.fromRGB(94, 111, 170), critical = Color3.fromRGB(255, 84, 110), success = Color3.fromRGB(61, 213, 162)
+        primary = Color3.fromRGB(3,3,3), sidebar = Color3.fromRGB(7,7,7), secondary = Color3.fromRGB(12,12,12), tertiary = Color3.fromRGB(21,21,21),
+        accent = Color3.fromRGB(248,248,248), text = Color3.fromRGB(250,250,250), textDim = Color3.fromRGB(145,145,145), stroke = Color3.fromRGB(56,56,56), strokeHover = Color3.fromRGB(220,220,220), critical = Color3.fromRGB(68,68,68), success = Color3.fromRGB(255,255,255)
     }
 }
-
 local currentTheme = Themes[Settings.theme] or Themes.Dark
 local themeElements = {}
 local mainStrokeGrad, miniIconGrad
@@ -648,26 +635,26 @@ local function RunVexroSource(source, label)
 	local loader = (type(loadstring) == "function" and loadstring) or (type(load) == "function" and load)
 	if type(loader) ~= "function" then
 		warn("[Vexro] " .. label .. " failed: loadstring is not available")
-		Notify("Vexro", "Executor loadstring desteklemiyor.")
+		Notify("UNIVERSAL EMOTES", "Executor loadstring desteklemiyor.")
 		return false
 	end
 	if type(source) ~= "string" or source == "" then
 		warn("[Vexro] " .. label .. " failed: empty source")
-		Notify("Vexro", "Reload kaynagi bos geldi.")
+		Notify("UNIVERSAL EMOTES", "Reload kaynagi bos geldi.")
 		return false
 	end
 
 	local chunk, compileErr = loader(source)
 	if type(chunk) ~= "function" then
 		warn("[Vexro] " .. label .. " compile failed: " .. tostring(compileErr))
-		Notify("Vexro", "Reload scripti derlenemedi.")
+		Notify("UNIVERSAL EMOTES", "Reload scripti derlenemedi.")
 		return false
 	end
 
 	local ok, runErr = pcall(chunk)
 	if not ok then
 		warn("[Vexro] " .. label .. " runtime failed: " .. tostring(runErr))
-		Notify("Vexro", "Reload calisirken hata verdi.")
+		Notify("UNIVERSAL EMOTES", "Reload calisirken hata verdi.")
 		return false
 	end
 	return true
@@ -691,7 +678,7 @@ local function ReloadVexro()
 	end)
 	if not ok then
 		warn("[Vexro] remote reload http failed: " .. tostring(source))
-		Notify("Vexro", "Remote reload indirilemedi.")
+		Notify("UNIVERSAL EMOTES", "Remote reload indirilemedi.")
 		return false
 	end
 	return RunVexroSource(source, "remote reload")
@@ -754,7 +741,6 @@ gui.Parent = playerGui
 local selectedLang = nil
 local rememberLang = false
 
--- Old saved languages are intentionally discarded in this redesigned build.
 if Settings.language == "ES" or Settings.language == "EN" then
     selectedLang = Settings.language
 else
@@ -762,169 +748,189 @@ else
 end
 
 if not selectedLang then
-    local langTheme = Themes[Settings.theme] or Themes.Dark
+    local langTheme = Themes.Dark
 
     langScreen = Instance.new("Frame")
+    langScreen.Name = "LanguageGate"
     langScreen.Size = UDim2.fromScale(1, 1)
-    langScreen.BackgroundColor3 = langTheme.primary
+    langScreen.BackgroundColor3 = Color3.fromRGB(2,2,2)
+    langScreen.BorderSizePixel = 0
     langScreen.ZIndex = 20000
     langScreen.Parent = gui
 
-    local wash = Instance.new("Frame")
-    wash.Size = UDim2.fromScale(1, 1)
-    wash.BackgroundColor3 = Color3.new(1, 1, 1)
-    wash.BackgroundTransparency = 0
-    wash.ZIndex = 20000
-    wash.Parent = langScreen
-    local washGrad = Instance.new("UIGradient")
-    washGrad.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, langTheme.primary),
-        ColorSequenceKeypoint.new(0.55, langTheme.secondary),
-        ColorSequenceKeypoint.new(1, langTheme.primary)
-    }
-    washGrad.Rotation = 125
-    washGrad.Parent = wash
+    local dimGrid = Instance.new("Frame")
+    dimGrid.Size = UDim2.fromScale(1, 1)
+    dimGrid.BackgroundColor3 = Color3.fromRGB(5,5,5)
+    dimGrid.BackgroundTransparency = 0.18
+    dimGrid.BorderSizePixel = 0
+    dimGrid.ZIndex = 20000
+    dimGrid.Parent = langScreen
 
-    local glowA = Instance.new("Frame")
-    glowA.Size = UDim2.new(0, 340, 0, 340)
-    glowA.Position = UDim2.new(0.15, -170, 0.2, -170)
-    glowA.BackgroundColor3 = langTheme.accent
-    glowA.BackgroundTransparency = 0.86
-    glowA.ZIndex = 20000
-    glowA.Parent = langScreen
-    Instance.new("UICorner", glowA).CornerRadius = UDim.new(1, 0)
-
-    local glowB = glowA:Clone()
-    glowB.Position = UDim2.new(0.85, -170, 0.8, -170)
-    glowB.BackgroundTransparency = 0.91
-    glowB.Parent = langScreen
+    -- Subtle static scratch marks: decorative only, no visual loops.
+    for i = 1, 8 do
+        local scratch = Instance.new("Frame")
+        scratch.Size = UDim2.new(0, math.random(22, 84), 0, 1)
+        scratch.Position = UDim2.new(math.random(6,94)/100, 0, math.random(8,92)/100, 0)
+        scratch.Rotation = math.random(-18, 18)
+        scratch.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        scratch.BackgroundTransparency = 0.94
+        scratch.BorderSizePixel = 0
+        scratch.ZIndex = 20001
+        scratch.Parent = langScreen
+    end
 
     langBox = Instance.new("Frame")
+    langBox.Name = "LanguagePanel"
     langBox.Size = UDim2.new(0, 0, 0, 0)
     langBox.Position = UDim2.fromScale(0.5, 0.5)
     langBox.AnchorPoint = Vector2.new(0.5, 0.5)
-    langBox.BackgroundColor3 = langTheme.secondary
-    langBox.ZIndex = 20001
+    langBox.BackgroundColor3 = Color3.fromRGB(8,8,8)
+    langBox.BorderSizePixel = 0
+    langBox.ClipsDescendants = true
+    langBox.ZIndex = 20002
     langBox.Parent = langScreen
-    Instance.new("UICorner", langBox).CornerRadius = UDim.new(0, 16)
+    Instance.new("UICorner", langBox).CornerRadius = UDim.new(0, 10)
 
     local langStroke = Instance.new("UIStroke")
-    langStroke.Color = langTheme.stroke
+    langStroke.Color = Color3.fromRGB(235,235,235)
     langStroke.Thickness = 1
-    langStroke.Transparency = 0.2
+    langStroke.Transparency = 0.15
     langStroke.Parent = langBox
 
-    local accentLine = Instance.new("Frame")
-    accentLine.Size = UDim2.new(0, 48, 0, 4)
-    accentLine.Position = UDim2.new(0, 24, 0, 22)
-    accentLine.BackgroundColor3 = langTheme.accent
-    accentLine.ZIndex = 20002
-    accentLine.Parent = langBox
-    Instance.new("UICorner", accentLine).CornerRadius = UDim.new(1, 0)
+    local whiteRail = Instance.new("Frame")
+    whiteRail.Size = UDim2.new(0, 5, 0, 68)
+    whiteRail.Position = UDim2.new(0, 18, 0, 20)
+    whiteRail.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    whiteRail.BorderSizePixel = 0
+    whiteRail.ZIndex = 20003
+    whiteRail.Parent = langBox
 
     langTitle = Instance.new("TextLabel")
-    langTitle.Size = UDim2.new(1, -48, 0, 34)
-    langTitle.Position = UDim2.new(0, 24, 0, 38)
+    langTitle.Size = UDim2.new(1, -62, 0, 52)
+    langTitle.Position = UDim2.new(0, 34, 0, 17)
     langTitle.BackgroundTransparency = 1
-    langTitle.Text = "Choose your language"
-    langTitle.TextColor3 = langTheme.text
-    langTitle.Font = Enum.Font.GothamBold
-    langTitle.TextSize = isMobile and 20 or 24
+    langTitle.Text = "SELECT LANGUAGE\nSELECCIONA IDIOMA"
+    langTitle.TextColor3 = Color3.fromRGB(255,255,255)
+    langTitle.Font = Enum.Font.GothamBlack
+    langTitle.TextSize = isMobile and 15 or 18
     langTitle.TextXAlignment = Enum.TextXAlignment.Left
-    langTitle.ZIndex = 20002
+    langTitle.TextYAlignment = Enum.TextYAlignment.Center
+    langTitle.ZIndex = 20003
     langTitle.Parent = langBox
 
     local langSub = Instance.new("TextLabel")
-    langSub.Size = UDim2.new(1, -48, 0, 24)
-    langSub.Position = UDim2.new(0, 24, 0, 72)
+    langSub.Size = UDim2.new(1, -50, 0, 22)
+    langSub.Position = UDim2.new(0, 34, 0, 72)
     langSub.BackgroundTransparency = 1
-    langSub.Text = "Selecciona Español o English"
-    langSub.TextColor3 = langTheme.textDim
-    langSub.Font = Enum.Font.Gotham
-    langSub.TextSize = isMobile and 12 or 13
+    langSub.Text = "UNIVERSAL EMOTES  //  ES · EN"
+    langSub.TextColor3 = Color3.fromRGB(130,130,130)
+    langSub.Font = Enum.Font.GothamMedium
+    langSub.TextSize = isMobile and 9 or 10
     langSub.TextXAlignment = Enum.TextXAlignment.Left
-    langSub.ZIndex = 20002
+    langSub.ZIndex = 20003
     langSub.Parent = langBox
 
-    local function MakeLangBtn(titleText, subText, lang, xScale)
+    local function MakeLangBtn(flag, titleText, subText, lang, xScale)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.44, 0, 0, 92)
+        btn.Size = UDim2.new(0.44, 0, 0, isMobile and 86 or 94)
         btn.Position = UDim2.new(xScale, 0, 0, 112)
-        btn.BackgroundColor3 = langTheme.tertiary
+        btn.BackgroundColor3 = Color3.fromRGB(13,13,13)
         btn.Text = ""
         btn.AutoButtonColor = false
-        btn.ZIndex = 20003
+        btn.ZIndex = 20004
         btn.Parent = langBox
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 13)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
         local stroke = Instance.new("UIStroke")
-        stroke.Color = langTheme.stroke
+        stroke.Color = Color3.fromRGB(70,70,70)
         stroke.Thickness = 1
-        stroke.Transparency = 0.35
         stroke.Parent = btn
 
+        local flagLbl = Instance.new("TextLabel")
+        flagLbl.Size = UDim2.new(0, 52, 1, 0)
+        flagLbl.Position = UDim2.new(0, 10, 0, 0)
+        flagLbl.BackgroundTransparency = 1
+        flagLbl.Text = flag
+        flagLbl.TextColor3 = Color3.fromRGB(255,255,255)
+        flagLbl.Font = Enum.Font.GothamBold
+        flagLbl.TextSize = isMobile and 27 or 31
+        flagLbl.ZIndex = 20005
+        flagLbl.Parent = btn
+
         local t = Instance.new("TextLabel")
-        t.Size = UDim2.new(1, -20, 0, 30)
-        t.Position = UDim2.new(0, 10, 0, 18)
+        t.Size = UDim2.new(1, -74, 0, 30)
+        t.Position = UDim2.new(0, 66, 0, 19)
         t.BackgroundTransparency = 1
         t.Text = titleText
-        t.TextColor3 = langTheme.text
-        t.Font = Enum.Font.GothamBold
-        t.TextSize = isMobile and 16 or 18
-        t.ZIndex = 20004
+        t.TextColor3 = Color3.fromRGB(255,255,255)
+        t.Font = Enum.Font.GothamBlack
+        t.TextSize = isMobile and 13 or 15
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.ZIndex = 20005
         t.Parent = btn
 
-        local s = Instance.new("TextLabel")
-        s.Size = UDim2.new(1, -20, 0, 22)
-        s.Position = UDim2.new(0, 10, 0, 51)
-        s.BackgroundTransparency = 1
-        s.Text = subText
-        s.TextColor3 = langTheme.textDim
-        s.Font = Enum.Font.Gotham
-        s.TextSize = isMobile and 11 or 12
-        s.ZIndex = 20004
-        s.Parent = btn
+        local sub = Instance.new("TextLabel")
+        sub.Size = UDim2.new(1, -74, 0, 20)
+        sub.Position = UDim2.new(0, 66, 0, 48)
+        sub.BackgroundTransparency = 1
+        sub.Text = subText
+        sub.TextColor3 = Color3.fromRGB(125,125,125)
+        sub.Font = Enum.Font.Gotham
+        sub.TextSize = isMobile and 9 or 10
+        sub.TextXAlignment = Enum.TextXAlignment.Left
+        sub.ZIndex = 20005
+        sub.Parent = btn
 
         btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.16), {BackgroundColor3 = langTheme.accent}):Play()
-            TweenService:Create(stroke, TweenInfo.new(0.16), {Color = langTheme.accent, Transparency = 0}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {BackgroundColor3 = Color3.fromRGB(245,245,245)}):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.18), {Color = Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(t, TweenInfo.new(0.18), {TextColor3 = Color3.fromRGB(0,0,0)}):Play()
+            TweenService:Create(sub, TweenInfo.new(0.18), {TextColor3 = Color3.fromRGB(45,45,45)}):Play()
+            TweenService:Create(flagLbl, TweenInfo.new(0.18), {TextColor3 = Color3.fromRGB(0,0,0)}):Play()
         end)
         btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.16), {BackgroundColor3 = langTheme.tertiary}):Play()
-            TweenService:Create(stroke, TweenInfo.new(0.16), {Color = langTheme.stroke, Transparency = 0.35}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {BackgroundColor3 = Color3.fromRGB(13,13,13)}):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.18), {Color = Color3.fromRGB(70,70,70)}):Play()
+            TweenService:Create(t, TweenInfo.new(0.18), {TextColor3 = Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(sub, TweenInfo.new(0.18), {TextColor3 = Color3.fromRGB(125,125,125)}):Play()
+            TweenService:Create(flagLbl, TweenInfo.new(0.18), {TextColor3 = Color3.fromRGB(255,255,255)}):Play()
         end)
         btn.MouseButton1Click:Connect(function()
             selectedLang = lang
         end)
     end
 
-    MakeLangBtn("Español", "Interfaz en español", "ES", 0.04)
-    MakeLangBtn("English", "English interface", "EN", 0.52)
+    MakeLangBtn("🇪🇸", "ESPAÑOL", "Interfaz en español", "ES", 0.04)
+    MakeLangBtn("🇺🇸", "ENGLISH", "English interface", "EN", 0.52)
 
     rememberBtn = Instance.new("TextButton")
-    rememberBtn.Size = UDim2.new(0.92, 0, 0, 42)
-    rememberBtn.Position = UDim2.new(0.04, 0, 1, -58)
-    rememberBtn.BackgroundColor3 = langTheme.tertiary
-    rememberBtn.Text = "Remember / Recordar"
-    rememberBtn.TextColor3 = langTheme.textDim
-    rememberBtn.Font = Enum.Font.GothamMedium
-    rememberBtn.TextSize = isMobile and 12 or 13
+    rememberBtn.Size = UDim2.new(0.92, 0, 0, 40)
+    rememberBtn.Position = UDim2.new(0.04, 0, 1, -54)
+    rememberBtn.BackgroundColor3 = Color3.fromRGB(14,14,14)
+    rememberBtn.Text = "□  RECORDAR / REMEMBER"
+    rememberBtn.TextColor3 = Color3.fromRGB(155,155,155)
+    rememberBtn.Font = Enum.Font.GothamBold
+    rememberBtn.TextSize = isMobile and 10 or 11
     rememberBtn.AutoButtonColor = false
-    rememberBtn.ZIndex = 20003
+    rememberBtn.ZIndex = 20004
     rememberBtn.Parent = langBox
-    Instance.new("UICorner", rememberBtn).CornerRadius = UDim.new(0, 11)
+    Instance.new("UICorner", rememberBtn).CornerRadius = UDim.new(0, 7)
+    local remStroke = Instance.new("UIStroke")
+    remStroke.Color = Color3.fromRGB(55,55,55)
+    remStroke.Thickness = 1
+    remStroke.Parent = rememberBtn
 
     rememberBtn.MouseButton1Click:Connect(function()
         rememberLang = not rememberLang
+        rememberBtn.Text = rememberLang and "■  RECORDAR / REMEMBER" or "□  RECORDAR / REMEMBER"
         TweenService:Create(rememberBtn, TweenInfo.new(0.18), {
-            BackgroundColor3 = rememberLang and langTheme.accent or langTheme.tertiary,
-            TextColor3 = rememberLang and Color3.new(1,1,1) or langTheme.textDim
+            BackgroundColor3 = rememberLang and Color3.fromRGB(245,245,245) or Color3.fromRGB(14,14,14),
+            TextColor3 = rememberLang and Color3.fromRGB(0,0,0) or Color3.fromRGB(155,155,155)
         }):Play()
-        rememberBtn.Text = rememberLang and "✓ Remember / Recordar" or "Remember / Recordar"
     end)
 
-    local targetSize = isMobile and UDim2.new(0, 350, 0, 285) or UDim2.new(0, 460, 0, 300)
-    TweenService:Create(langBox, TweenInfo.new(0.42, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = targetSize}):Play()
+    local targetSize = isMobile and UDim2.new(0, 338, 0, 274) or UDim2.new(0, 500, 0, 292)
+    TweenService:Create(langBox, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = targetSize}):Play()
 
     repeat task.wait(0.05) until selectedLang
 
@@ -933,9 +939,9 @@ if not selectedLang then
         SaveData()
     end
 
-    TweenService:Create(langBox, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 1}):Play()
-    TweenService:Create(langScreen, TweenInfo.new(0.24), {BackgroundTransparency = 1}):Play()
-    task.wait(0.24)
+    TweenService:Create(langBox, TweenInfo.new(0.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
+    TweenService:Create(langScreen, TweenInfo.new(0.20), {BackgroundTransparency = 1}):Play()
+    task.wait(0.20)
     langScreen:Destroy()
 end
 
@@ -947,8 +953,8 @@ local isTR, isES, isAR, isFR, isHI, isPT, isRU = false, selectedLang == "ES", fa
 local L = {
 	r6Msg = isES and "Solo R15!" or "R15 only!",
 	loading = isES and "Cargando..." or "Loading...",
-	madeBy = isES and "Hecho por Oyuncu15q" or "Made by Oyuncu15q",
-	search = isES and "Buscar..." or "Search...",
+	madeBy = "",
+	search = isES and "Buscar emote..." or "Search emote...",
 	playing = isES and "Reproduciendo" or "Playing",
 	stopped = isES and "Detenido" or "Stopped",
 	ready = isES and "Listo!" or "Ready!",
@@ -956,7 +962,7 @@ local L = {
 	favorites = isES and "Favoritos" or "Favorites",
 	recent = isES and "Recientes" or "Recent",
 	settings = isES and "Ajustes" or "Settings",
-	noFav = isES and "Sin favoritos" or "No favorites",
+	noFav = isES and "No tienes emotes favoritos." or "You have no favorite emotes.",
 	noRecent = isES and "Sin recientes" or "No recent",
 	theme = isES and "Tema" or "Theme",
 	speed = isES and "Velocidad" or "Speed",
@@ -1026,13 +1032,13 @@ local L = {
 	deleteConfirm = isES and "¿Seguro?" or "Sure?",
 	createdBy = isES and "Creado por " or "Created by ",
 	playlistsTab = isES and "Listas de Reproducción" or "Playlists",
-	serverPlayersDown = isES and "Jugadores en Servidor ▼" or "Server Vexro Players ▼",
-	serverPlayersUp = isES and "Jugadores en Servidor ▲" or "Server Vexro Players ▲",
+	serverPlayersDown = isES and "Jugadores en Servidor ▼" or "Server Players ▼",
+	serverPlayersUp = isES and "Jugadores en Servidor ▲" or "Server Players ▲",
 	noOneFound = isES and "Nadie encontrado" or "No one found",
 }
 
 local FriendL = {
-	brandTitle = isES and "Reproductor de Emotes Vexro" or "Vexro Emote Player",
+	brandTitle = isES and "Reproductor Universal de Emotes" or "Universal Emote Player",
 	requestIncoming = isES and "%s quiere agregarte como amigo." or "%s wants to add you as a friend.",
 	playEmoteLbl = isES and "Reproducir emote de amigo" or "Play friend's emote",
 	playEmoteDesc = isES and "Se reproduce automáticamente cuando tu amigo lo inicia." or "Plays automatically when your friend starts it.",
@@ -1081,227 +1087,201 @@ local Emotes = {}
 -- SPLASH SCREEN
 -- ===============================================================
 
-local _bgMusic -- müzik objesi (kapanışta da lazım)
-local _splashTheme = Themes[Settings.theme] or Themes.Dark
-local _splashPrimary = _splashTheme.primary
-local _splashAccent  = _splashTheme.accent
-local _splashIsGlass = Settings.theme == "FrostedGlass" or Settings.theme == "DarkGlass"
+local _bgMusic
+do
+local _splashTheme = Themes.Dark
+local _splashPrimary = Color3.fromRGB(2,2,2)
+local _splashAccent = Color3.fromRGB(255,255,255)
+local _splashIsGlass = false
 
--- GTA IV muzigi
 _bgMusic = Instance.new("Sound")
 _bgMusic.Volume = 1
 _bgMusic.Looped = true
 _bgMusic.Parent = gui
 task.spawn(function()
-	local ok, audioId = pcall(getcustomasset, "gta_iv_theme.ogg")
-	if ok and audioId and audioId ~= "" then
-		_bgMusic.SoundId = audioId
-		_bgMusic:Play()
-	end
+    local ok, audioId = pcall(getcustomasset, "gta_iv_theme.ogg")
+    if ok and audioId and audioId ~= "" then
+        _bgMusic.SoundId = audioId
+        _bgMusic:Play()
+    end
 end)
 
 splashBlur = Instance.new("BlurEffect")
-splashBlur.Size = 24
+splashBlur.Size = 18
 splashBlur.Parent = game:GetService("Lighting")
 
 splash = Instance.new("Frame")
 splash.Size = UDim2.fromScale(1, 1)
-splash.BackgroundColor3 = _splashPrimary
-splash.BackgroundTransparency = _splashIsGlass and 0.42 or 0.08
+splash.BackgroundColor3 = Color3.fromRGB(2,2,2)
+splash.BackgroundTransparency = 0.04
+splash.BorderSizePixel = 0
 splash.ZIndex = 10000
 splash.Parent = gui
 
-splashBgGrad = Instance.new("UIGradient")
-splashBgGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0,   _splashPrimary),
-	ColorSequenceKeypoint.new(0.5, Color3.new(
-		math.clamp(_splashPrimary.R + _splashAccent.R * 0.15, 0, 1),
-		math.clamp(_splashPrimary.G + _splashAccent.G * 0.15, 0, 1),
-		math.clamp(_splashPrimary.B + _splashAccent.B * 0.20, 0, 1)
-	)),
-	ColorSequenceKeypoint.new(1,   _splashPrimary)
-}
-splashBgGrad.Rotation = 45
-splashBgGrad.Parent = splash
-
-task.spawn(function()
-	local rot = 0
-	while splash.Parent do
-		rot = (rot + 1) % 360
-		splashBgGrad.Rotation = rot
-		task.wait(0.05)
-	end
-end)
+for i = 1, 10 do
+    local scratch = Instance.new("Frame")
+    scratch.Size = UDim2.new(0, math.random(28, 115), 0, 1)
+    scratch.Position = UDim2.new(math.random(4,96)/100, 0, math.random(7,93)/100, 0)
+    scratch.Rotation = math.random(-16,16)
+    scratch.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    scratch.BackgroundTransparency = 0.95
+    scratch.BorderSizePixel = 0
+    scratch.ZIndex = 10000
+    scratch.Parent = splash
+end
 
 splashBox = Instance.new("Frame")
-splashBox.Size = UDim2.new(0, 0, 0, 0)
-splashBox.Position = UDim2.fromScale(0.5, 0.5)
-splashBox.AnchorPoint = Vector2.new(0.5, 0.5)
-splashBox.BackgroundColor3 = _splashTheme.secondary
-splashBox.BackgroundTransparency = _splashIsGlass and 0.30 or 0.02
-splashBox.Rotation = 0
+splashBox.Size = UDim2.new(0,0,0,0)
+splashBox.Position = UDim2.fromScale(0.5,0.5)
+splashBox.AnchorPoint = Vector2.new(0.5,0.5)
+splashBox.BackgroundColor3 = Color3.fromRGB(7,7,7)
+splashBox.BorderSizePixel = 0
+splashBox.ClipsDescendants = true
 splashBox.ZIndex = 10001
 splashBox.Parent = splash
-Instance.new("UICorner", splashBox).CornerRadius = UDim.new(0, 16)
+Instance.new("UICorner", splashBox).CornerRadius = UDim.new(0,10)
 
 splashStroke = Instance.new("UIStroke")
-splashStroke.Color = _splashAccent
+splashStroke.Color = Color3.fromRGB(235,235,235)
 splashStroke.Thickness = 1
+splashStroke.Transparency = 0.16
 splashStroke.Parent = splashBox
 
-splashStrokeGrad = Instance.new("UIGradient")
-splashStrokeGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0,    _splashAccent),
-	ColorSequenceKeypoint.new(0.33, _splashTheme.stroke),
-	ColorSequenceKeypoint.new(0.66, _splashAccent),
-	ColorSequenceKeypoint.new(1,    _splashAccent)
-}
-splashStrokeGrad.Parent = splashStroke
-
-task.spawn(function()
-	local rot = 0
-	while splashStroke.Parent do
-		rot = rot + 360
-		TweenService:Create(splashStrokeGrad, TweenInfo.new(1.5, Enum.EasingStyle.Linear), {Rotation = rot}):Play()
-		task.wait(1.5)
-	end
-end)
-
-avatarHolder = Instance.new("Frame")
-avatarHolder.Size = UDim2.new(1, -24, 0, 50)
-avatarHolder.Position = UDim2.new(0, 12, 0, 12)
-avatarHolder.BackgroundTransparency = 1
-avatarHolder.ZIndex = 10002
-avatarHolder.Parent = splashBox
-
-avatar = Instance.new("ImageLabel")
-avatar.Size = UDim2.new(0, 44, 0, 44)
-avatar.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
-avatar.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=3164346931&width=150&height=150&format=png"
-avatar.ZIndex = 10003
-avatar.Parent = avatarHolder
-Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
-
-avatarGlow = Instance.new("UIStroke")
-avatarGlow.Color = Color3.fromRGB(138, 43, 226)
-avatarGlow.Thickness = 2
-avatarGlow.Parent = avatar
-
-task.spawn(function()
-	while avatar.Parent do
-		TweenService:Create(avatarGlow, TweenInfo.new(1, Enum.EasingStyle.Sine), {Color = Color3.fromRGB(186, 85, 211)}):Play()
-		task.wait(1)
-		TweenService:Create(avatarGlow, TweenInfo.new(1, Enum.EasingStyle.Sine), {Color = Color3.fromRGB(138, 43, 226)}):Play()
-		task.wait(1)
-	end
-end)
-
-madeByLbl = Instance.new("TextLabel")
-madeByLbl.Size = UDim2.new(1, -54, 1, 0)
-madeByLbl.Position = UDim2.new(0, 52, 0, 0)
-madeByLbl.BackgroundTransparency = 1
-madeByLbl.Text = L.madeBy
-madeByLbl.TextColor3 = _splashTheme.textDim
-madeByLbl.Font = Enum.Font.GothamBold
-madeByLbl.TextScaled = true
-madeByLbl.TextXAlignment = Enum.TextXAlignment.Left
-madeByLbl.ZIndex = 10003
-madeByLbl.Parent = avatarHolder
+local splashMark = Instance.new("Frame")
+splashMark.Size = UDim2.new(0,5,0,66)
+splashMark.Position = UDim2.new(0,20,0,22)
+splashMark.BackgroundColor3 = Color3.fromRGB(255,255,255)
+splashMark.BorderSizePixel = 0
+splashMark.ZIndex = 10003
+splashMark.Parent = splashBox
 
 logo = Instance.new("TextLabel")
-logo.Size = UDim2.new(1, -24, 0, 60)
-logo.Position = UDim2.new(0, 12, 0, 70)
+logo.Size = UDim2.new(1,-60,0,68)
+logo.Position = UDim2.new(0,38,0,20)
 logo.BackgroundTransparency = 1
-logo.Text = "Vexro Emotes"
-logo.TextColor3 = _splashTheme.text
+logo.Text = "UNIVERSAL\nEMOTES"
+logo.TextColor3 = Color3.fromRGB(255,255,255)
 logo.Font = Enum.Font.GothamBlack
-logo.TextScaled = true
+logo.TextSize = isMobile and 20 or 25
+logo.TextXAlignment = Enum.TextXAlignment.Left
+logo.TextYAlignment = Enum.TextYAlignment.Center
 logo.ZIndex = 10003
 logo.Parent = splashBox
 
-logoGrad = Instance.new("UIGradient")
-logoGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0,    _splashAccent),
-	ColorSequenceKeypoint.new(0.25, _splashTheme.stroke),
-	ColorSequenceKeypoint.new(0.5,  _splashAccent),
-	ColorSequenceKeypoint.new(0.75, _splashTheme.stroke),
-	ColorSequenceKeypoint.new(1,    _splashAccent)
-}
-logoGrad.Parent = logo
-
-task.spawn(function()
-	while logo.Parent do
-		TweenService:Create(logoGrad, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Offset = Vector2.new(1, 0)}):Play()
-		task.wait(2)
-		TweenService:Create(logoGrad, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Offset = Vector2.new(-1, 0)}):Play()
-		task.wait(2)
-	end
-end)
+local splashTag = Instance.new("TextLabel")
+splashTag.Size = UDim2.new(1,-40,0,20)
+splashTag.Position = UDim2.new(0,20,0,96)
+splashTag.BackgroundTransparency = 1
+splashTag.Text = "UNIVERSAL EMOTE SYSTEM  //  V5.0"
+splashTag.TextColor3 = Color3.fromRGB(125,125,125)
+splashTag.Font = Enum.Font.GothamMedium
+splashTag.TextSize = isMobile and 9 or 10
+splashTag.TextXAlignment = Enum.TextXAlignment.Left
+splashTag.ZIndex = 10003
+splashTag.Parent = splashBox
 
 loadingLbl = Instance.new("TextLabel")
-loadingLbl.Size = UDim2.new(1, 0, 0, 30)
-loadingLbl.Position = UDim2.new(0, 0, 0, 140)
+loadingLbl.Size = UDim2.new(1,-40,0,24)
+loadingLbl.Position = UDim2.new(0,20,0,132)
 loadingLbl.BackgroundTransparency = 1
-loadingLbl.Text = L.loading
-loadingLbl.TextColor3 = _splashTheme.textDim
+loadingLbl.Text = isES and "CARGANDO BIBLIOTECA..." or "LOADING LIBRARY..."
+loadingLbl.TextColor3 = Color3.fromRGB(205,205,205)
 loadingLbl.Font = Enum.Font.GothamBold
-loadingLbl.TextSize = 16
+loadingLbl.TextSize = isMobile and 11 or 12
+loadingLbl.TextXAlignment = Enum.TextXAlignment.Left
 loadingLbl.ZIndex = 10003
 loadingLbl.Parent = splashBox
 
-task.spawn(function()
-	local dots = {"", ".", "..", "..."}
-	local i = 1
-	while loadingLbl.Parent do
-		loadingLbl.Text = "Vexro Emotes " .. L.loading .. dots[i]
-		i = i % 4 + 1
-		task.wait(0.4)
-	end
-end)
-
 loadingBarBg = Instance.new("Frame")
-loadingBarBg.Size = UDim2.new(0.8, 0, 0, 6)
-loadingBarBg.Position = UDim2.new(0.1, 0, 0, 175)
-loadingBarBg.BackgroundColor3 = _splashTheme.tertiary
+loadingBarBg.Size = UDim2.new(1,-40,0,8)
+loadingBarBg.Position = UDim2.new(0,20,0,166)
+loadingBarBg.BackgroundColor3 = Color3.fromRGB(25,25,25)
+loadingBarBg.BorderSizePixel = 0
 loadingBarBg.ZIndex = 10003
 loadingBarBg.Parent = splashBox
-Instance.new("UICorner", loadingBarBg).CornerRadius = UDim.new(1, 0)
+Instance.new("UICorner", loadingBarBg).CornerRadius = UDim.new(0,2)
+local loadBgStroke = Instance.new("UIStroke")
+loadBgStroke.Color = Color3.fromRGB(65,65,65)
+loadBgStroke.Thickness = 1
+loadBgStroke.Parent = loadingBarBg
 
 loadingBar = Instance.new("Frame")
-loadingBar.Size = UDim2.new(0, 0, 1, 0)
-loadingBar.BackgroundColor3 = _splashAccent
+loadingBar.Size = UDim2.new(0,0,1,0)
+loadingBar.BackgroundColor3 = Color3.fromRGB(255,255,255)
+loadingBar.BorderSizePixel = 0
 loadingBar.ZIndex = 10004
 loadingBar.Parent = loadingBarBg
-Instance.new("UICorner", loadingBar).CornerRadius = UDim.new(1, 0)
+Instance.new("UICorner", loadingBar).CornerRadius = UDim.new(0,2)
 
 loadingBarGrad = Instance.new("UIGradient")
 loadingBarGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, _splashAccent),
-	ColorSequenceKeypoint.new(0.5, _splashTheme.stroke),
-	ColorSequenceKeypoint.new(1, _splashAccent)
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(155,155,155)),
+    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(255,255,255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(205,205,205))
 }
 loadingBarGrad.Parent = loadingBar
 
+local loadTicks = Instance.new("Frame")
+loadTicks.Size = UDim2.new(1,-40,0,12)
+loadTicks.Position = UDim2.new(0,20,0,184)
+loadTicks.BackgroundTransparency = 1
+loadTicks.ZIndex = 10003
+loadTicks.Parent = splashBox
+for i = 0, 7 do
+    local tickMark = Instance.new("Frame")
+    tickMark.Size = UDim2.new(0,1,0,math.max(3, 9 - (i % 2) * 3))
+    tickMark.Position = UDim2.new(i/7,0,0,0)
+    tickMark.BackgroundColor3 = Color3.fromRGB(85,85,85)
+    tickMark.BorderSizePixel = 0
+    tickMark.Parent = loadTicks
+end
+
+local loadingPercent = Instance.new("TextLabel")
+loadingPercent.Name = "LoadPercent"
+loadingPercent.Size = UDim2.new(1,-40,0,22)
+loadingPercent.Position = UDim2.new(0,20,1,-46)
+loadingPercent.BackgroundTransparency = 1
+loadingPercent.Text = "INITIALIZING / INICIALIZANDO"
+loadingPercent.TextColor3 = Color3.fromRGB(105,105,105)
+loadingPercent.Font = Enum.Font.GothamMedium
+loadingPercent.TextSize = isMobile and 8 or 9
+loadingPercent.TextXAlignment = Enum.TextXAlignment.Left
+loadingPercent.ZIndex = 10003
+loadingPercent.Parent = splashBox
+
+-- Preserve the original Discord action without using Discord blue.
 discordBtn = Instance.new("TextButton")
-discordBtn.Size = UDim2.new(0.85, 0, 0, 42)
-discordBtn.Position = UDim2.new(0.075, 0, 1, -55)
-discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-discordBtn.Text = "Discord: 4Bs9WYSabf"
-discordBtn.TextColor3 = Color3.new(1, 1, 1)
+discordBtn.Size = UDim2.new(0, isMobile and 104 or 118, 0, 28)
+discordBtn.Position = UDim2.new(1, -(isMobile and 124 or 138), 1, -48)
+discordBtn.BackgroundColor3 = Color3.fromRGB(12,12,12)
+discordBtn.Text = "DISCORD"
+discordBtn.TextColor3 = Color3.fromRGB(205,205,205)
 discordBtn.Font = Enum.Font.GothamBold
-discordBtn.TextSize = 14
+discordBtn.TextSize = isMobile and 9 or 10
+discordBtn.AutoButtonColor = false
 discordBtn.ZIndex = 10003
 discordBtn.Parent = splashBox
-Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0,5)
+local discordStroke = Instance.new("UIStroke")
+discordStroke.Color = Color3.fromRGB(65,65,65)
+discordStroke.Thickness = 1
+discordStroke.Parent = discordBtn
 
+discordBtn.MouseEnter:Connect(function()
+    TweenService:Create(discordBtn, TweenInfo.new(0.16), {BackgroundColor3 = Color3.fromRGB(240,240,240), TextColor3 = Color3.fromRGB(0,0,0)}):Play()
+end)
+discordBtn.MouseLeave:Connect(function()
+    TweenService:Create(discordBtn, TweenInfo.new(0.16), {BackgroundColor3 = Color3.fromRGB(12,12,12), TextColor3 = Color3.fromRGB(205,205,205)}):Play()
+end)
 discordBtn.MouseButton1Click:Connect(function()
-	pcall(function() if setclipboard then setclipboard("https://discord.gg/4Bs9WYSabf") end end)
-	Notify(SafeUtf8Char(0x2705), L.copied)
+    pcall(function() if setclipboard then setclipboard("https://discord.gg/4Bs9WYSabf") end end)
+    Notify(SafeUtf8Char(0x2705), L.copied)
 end)
 
-local splashSize = isMobile and UDim2.new(0, 320, 0, 240) or UDim2.new(0, 420, 0, 270)
-TweenService:Create(splashBox, TweenInfo.new(0.42, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = splashSize, Rotation = 0}):Play()
+local splashSize = isMobile and UDim2.new(0,318,0,244) or UDim2.new(0,430,0,258)
+TweenService:Create(splashBox, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = splashSize}):Play()
 
+end
 -- ===============================================================
 -- EMOTE LOADING
 -- ===============================================================
@@ -1571,9 +1551,9 @@ local currentTab = "emotes"
 local page, perPage, pages, cols = 1, 14, 1, 7
 local cards = {}
 local lastVexroAnimationPack = nil
-local sideBarW = isMobile and 58 or 150
-local tabBtnS = isMobile and 42 or 40
-local bottomBarH = isMobile and 24 or 22
+local sideBarW = isMobile and 72 or 184
+local tabBtnS = isMobile and 50 or 44
+local bottomBarH = isMobile and 58 or 64
 local currentCardSize = 0
 local _badEmotes = {}
 local _refreshPending = false
@@ -1845,26 +1825,24 @@ end
 -- MAIN MENU
 -- ===============================================================
 
-local TARGET_PC_CARD = 92
-local TARGET_MOBILE_CARD = 64
+local TARGET_PC_CARD = 112
+local TARGET_MOBILE_CARD = 78
 
 local function GetDefaultSize()
-	local PAD = isMobile and 4 or 6
-	local targetCard = isMobile and TARGET_MOBILE_CARD or TARGET_PC_CARD
-	
-	local perfectWidth = (targetCard * 7) + (PAD * 6) + sideBarW + 20
-	
-	local vp = workspace.CurrentCamera.ViewportSize
-	local finalW = math.clamp(perfectWidth, 400, vp.X * 0.95)
-	
-	local cardH = targetCard + (targetCard * 0.3 * 2) + PAD
-	local perfectHeight = (cardH * 2) + 60 + bottomBarH + 20
-	
-	local tabCount = not isMobile and 8 or 7
-	local minH = (isMobile and 8 or 62) + (tabBtnS + 6) * (tabCount - 1) + tabBtnS + 16
-	local finalH = math.clamp(math.max(perfectHeight, minH), minH, math.max(minH, vp.Y * 0.95))
-	
-	return UDim2.new(0, finalW, 0, finalH)
+    local vp = workspace.CurrentCamera.ViewportSize
+    local pad = isMobile and 6 or 8
+    local targetCard = isMobile and TARGET_MOBILE_CARD or TARGET_PC_CARD
+    local desiredCols = isMobile and ((vp.X >= 500) and 3 or 2) or 4
+    local perfectWidth = sideBarW + 30 + desiredCols * targetCard + (desiredCols - 1) * pad
+    local minW = isMobile and 330 or 650
+    local maxW = math.max(minW, vp.X * (isMobile and 0.96 or 0.88))
+    local finalW = math.clamp(perfectWidth, minW, maxW)
+
+    local perfectHeight = isMobile and 430 or 520
+    local minH = isMobile and 365 or 455
+    local maxH = math.max(minH, vp.Y * (isMobile and 0.94 or 0.86))
+    local finalH = math.clamp(perfectHeight, minH, maxH)
+    return UDim2.new(0, finalW, 0, finalH)
 end
 
 main = Instance.new("Frame")
@@ -1876,163 +1854,25 @@ main.BackgroundColor3 = currentTheme.primary
 main.BackgroundTransparency = 0
 main.ClipsDescendants = true
 main.Parent = gui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 14)
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 9)
 RegisterTheme(main, "BackgroundColor3", "primary")
 
 local ThemeGradients = {
-	Dark        = {Color3.fromRGB(22, 22, 30),  Color3.fromRGB(10, 10, 14),  135},
-	Purple      = {Color3.fromRGB(28, 18, 48),  Color3.fromRGB(10, 6, 18),   135},
-	Blue        = {Color3.fromRGB(18, 28, 52),  Color3.fromRGB(6, 10, 20),   135},
-	Green       = {Color3.fromRGB(16, 32, 22),  Color3.fromRGB(6, 12, 8),    135},
-	Red         = {Color3.fromRGB(48, 16, 18),  Color3.fromRGB(18, 6, 8),    135},
-	Light       = {Color3.fromRGB(255, 255, 255), Color3.fromRGB(228, 228, 238), 135},
-	MaterialYou = {Color3.fromRGB(30, 34, 50),  Color3.fromRGB(12, 14, 20),  135},
-	FrostedGlass= {Color3.fromRGB(230, 238, 255), Color3.fromRGB(190, 205, 235), 135},
-	DarkGlass   = {Color3.fromRGB(24, 24, 34),  Color3.fromRGB(8, 8, 12),    135},
+	Dark = {Color3.fromRGB(16,16,16), Color3.fromRGB(3,3,3), 135},
+	Purple = {Color3.fromRGB(20,20,20), Color3.fromRGB(4,4,4), 135},
+	Blue = {Color3.fromRGB(18,18,18), Color3.fromRGB(5,5,5), 135},
+	Green = {Color3.fromRGB(15,15,15), Color3.fromRGB(3,3,3), 135},
+	Red = {Color3.fromRGB(22,22,22), Color3.fromRGB(5,5,5), 135},
+	Light = {Color3.fromRGB(26,26,26), Color3.fromRGB(8,8,8), 135},
+	MaterialYou = {Color3.fromRGB(19,19,19), Color3.fromRGB(4,4,4), 135},
+	FrostedGlass = {Color3.fromRGB(28,28,28), Color3.fromRGB(9,9,9), 135},
+	DarkGlass = {Color3.fromRGB(17,17,17), Color3.fromRGB(2,2,2), 135},
 }
 
-local VexroAcrylic = (function()
-	local api = {}
-	local folder, body, mesh, dof
-	local conns = {}
-
-	local function disconnectAll()
-		for _, conn in ipairs(conns) do
-			pcall(function() conn:Disconnect() end)
-		end
-		conns = {}
-	end
-
-	function api.Stop()
-		disconnectAll()
-		if body then pcall(function() body:Destroy() end) end
-		if folder then pcall(function() folder:Destroy() end) end
-		if dof then pcall(function() dof:Destroy() end) end
-		body, mesh, folder, dof = nil, nil, nil, nil
-	end
-
-	local function viewportPointToWorld(point, distance)
-		local camera = workspace.CurrentCamera
-		if not camera then return Vector3.new() end
-		return camera:ViewportPointToRay(point.X, point.Y, distance).Origin
-	end
-
-	local function getViewportOffset()
-		if gui.IgnoreGuiInset then
-			local ok, inset = pcall(function()
-				return game:GetService("GuiService"):GetGuiInset()
-			end)
-			if ok and inset then return inset end
-		end
-		return Vector2.new()
-	end
-
-	local function createBody()
-		local part = Instance.new("Part")
-		part.Name = "VexroGlassBody"
-		part.Color = Color3.new(0, 0, 0)
-		part.Material = Enum.Material.Glass
-		part.Size = Vector3.new(1, 1, 0)
-		part.Anchored = true
-		part.CanCollide = false
-		part.Locked = true
-		part.CastShadow = false
-		part.Transparency = 0.985
-
-		local partMesh = Instance.new("SpecialMesh")
-		partMesh.MeshType = Enum.MeshType.Brick
-		partMesh.Offset = Vector3.new(0, 0, -0.000001)
-		partMesh.Parent = part
-
-		return part, partMesh
-	end
-
-	function api.Start(themeName)
-		if isMobile then return end
-		if body and body.Parent then
-			if dof then
-				dof.InFocusRadius = themeName == "FrostedGlass" and 0.08 or 0.12
-				dof.NearIntensity = themeName == "FrostedGlass" and 0.85 or 1
-			end
-			body.Transparency = themeName == "FrostedGlass" and 0.985 or 0.99
-			return
-		end
-
-		api.Stop()
-
-		folder = Instance.new("Folder")
-		folder.Name = "VexroGlassBlurFolder"
-		folder.Parent = workspace
-
-		body, mesh = createBody()
-		body.Parent = folder
-
-		dof = Instance.new("DepthOfFieldEffect")
-		dof.Name = "VexroGlassBlur"
-		dof.FarIntensity = 0
-		dof.InFocusRadius = themeName == "FrostedGlass" and 0.08 or 0.12
-		dof.NearIntensity = themeName == "FrostedGlass" and 0.85 or 1
-		dof.Parent = game:GetService("Lighting")
-
-		local positions = {
-			topLeft = Vector2.new(),
-			topRight = Vector2.new(),
-			bottomRight = Vector2.new(),
-		}
-
-		local function updatePositions()
-			local size = main.AbsoluteSize
-			local inset = getViewportOffset()
-			local pad = math.clamp(math.min(size.X, size.Y) * 0.035, 10, 18)
-			local pos = main.AbsolutePosition + inset + Vector2.new(pad, pad)
-			local clippedSize = Vector2.new(math.max(size.X - pad * 2, 1), math.max(size.Y - pad * 2, 1))
-			positions.topLeft = pos
-			positions.topRight = pos + Vector2.new(clippedSize.X, 0)
-			positions.bottomRight = pos + clippedSize
-		end
-
-		local function render()
-			if not body or not mesh or not main or not main.Parent then return end
-			local camera = workspace.CurrentCamera
-			if not camera then return end
-
-			local size = main.AbsoluteSize
-			if not gui.Enabled or not main.Visible or size.X <= 2 or size.Y <= 2 then
-				body.Transparency = 1
-				return
-			end
-
-			body.Transparency = themeName == "FrostedGlass" and 0.985 or 0.99
-			updatePositions()
-
-			local distance = 0.002
-			local topLeft3D = viewportPointToWorld(positions.topLeft, distance)
-			local topRight3D = viewportPointToWorld(positions.topRight, distance)
-			local bottomRight3D = viewportPointToWorld(positions.bottomRight, distance)
-			local width = (topRight3D - topLeft3D).Magnitude
-			local height = (topRight3D - bottomRight3D).Magnitude
-
-			body.CFrame = CFrame.fromMatrix(
-				(topLeft3D + bottomRight3D) / 2,
-				camera.CFrame.XVector,
-				camera.CFrame.YVector,
-				camera.CFrame.ZVector
-			)
-			mesh.Scale = Vector3.new(width, height, 0)
-		end
-
-		table.insert(conns, main:GetPropertyChangedSignal("AbsolutePosition"):Connect(render))
-		table.insert(conns, main:GetPropertyChangedSignal("AbsoluteSize"):Connect(render))
-		table.insert(conns, main:GetPropertyChangedSignal("Visible"):Connect(render))
-		table.insert(conns, gui:GetPropertyChangedSignal("Enabled"):Connect(render))
-		table.insert(conns, RunService.RenderStepped:Connect(render))
-		table.insert(conns, main.Destroying:Connect(api.Stop))
-
-		render()
-	end
-
-	return api
-end)()
+local VexroAcrylic = {
+    Start = function() end,
+    Stop = function() end,
+}
 
 local _glassApplyBase = ApplyTheme
 ApplyTheme = function(name)
@@ -2091,7 +1931,7 @@ end
 mainStroke = Instance.new("UIStroke")
 mainStroke.Color = currentTheme.stroke
 mainStroke.Thickness = 1
-mainStroke.Transparency = 0.12
+mainStroke.Transparency = 0.04
 mainStroke.Parent = main
 RegisterTheme(mainStroke, "Color", "stroke")
 
@@ -2134,178 +1974,158 @@ ambientB.Parent = bgParticles
 -- NAVIGATION RAIL
 -- ===============================================================
 
+do
 sidebar = Instance.new("Frame")
+sidebar.Name = "CompetitiveSidebar"
 sidebar.Size = UDim2.new(0, sideBarW, 1, 0)
-sidebar.BackgroundColor3 = currentTheme.sidebar
+sidebar.BackgroundColor3 = Color3.fromRGB(5,5,5)
 sidebar.BorderSizePixel = 0
 sidebar.ClipsDescendants = true
 sidebar.ZIndex = 8
 sidebar.Parent = main
-RegisterTheme(sidebar, "BackgroundColor3", "sidebar")
 
 local navDivider = Instance.new("Frame")
-navDivider.Size = UDim2.new(0, 1, 1, -24)
-navDivider.Position = UDim2.new(1, -1, 0, 12)
-navDivider.BackgroundColor3 = currentTheme.stroke
-navDivider.BackgroundTransparency = 0.35
+navDivider.Size = UDim2.new(0,1,1,-20)
+navDivider.Position = UDim2.new(1,-1,0,10)
+navDivider.BackgroundColor3 = Color3.fromRGB(72,72,72)
 navDivider.BorderSizePixel = 0
 navDivider.ZIndex = 9
 navDivider.Parent = sidebar
-RegisterTheme(navDivider, "BackgroundColor3", "stroke")
 
-local tabStartY = isMobile and 8 or 62
-if not isMobile then
-    local brand = Instance.new("Frame")
-    brand.Size = UDim2.new(1, -18, 0, 42)
-    brand.Position = UDim2.new(0, 9, 0, 10)
-    brand.BackgroundColor3 = currentTheme.tertiary
-    brand.ZIndex = 10
-    brand.Parent = sidebar
-    Instance.new("UICorner", brand).CornerRadius = UDim.new(0, 11)
-    RegisterTheme(brand, "BackgroundColor3", "tertiary")
+local brand = Instance.new("Frame")
+brand.Name = "UniversalBrand"
+brand.Size = UDim2.new(1,-16,0,isMobile and 54 or 88)
+brand.Position = UDim2.new(0,8,0,8)
+brand.BackgroundColor3 = Color3.fromRGB(8,8,8)
+brand.BorderSizePixel = 0
+brand.ZIndex = 10
+brand.Parent = sidebar
+Instance.new("UICorner", brand).CornerRadius = UDim.new(0,7)
+local brandStroke = Instance.new("UIStroke")
+brandStroke.Color = Color3.fromRGB(70,70,70)
+brandStroke.Thickness = 1
+brandStroke.Parent = brand
 
-    local brandDot = Instance.new("Frame")
-    brandDot.Size = UDim2.new(0, 9, 0, 9)
-    brandDot.Position = UDim2.new(0, 13, 0.5, -4)
-    brandDot.BackgroundColor3 = currentTheme.accent
-    brandDot.ZIndex = 11
-    brandDot.Parent = brand
-    Instance.new("UICorner", brandDot).CornerRadius = UDim.new(1, 0)
-    RegisterTheme(brandDot, "BackgroundColor3", "accent")
+local brandRail = Instance.new("Frame")
+brandRail.Size = UDim2.new(0,4,1,-18)
+brandRail.Position = UDim2.new(0,9,0,9)
+brandRail.BackgroundColor3 = Color3.fromRGB(255,255,255)
+brandRail.BorderSizePixel = 0
+brandRail.ZIndex = 11
+brandRail.Parent = brand
 
-    local brandText = Instance.new("TextLabel")
-    brandText.Size = UDim2.new(1, -34, 1, 0)
-    brandText.Position = UDim2.new(0, 30, 0, 0)
-    brandText.BackgroundTransparency = 1
-    brandText.Text = "VEXRO  /  EMOTES"
-    brandText.TextColor3 = currentTheme.text
-    brandText.Font = Enum.Font.GothamBold
-    brandText.TextSize = 11
-    brandText.TextXAlignment = Enum.TextXAlignment.Left
-    brandText.ZIndex = 11
-    brandText.Parent = brand
-    RegisterTheme(brandText, "TextColor3", "text")
-end
+local brandText = Instance.new("TextLabel")
+brandText.Size = UDim2.new(1,-28,1,-14)
+brandText.Position = UDim2.new(0,21,0,7)
+brandText.BackgroundTransparency = 1
+brandText.Text = isMobile and "U\nE" or "UNIVERSAL\nEMOTES"
+brandText.TextColor3 = Color3.fromRGB(255,255,255)
+brandText.Font = Enum.Font.GothamBlack
+brandText.TextSize = isMobile and 16 or 19
+brandText.TextXAlignment = Enum.TextXAlignment.Left
+brandText.TextYAlignment = Enum.TextYAlignment.Center
+brandText.ZIndex = 11
+brandText.Parent = brand
 
-local tabBtns = {}
-local tabLabels = {
-    emotes = isES and "Emotes" or "Emotes",
-    animations = isES and "Animaciones" or "Animations",
-    favorites = isES and "Favoritos" or "Favorites",
-    recent = isES and "Recientes" or "Recent",
-    friends = isES and "Amigos" or "Friends",
-    keybinds = isES and "Teclas" or "Keybinds",
-    playlists = isES and "Listas" or "Playlists",
-    settings = isES and "Ajustes" or "Settings",
+tabStartY = isMobile and 70 or 108
+tabBtns = {}
+tabLabels = {
+    emotes = "EMOTES",
+    favorites = isES and "FAVORITOS" or "FAVORITES",
+    settings = isES and "AJUSTES" or "SETTINGS",
+    keybinds = "BINDINGS",
+    info = "INFO",
+    animations = isES and "ANIMACIONES" or "ANIMATIONS",
+    recent = isES and "RECIENTES" or "RECENT",
+    friends = isES and "AMIGOS" or "FRIENDS",
+    playlists = isES and "LISTAS" or "PLAYLISTS",
 }
 
-local function CreateTabBtn(icon, tabName, yPos, customScale, rawImage)
+local function CreateTabBtn(icon, tabName, yPos)
     local btn = Instance.new("TextButton")
-    btn.Size = isMobile and UDim2.new(0, tabBtnS, 0, tabBtnS) or UDim2.new(1, -16, 0, tabBtnS)
-    btn.Position = isMobile and UDim2.new(0.5, -tabBtnS/2, 0, yPos) or UDim2.new(0, 8, 0, yPos)
-    btn.BackgroundColor3 = currentTheme.tertiary
-    btn.BackgroundTransparency = 1
+    btn.Name = "Nav_" .. tabName
+    btn.Size = UDim2.new(1,-16,0,tabBtnS)
+    btn.Position = UDim2.new(0,8,0,yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(5,5,5)
     btn.Text = ""
     btn.AutoButtonColor = false
     btn.ZIndex = 10
     btn.Parent = sidebar
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
 
     local stroke = Instance.new("UIStroke")
-    stroke.Color = currentTheme.stroke
+    stroke.Color = Color3.fromRGB(48,48,48)
     stroke.Thickness = 1
-    stroke.Transparency = 1
+    stroke.Transparency = 0.35
     stroke.Parent = btn
-    RegisterTheme(stroke, "Color", "stroke")
 
-    local isUrl = type(icon) == "string" and (string.find(icon, "rbxassetid://") or string.find(icon, "http") or string.find(icon, "rbxthumb://"))
-    local imgElement = nil
-    local iconSize = isMobile and 22 or 20
-    if isUrl then
+    local iconHolder = Instance.new("TextLabel")
+    iconHolder.Size = UDim2.new(0,isMobile and 26 or 30,1,0)
+    iconHolder.Position = UDim2.new(0,isMobile and 8 or 10,0,0)
+    iconHolder.BackgroundTransparency = 1
+    iconHolder.Text = ""
+    iconHolder.TextColor3 = Color3.fromRGB(235,235,235)
+    iconHolder.Font = Enum.Font.GothamBlack
+    iconHolder.TextSize = 15
+    iconHolder.ZIndex = 12
+    iconHolder.Parent = btn
+
+    local imageElement
+    if type(icon) == "string" and (string.find(icon,"rbxassetid://") or string.find(icon,"rbxthumb://") or string.find(icon,"http")) then
         local img = Instance.new("ImageLabel")
-        img.Size = UDim2.new(0, iconSize, 0, iconSize)
-        img.Position = isMobile and UDim2.fromScale(0.5, 0.5) or UDim2.new(0, 12, 0.5, 0)
-        img.AnchorPoint = isMobile and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5)
+        img.Size = UDim2.new(0,isMobile and 20 or 19,0,isMobile and 20 or 19)
+        img.Position = UDim2.new(0.5,0,0.5,0)
+        img.AnchorPoint = Vector2.new(0.5,0.5)
         img.BackgroundTransparency = 1
-        img.Image = rawImage or ResolveAssetImage(icon)
-        img.ImageColor3 = currentTheme.textDim
-        img.ZIndex = 12
-        img.Parent = btn
-        RegisterTheme(img, "ImageColor3", "textDim")
-        imgElement = img
+        img.Image = ResolveAssetImage(icon)
+        img.ImageColor3 = Color3.fromRGB(230,230,230)
+        img.ZIndex = 13
+        img.Parent = iconHolder
+        imageElement = img
     else
-        local glyph = Instance.new("TextLabel")
-        glyph.Size = UDim2.new(0, iconSize + 4, 0, iconSize + 4)
-        glyph.Position = isMobile and UDim2.fromScale(0.5, 0.5) or UDim2.new(0, 10, 0.5, 0)
-        glyph.AnchorPoint = isMobile and Vector2.new(0.5, 0.5) or Vector2.new(0, 0.5)
-        glyph.BackgroundTransparency = 1
-        glyph.Text = icon
-        glyph.TextColor3 = currentTheme.textDim
-        glyph.Font = Enum.Font.GothamBold
-        glyph.TextSize = 17
-        glyph.ZIndex = 12
-        glyph.Parent = btn
-        RegisterTheme(glyph, "TextColor3", "textDim")
-        imgElement = glyph
+        iconHolder.Text = tostring(icon or "•")
+        imageElement = iconHolder
     end
 
-    local label = nil
-    if not isMobile then
-        label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -46, 1, 0)
-        label.Position = UDim2.new(0, 42, 0, 0)
-        label.BackgroundTransparency = 1
-        label.Text = tabLabels[tabName] or tabName
-        label.TextColor3 = currentTheme.textDim
-        label.Font = Enum.Font.GothamMedium
-        label.TextSize = 12
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 12
-        label.Parent = btn
-        RegisterTheme(label, "TextColor3", "textDim")
-    end
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,-48,1,0)
+    label.Position = UDim2.new(0,isMobile and 38 or 44,0,0)
+    label.BackgroundTransparency = 1
+    label.Text = tabLabels[tabName] or tabName:upper()
+    label.TextColor3 = Color3.fromRGB(185,185,185)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = isMobile and 8 or 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 12
+    label.Parent = btn
 
     btn.MouseEnter:Connect(function()
         if currentTab ~= tabName then
-            TweenService:Create(btn, TweenInfo.new(0.14), {BackgroundTransparency = 0.55}):Play()
+            TweenService:Create(btn,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(22,22,22)}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(105,105,105),Transparency=0.1}):Play()
         end
     end)
     btn.MouseLeave:Connect(function()
         if currentTab ~= tabName then
-            TweenService:Create(btn, TweenInfo.new(0.14), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(btn,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(5,5,5)}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Transparency=0.35}):Play()
         end
     end)
 
-    tabBtns[tabName] = {btn = btn, stroke = stroke, img = imgElement, label = label, yPos = yPos}
+    tabBtns[tabName] = {btn=btn, stroke=stroke, img=imageElement, label=label, yPos=yPos, primary=true}
     return btn
 end
 
 CreateTabBtn(Icons.Emote, "emotes", tabStartY)
-CreateTabBtn("rbxassetid://75528584354229", "animations", tabStartY + tabBtnS + 6, 0.85)
-CreateTabBtn(Icons.FavoriteFull, "favorites", tabStartY + (tabBtnS + 6) * 2)
-CreateTabBtn(Icons.Recent, "recent", tabStartY + (tabBtnS + 6) * 3)
-CreateTabBtn("rbxassetid://115725480722697", "friends", tabStartY + (tabBtnS + 6) * 4)
-if not isMobile then
-    CreateTabBtn(Icons.Keybind, "keybinds", tabStartY + (tabBtnS + 6) * 5)
-    CreateTabBtn("rbxassetid://108973165274475", "playlists", tabStartY + (tabBtnS + 6) * 6, 1.15)
-    CreateTabBtn(Icons.Settings, "settings", tabStartY + (tabBtnS + 6) * 7)
-else
-    CreateTabBtn("rbxassetid://108973165274475", "playlists", tabStartY + (tabBtnS + 6) * 5, 1.15)
-    CreateTabBtn(Icons.Settings, "settings", tabStartY + (tabBtnS + 6) * 6)
-end
+CreateTabBtn(Icons.FavoriteFull, "favorites", tabStartY + (tabBtnS + 7))
+CreateTabBtn(Icons.Settings, "settings", tabStartY + (tabBtnS + 7) * 2)
+CreateTabBtn(Icons.Keybind, "keybinds", tabStartY + (tabBtnS + 7) * 3)
+CreateTabBtn("i", "info", tabStartY + (tabBtnS + 7) * 4)
 
-local _indS = 3
-local _tabIndicator = Instance.new("Frame")
-_tabIndicator.Name = "TabIndicator"
-_tabIndicator.Size = UDim2.new(0, _indS, 0, tabBtnS - 14)
-_tabIndicator.Position = UDim2.new(0, 2, 0, tabStartY + 7)
-_tabIndicator.BackgroundColor3 = currentTheme.accent
-_tabIndicator.ZIndex = 13
-_tabIndicator.Parent = sidebar
-Instance.new("UICorner", _tabIndicator).CornerRadius = UDim.new(1, 0)
-RegisterTheme(_tabIndicator, "BackgroundColor3", "accent")
-
+-- Indicator intentionally removed: selected category is represented by white fill.
+local _tabIndicator = nil
 local function _UpdateIndicatorGrad() end
+end
 
 -- ===============================================================
 -- CONTENT
@@ -2319,7 +2139,7 @@ content.ZIndex = 2
 content.ClipsDescendants = true
 content.Parent = main
 
-local titleH = isMobile and 44 or 54
+local titleH = isMobile and 76 or 86
 titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, titleH)
 titleBar.BackgroundTransparency = 1
@@ -2327,13 +2147,13 @@ titleBar.ZIndex = 5
 titleBar.Parent = content
 
 local headerSurface = Instance.new("Frame")
-headerSurface.Size = UDim2.new(1, -16, 1, -10)
+headerSurface.Size = UDim2.new(1, -16, 0, isMobile and 68 or 78)
 headerSurface.Position = UDim2.new(0, 8, 0, 5)
 headerSurface.BackgroundColor3 = currentTheme.secondary
 headerSurface.BackgroundTransparency = 0.12
 headerSurface.ZIndex = 4
 headerSurface.Parent = titleBar
-Instance.new("UICorner", headerSurface).CornerRadius = UDim.new(0, 12)
+Instance.new("UICorner", headerSurface).CornerRadius = UDim.new(0, 7)
 RegisterTheme(headerSurface, "BackgroundColor3", "secondary")
 
 local headerStroke = Instance.new("UIStroke")
@@ -2358,20 +2178,20 @@ titleIcon.Parent = titleBar
 RegisterTheme(titleIcon, "ImageColor3", "accent")
 
 title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -220, 0, 24)
+title.Size = UDim2.new(1, isMobile and -88 or -110, 0, 24)
 title.Position = UDim2.new(0, 18 + titleIconSz + 9, 0, isMobile and 10 or 8)
 title.BackgroundTransparency = 1
 title.Text = L.emotes
 title.TextColor3 = currentTheme.text
 title.Font = Enum.Font.GothamBold
-title.TextSize = isMobile and 15 or 17
+title.TextSize = isMobile and 14 or 16
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.ZIndex = 6
 title.Parent = titleBar
 RegisterTheme(title, "TextColor3", "text")
 
 local titleSubtitle = Instance.new("TextLabel")
-titleSubtitle.Size = UDim2.new(1, -220, 0, 16)
+titleSubtitle.Size = UDim2.new(1, isMobile and -88 or -110, 0, 16)
 titleSubtitle.Position = UDim2.new(0, 18 + titleIconSz + 9, 0, isMobile and 27 or 29)
 titleSubtitle.BackgroundTransparency = 1
 titleSubtitle.Text = isES and "Biblioteca de animaciones" or "Animation library"
@@ -2382,6 +2202,62 @@ titleSubtitle.TextXAlignment = Enum.TextXAlignment.Left
 titleSubtitle.ZIndex = 6
 titleSubtitle.Parent = titleBar
 RegisterTheme(titleSubtitle, "TextColor3", "textDim")
+
+
+do
+local quickNav = Instance.new("ScrollingFrame")
+quickNav.Name = "SecondaryNavigation"
+quickNav.Size = UDim2.new(1, -(isMobile and 120 or 210), 0, 24)
+quickNav.Position = UDim2.new(0, 14, 1, -29)
+quickNav.BackgroundTransparency = 1
+quickNav.BorderSizePixel = 0
+quickNav.ScrollBarThickness = 0
+quickNav.ScrollingDirection = Enum.ScrollingDirection.X
+quickNav.AutomaticCanvasSize = Enum.AutomaticSize.X
+quickNav.CanvasSize = UDim2.new(0,0,0,0)
+quickNav.ZIndex = 8
+quickNav.Parent = titleBar
+local quickLayout = Instance.new("UIListLayout")
+quickLayout.FillDirection = Enum.FillDirection.Horizontal
+quickLayout.Padding = UDim.new(0, isMobile and 4 or 6)
+quickLayout.SortOrder = Enum.SortOrder.LayoutOrder
+quickLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+quickLayout.Parent = quickNav
+
+local function CreateSecondaryTabBtn(tabName, order)
+    local btn = Instance.new("TextButton")
+    btn.Name = "Quick_" .. tabName
+    btn.Size = UDim2.new(0, isMobile and 54 or 78, 0, 22)
+    btn.BackgroundColor3 = Color3.fromRGB(12,12,12)
+    btn.Text = tabLabels[tabName] or tabName:upper()
+    btn.TextColor3 = Color3.fromRGB(145,145,145)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = isMobile and 7 or 8
+    btn.AutoButtonColor = false
+    btn.LayoutOrder = order
+    btn.ZIndex = 9
+    btn.Parent = quickNav
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,5)
+    local st = Instance.new("UIStroke")
+    st.Color = Color3.fromRGB(48,48,48)
+    st.Thickness = 1
+    st.Transparency = 0.35
+    st.Parent = btn
+    btn.MouseEnter:Connect(function()
+        if currentTab ~= tabName then TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(28,28,28),TextColor3=Color3.fromRGB(235,235,235)}):Play() end
+    end)
+    btn.MouseLeave:Connect(function()
+        if currentTab ~= tabName then TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(12,12,12),TextColor3=Color3.fromRGB(145,145,145)}):Play() end
+    end)
+    tabBtns[tabName] = {btn=btn,stroke=st,img=nil,label=nil,yPos=tabStartY,primary=false}
+end
+
+CreateSecondaryTabBtn("animations",1)
+CreateSecondaryTabBtn("recent",2)
+CreateSecondaryTabBtn("friends",3)
+CreateSecondaryTabBtn("playlists",4)
+
+end
 
 local _textGrads = {}
 local function _ApplyTextGrad(grad)
@@ -2398,18 +2274,19 @@ _updateTitleGrad = function() end
 
 local btnS = isMobile and 28 or 30
 
-local function MakeBtn(icon, px, colorKey, customSize)
+local function MakeBtn(icon, px, colorKey, customSize, customCenterY)
 	local s = customSize or btnS
+	local centerY = customCenterY or (titleH / 2)
 	local b = Instance.new("TextButton")
 	b.Size = UDim2.new(0, s, 0, s)
-	b.Position = UDim2.new(1, px, 0.5, -s/2)
+	b.Position = UDim2.new(1, px, 0, centerY - s/2)
 	b.BackgroundColor3 = currentTheme.tertiary
 	b.Text = ""
 	b.ZIndex = 10
 	b.Parent = titleBar
-	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
 	
-	local useWhite = (colorKey == "critical" or colorKey == "accent" or colorKey == "success")
+	local useWhite = true
 	
 	local isImg = type(icon) == "string" and (string.find(icon, "rbxassetid://") or string.find(icon, "http") or string.find(icon, "rbxthumb://"))
 	if isImg then
@@ -2491,25 +2368,47 @@ local function MakeBtn(icon, px, colorKey, customSize)
 		local s = customSize or btnS
 		TweenService:Create(b, TweenInfo.new(0.1), {
 			Size = UDim2.new(0, s + 4, 0, s + 4),
-			Position = UDim2.new(1, px - 2, 0.5, -(s + 4)/2)
+			Position = UDim2.new(1, px - 2, 0, centerY - (s + 4)/2)
 		}):Play()
 	end)
 	b.MouseLeave:Connect(function()
 		local s = customSize or btnS
 		TweenService:Create(b, TweenInfo.new(0.1), {
 			Size = UDim2.new(0, s, 0, s),
-			Position = UDim2.new(1, px, 0.5, -s/2)
+			Position = UDim2.new(1, px, 0, centerY - s/2)
 		}):Play()
 	end)
 	return b
 end
 
-local copyEmoteBtn = MakeBtn("rbxassetid://77508802666652", -(btnS*6 + 30), "critical")
-local stopBtn = MakeBtn("STOP_SHAPE", -(btnS*5 + 24), "critical")
-local randBtn = MakeBtn(Icons.Sort, -(btnS*4 + 18), "accent")
-local notifBtn = MakeBtn("rbxassetid://102189770974908", -(btnS*3 + 12), "tertiary")
-local minBtn = MakeBtn("-", -(btnS*2 + 6), "textDim")
-local closeBtn = MakeBtn("CLOSE_SHAPE", -(btnS + 2), "critical")
+local utilS = isMobile and 21 or 23
+local utilY = titleH - (isMobile and 16 or 17)
+local topY = isMobile and 19 or 21
+local copyEmoteBtn = MakeBtn("rbxassetid://77508802666652", -(utilS*4 + 16), "tertiary", utilS, utilY)
+local stopBtn = MakeBtn("STOP_SHAPE", -(utilS*3 + 12), "tertiary", utilS, utilY)
+local randBtn = MakeBtn(Icons.Sort, -(utilS*2 + 8), "tertiary", utilS, utilY)
+local notifBtn = MakeBtn("rbxassetid://102189770974908", -(utilS + 4), "tertiary", utilS, utilY)
+local minBtn = MakeBtn("-", -(btnS*2 + 6), "tertiary", btnS, topY)
+local closeBtn = MakeBtn("CLOSE_SHAPE", -(btnS + 2), "tertiary", btnS, topY)
+
+local function AddControlInvert(btn)
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(245,245,245),TextColor3=Color3.fromRGB(0,0,0)}):Play()
+        for _,child in ipairs(btn:GetChildren()) do
+            if child:IsA("ImageLabel") then child.ImageColor3 = Color3.fromRGB(0,0,0) end
+            if child:IsA("Frame") then child.BackgroundColor3 = Color3.fromRGB(0,0,0) end
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(18,18,18),TextColor3=Color3.fromRGB(255,255,255)}):Play()
+        for _,child in ipairs(btn:GetChildren()) do
+            if child:IsA("ImageLabel") then child.ImageColor3 = Color3.fromRGB(255,255,255) end
+            if child:IsA("Frame") then child.BackgroundColor3 = Color3.fromRGB(255,255,255) end
+        end
+    end)
+end
+AddControlInvert(minBtn)
+AddControlInvert(closeBtn)
 
 local notifIcon = notifBtn:FindFirstChildWhichIsA("ImageLabel")
 if notifIcon then
@@ -2581,6 +2480,31 @@ Instance.new("UICorner", search).CornerRadius = UDim.new(0, 12)
 Instance.new("UIPadding", search).PaddingLeft = UDim.new(0, 10)
 RegisterTheme(search, "BackgroundColor3", "tertiary")
 RegisterTheme(search, "TextColor3", "text")
+
+do
+search.PlaceholderText = isES and "Buscar emote..." or "Search emote..."
+search.BackgroundColor3 = Color3.fromRGB(8,8,8)
+search.TextColor3 = Color3.fromRGB(245,245,245)
+search.PlaceholderColor3 = Color3.fromRGB(105,105,105)
+search.Font = Enum.Font.GothamMedium
+local searchStroke = Instance.new("UIStroke")
+searchStroke.Color = Color3.fromRGB(52,52,52)
+searchStroke.Thickness = 1
+searchStroke.Parent = search
+local magnifier = Instance.new("TextLabel")
+magnifier.Size = UDim2.new(0,24,1,0)
+magnifier.Position = UDim2.new(0,7,0,0)
+magnifier.BackgroundTransparency = 1
+magnifier.Text = "⌕"
+magnifier.TextColor3 = Color3.fromRGB(235,235,235)
+magnifier.Font = Enum.Font.GothamBlack
+magnifier.TextSize = isMobile and 15 or 17
+magnifier.ZIndex = 6
+magnifier.Parent = search
+local searchPadding = search:FindFirstChildOfClass("UIPadding")
+if searchPadding then searchPadding.PaddingLeft = UDim.new(0,32) end
+
+end
 
 -- Trending Dropdown UI
 trendingDropdown = Instance.new("Frame")
@@ -2739,7 +2663,7 @@ end)
 local pageH = isMobile and 30 or 36
 pageBar = Instance.new("Frame")
 pageBar.Size = UDim2.new(1, -24, 0, pageH)
-pageBar.Position = UDim2.new(0, 12, 1, -(pageH + bottomBarH + 8))
+pageBar.Position = UDim2.new(0, 12, 1, -(pageH + bottomBarH + 14))
 pageBar.BackgroundColor3 = currentTheme.secondary
 pageBar.BackgroundTransparency = 0.28
 pageBar.ZIndex = 5
@@ -2839,7 +2763,7 @@ RegisterTheme(emptyLbl, "TextColor3", "textDim")
 -- ===============================================================
 
 settingsPanel = Instance.new("ScrollingFrame")
-settingsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 20))
+settingsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 28))
 settingsPanel.Position = UDim2.new(0, 8, 0, titleH + 8)
 settingsPanel.BackgroundTransparency = 1
 settingsPanel.ScrollBarThickness = isMobile and 6 or 4
@@ -2855,14 +2779,14 @@ settingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 settingsLayout.Parent = settingsPanel
 
 friendsPanel = Instance.new("ScrollingFrame")
-friendsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 20))
+friendsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 28))
 friendsPanel.Position = UDim2.new(0, 8, 0, titleH + 8)
 friendsPanel.BackgroundTransparency = 1
 friendsPanel.ScrollBarThickness = isMobile and 6 or 4
 friendsPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 playlistsPanel = Instance.new("ScrollingFrame")
-playlistsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 20))
+playlistsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 28))
 playlistsPanel.Position = UDim2.new(0, 8, 0, titleH + 8)
 playlistsPanel.BackgroundTransparency = 1
 playlistsPanel.ScrollBarThickness = isMobile and 6 or 4
@@ -2943,7 +2867,7 @@ friendsPanelLayout = Instance.new("UIListLayout")
 	friendsPanelLayout.Parent = friendsPanel
 
 keybindsPanel = Instance.new("ScrollingFrame")
-keybindsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 20))
+keybindsPanel.Size = UDim2.new(1, -16, 1, -(titleH + bottomBarH + 28))
 keybindsPanel.Position = UDim2.new(0, 8, 0, titleH + 8)
 keybindsPanel.BackgroundTransparency = 1
 keybindsPanel.ScrollBarThickness = isMobile and 6 or 4
@@ -2957,6 +2881,99 @@ keybindsPanelLayout.Padding = UDim.new(0, 8)
 keybindsPanelLayout.Parent = keybindsPanel
 
 local RefreshKeybindsPanel
+
+
+do
+aboutPanel = Instance.new("ScrollingFrame")
+aboutPanel.Name = "UniversalInfo"
+aboutPanel.Size = UDim2.new(1,-20,1,-(titleH+bottomBarH+24))
+aboutPanel.Position = UDim2.new(0,10,0,titleH+10)
+aboutPanel.BackgroundTransparency = 1
+aboutPanel.BorderSizePixel = 0
+aboutPanel.ScrollBarThickness = 3
+aboutPanel.ScrollBarImageColor3 = Color3.fromRGB(150,150,150)
+aboutPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
+aboutPanel.CanvasSize = UDim2.new(0,0,0,0)
+aboutPanel.Visible = false
+aboutPanel.ZIndex = 6
+aboutPanel.Parent = content
+local aboutLayout = Instance.new("UIListLayout")
+aboutLayout.Padding = UDim.new(0,8)
+aboutLayout.SortOrder = Enum.SortOrder.LayoutOrder
+aboutLayout.Parent = aboutPanel
+
+local function MakeInfoBlock(labelText, valueText, order)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1,-4,0,isMobile and 58 or 64)
+    row.BackgroundColor3 = Color3.fromRGB(10,10,10)
+    row.BorderSizePixel = 0
+    row.LayoutOrder = order
+    row.Parent = aboutPanel
+    Instance.new("UICorner",row).CornerRadius = UDim.new(0,6)
+    local st = Instance.new("UIStroke")
+    st.Color = Color3.fromRGB(55,55,55)
+    st.Thickness = 1
+    st.Parent = row
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,-20,0,18)
+    label.Position = UDim2.new(0,10,0,9)
+    label.BackgroundTransparency = 1
+    label.Text = labelText:upper()
+    label.TextColor3 = Color3.fromRGB(120,120,120)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = isMobile and 8 or 9
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = row
+    local value = Instance.new("TextLabel")
+    value.Size = UDim2.new(1,-20,0,25)
+    value.Position = UDim2.new(0,10,0,27)
+    value.BackgroundTransparency = 1
+    value.Text = tostring(valueText)
+    value.TextColor3 = Color3.fromRGB(245,245,245)
+    value.Font = Enum.Font.GothamBlack
+    value.TextSize = isMobile and 12 or 14
+    value.TextXAlignment = Enum.TextXAlignment.Left
+    value.TextWrapped = true
+    value.Parent = row
+    return value
+end
+
+local infoHero = Instance.new("Frame")
+infoHero.Size = UDim2.new(1,-4,0,isMobile and 90 or 106)
+infoHero.BackgroundColor3 = Color3.fromRGB(7,7,7)
+infoHero.BorderSizePixel = 0
+infoHero.LayoutOrder = 0
+infoHero.Parent = aboutPanel
+Instance.new("UICorner",infoHero).CornerRadius = UDim.new(0,7)
+local infoHeroStroke = Instance.new("UIStroke")
+infoHeroStroke.Color = Color3.fromRGB(225,225,225)
+infoHeroStroke.Thickness = 1
+infoHeroStroke.Parent = infoHero
+local heroRail = Instance.new("Frame")
+heroRail.Size = UDim2.new(0,5,1,-22)
+heroRail.Position = UDim2.new(0,12,0,11)
+heroRail.BackgroundColor3 = Color3.fromRGB(255,255,255)
+heroRail.BorderSizePixel = 0
+heroRail.Parent = infoHero
+local heroText = Instance.new("TextLabel")
+heroText.Size = UDim2.new(1,-45,1,-18)
+heroText.Position = UDim2.new(0,30,0,9)
+heroText.BackgroundTransparency = 1
+heroText.Text = "UNIVERSAL\nEMOTES"
+heroText.TextColor3 = Color3.fromRGB(255,255,255)
+heroText.Font = Enum.Font.GothamBlack
+heroText.TextSize = isMobile and 20 or 24
+heroText.TextXAlignment = Enum.TextXAlignment.Left
+heroText.TextYAlignment = Enum.TextYAlignment.Center
+heroText.Parent = infoHero
+
+local _infoVersionValue = MakeInfoBlock(isES and "Versión" or "Version", "V5.0", 1)
+local _infoCountValue = MakeInfoBlock(isES and "Cantidad de emotes" or "Emote count", tostring(#Emotes), 2)
+local _infoStatusValue = MakeInfoBlock(isES and "Estado" or "Status", (_genv().VexroServerAccessible and (isES and "CONECTADO" or "CONNECTED") or (isES and "MODO LOCAL / SERVIDOR NO DISPONIBLE" or "LOCAL MODE / SERVER UNAVAILABLE")), 3)
+local _infoLanguageValue = MakeInfoBlock(isES and "Idioma" or "Language", isES and "ESPAÑOL" or "ENGLISH", 4)
+local _infoExtraValue = MakeInfoBlock(isES and "Información" or "Information", isES and "R15 · Favoritos · Bindings · Playlists · Animaciones" or "R15 · Favorites · Bindings · Playlists · Animations", 5)
+
+end
 
 -- ---------------------------------------------------------------
 -- Yardımcı: bölüm başlığı
@@ -3073,54 +3090,52 @@ end
 -- Yardımcı: pill toggle anahtarı
 -- ---------------------------------------------------------------
 MakePillToggle = function(parent, value, onChange)
-	local pillW, pillH, pad = 50, 28, 3
-	local knobSz = pillH - pad * 2
+    local pillW, pillH, pad = 50, 28, 3
+    local knobSz = pillH - pad * 2
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.new(0,pillW,0,pillH)
+    pill.AnchorPoint = Vector2.new(1,0.5)
+    pill.Position = UDim2.new(1,-12,0.5,0)
+    pill.BackgroundColor3 = value and Color3.fromRGB(245,245,245) or Color3.fromRGB(35,35,35)
+    pill.ZIndex = 8
+    pill.Parent = parent
+    Instance.new("UICorner",pill).CornerRadius = UDim.new(1,0)
+    local pst = Instance.new("UIStroke")
+    pst.Color = Color3.fromRGB(75,75,75)
+    pst.Thickness = 1
+    pst.Parent = pill
 
-	local pill = Instance.new("Frame")
-	pill.Size = UDim2.new(0, pillW, 0, pillH)
-	pill.AnchorPoint = Vector2.new(1, 0.5)
-	pill.Position = UDim2.new(1, -12, 0.5, 0)
-	pill.BackgroundColor3 = value and currentTheme.success or currentTheme.stroke
-	pill.ZIndex = 8
-	pill.Parent = parent
-	Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0,knobSz,0,knobSz)
+    knob.AnchorPoint = Vector2.new(0,0.5)
+    knob.Position = value and UDim2.new(1,-(knobSz+pad),0.5,0) or UDim2.new(0,pad,0.5,0)
+    knob.BackgroundColor3 = value and Color3.fromRGB(0,0,0) or Color3.fromRGB(120,120,120)
+    knob.ZIndex = 9
+    knob.Parent = pill
+    Instance.new("UICorner",knob).CornerRadius = UDim.new(1,0)
 
-	local knob = Instance.new("Frame")
-	knob.Size = UDim2.new(0, knobSz, 0, knobSz)
-	knob.AnchorPoint = Vector2.new(0, 0.5)
-	knob.Position = value
-		and UDim2.new(1, -(knobSz + pad), 0.5, 0)
-		or  UDim2.new(0, pad, 0.5, 0)
-	knob.BackgroundColor3 = Color3.new(1, 1, 1)
-	knob.ZIndex = 9
-	knob.Parent = pill
-	Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    local state = value
+    local pillBtn = Instance.new("TextButton")
+    pillBtn.Size = UDim2.fromScale(1,1)
+    pillBtn.BackgroundTransparency = 1
+    pillBtn.Text = ""
+    pillBtn.ZIndex = 10
+    pillBtn.Parent = pill
 
-	local state = value
-	local pillBtn = Instance.new("TextButton")
-	pillBtn.Size = UDim2.fromScale(1, 1)
-	pillBtn.BackgroundTransparency = 1
-	pillBtn.Text = ""
-	pillBtn.ZIndex = 10
-	pillBtn.Parent = pill
-
-	local function SetState(v)
-		state = v
-		TweenService:Create(pill, TweenInfo.new(0.22), {
-			BackgroundColor3 = v and currentTheme.success or currentTheme.stroke
-		}):Play()
-		TweenService:Create(knob, TweenInfo.new(0.22, Enum.EasingStyle.Back), {
-			Position = v and UDim2.new(1, -(knobSz + pad), 0.5, 0) or UDim2.new(0, pad, 0.5, 0)
-		}):Play()
-	end
-
-	pillBtn.MouseButton1Click:Connect(function()
-		state = not state
-		SetState(state)
-		onChange(state)
-	end)
-
-	return SetState
+    local function SetState(v)
+        state = v
+        TweenService:Create(pill,TweenInfo.new(0.20),{BackgroundColor3=v and Color3.fromRGB(245,245,245) or Color3.fromRGB(35,35,35)}):Play()
+        TweenService:Create(knob,TweenInfo.new(0.20,Enum.EasingStyle.Quad),{
+            Position=v and UDim2.new(1,-(knobSz+pad),0.5,0) or UDim2.new(0,pad,0.5,0),
+            BackgroundColor3=v and Color3.fromRGB(0,0,0) or Color3.fromRGB(120,120,120)
+        }):Play()
+    end
+    pillBtn.MouseButton1Click:Connect(function()
+        state = not state
+        SetState(state)
+        onChange(state)
+    end)
+    return SetState
 end
 
 -- ===============================================================
@@ -3304,20 +3319,20 @@ do
 	resetBtn.MouseButton1Click:Connect(function()
 		Settings.language = nil
 		SaveData()
-		Notify("Vexro", isES and "Idioma restablecido. Ejecuta el script otra vez para elegir." or "Language reset. Run the script again to choose.")
+		Notify("UNIVERSAL EMOTES", isES and "Idioma restablecido. Ejecuta el script otra vez para elegir." or "Language reset. Run the script again to choose.")
 	end)
 end
 
 do
 	MakeSectionHeader(isES and "Acerca de & Notas de actualización" or "About & Update Notes", 10)
-	local verRow = MakeRow("110192525313214", "V5.0 - VEXRO CLOUD", isES and "Versión más reciente de VEXRO Cloud" or "Latest VEXRO Cloud version", 11, 135)
+	local verRow = MakeRow("110192525313214", "V5.0", isES and "Versión del sistema" or "System version", 11, 135)
 	
 	local verLbl = Instance.new("TextLabel")
 	verLbl.Size = UDim2.new(1, -24, 0, 80)
 	verLbl.Position = UDim2.new(0, 12, 0, 48)
 	verLbl.BackgroundTransparency = 1
-	verLbl.Text = isES and "• Carga asíncrona de emotes\n• Ajuste dinámico de paquetes de animación\n• Correcciones de recorte y ventanas\n• Mejoras visuales de tarjetas\n• Integración con Vexro Cloud"
-		or "• Async emote loading\n• Dynamic animation pack slot matching\n• Window clipping fixes\n• Card visual improvements\n• Vexro Cloud integration"
+	verLbl.Text = isES and "• Carga asíncrona de emotes\n• Ajuste dinámico de paquetes de animación\n• Correcciones de recorte y ventanas\n• Favoritos, bindings y playlists\n• Sincronización y funciones online"
+		or "• Async emote loading\n• Dynamic animation pack slot matching\n• Window clipping fixes\n• Favorites, bindings and playlists\n• Sync and online features"
 	verLbl.TextColor3 = currentTheme.textDim
 	verLbl.Font = Enum.Font.Gotham
 	verLbl.TextSize = isMobile and 10 or 11
@@ -4131,7 +4146,7 @@ end
 do
 infoBox = Instance.new("Frame")
 infoBox.Size = UDim2.new(1, 0, 0, 52)
-infoBox.BackgroundColor3 = Color3.fromRGB(40, 60, 100)
+infoBox.BackgroundColor3 = Color3.fromRGB(59, 59, 59)
 infoBox.BackgroundTransparency = 0.4
 infoBox.LayoutOrder = 3
 infoBox.ZIndex = 5
@@ -4142,7 +4157,7 @@ infoBoxLbl.Size = UDim2.new(1, -32, 1, 0)
 infoBoxLbl.Position = UDim2.new(0, 32, 0, 0)
 infoBoxLbl.BackgroundTransparency = 1
 infoBoxLbl.Text = L.friendInfoTxt
-infoBoxLbl.TextColor3 = Color3.fromRGB(200, 220, 255)
+infoBoxLbl.TextColor3 = Color3.fromRGB(218, 218, 218)
 infoBoxLbl.Font = Enum.Font.Gotham
 infoBoxLbl.TextSize = 10
 infoBoxLbl.TextWrapped = true
@@ -4155,7 +4170,7 @@ infoIcon.Size = UDim2.new(0, 24, 0, 24)
 infoIcon.Position = UDim2.new(0, 6, 0.5, -12)
 infoIcon.BackgroundTransparency = 1
 infoIcon.Text = "ℹ"
-infoIcon.TextColor3 = Color3.fromRGB(150, 190, 255)
+infoIcon.TextColor3 = Color3.fromRGB(186, 186, 186)
 infoIcon.Font = Enum.Font.GothamBold
 infoIcon.TextSize = 14
 infoIcon.ZIndex = 6
@@ -4308,40 +4323,129 @@ end
 
 -- ===============================================================
 
+do
+selectedEmote = nil
+selectedCardStroke = nil
+selectedCardContainer = nil
+local actionUseBtn, actionKeyLbl
+
 bottomBar = Instance.new("Frame")
-bottomBar.Size = UDim2.new(1, 0, 0, bottomBarH)
-bottomBar.Position = UDim2.new(0, 0, 1, -bottomBarH)
-bottomBar.BackgroundColor3 = currentTheme.tertiary
+bottomBar.Size = UDim2.new(1,-20,0,bottomBarH)
+bottomBar.Position = UDim2.new(0,10,1,-(bottomBarH+8))
+bottomBar.BackgroundColor3 = Color3.fromRGB(6,6,6)
+bottomBar.BorderSizePixel = 0
 bottomBar.ZIndex = 15
 bottomBar.Parent = content
-Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0, 14)
-RegisterTheme(bottomBar, "BackgroundColor3", "tertiary")
+Instance.new("UICorner",bottomBar).CornerRadius = UDim.new(0,7)
+local bottomStroke = Instance.new("UIStroke")
+bottomStroke.Color = Color3.fromRGB(68,68,68)
+bottomStroke.Thickness = 1
+bottomStroke.Parent = bottomBar
 
 bottomOverlay = Instance.new("Frame")
-bottomOverlay.Size = UDim2.new(1, 0, 0, 8)
-bottomOverlay.BackgroundColor3 = currentTheme.tertiary
+bottomOverlay.Size = UDim2.new(0,4,0,math.max(24,bottomBarH-18))
+bottomOverlay.Position = UDim2.new(0,9,0.5,0)
+bottomOverlay.AnchorPoint = Vector2.new(0,0.5)
+bottomOverlay.BackgroundColor3 = Color3.fromRGB(255,255,255)
 bottomOverlay.BorderSizePixel = 0
-bottomOverlay.ZIndex = 14
+bottomOverlay.ZIndex = 16
 bottomOverlay.Parent = bottomBar
-RegisterTheme(bottomOverlay, "BackgroundColor3", "tertiary")
 
 grip = Instance.new("Frame")
-grip.Size = UDim2.new(0, 40, 0, 4)
-grip.Position = UDim2.new(0.5, -20, 0.5, -2)
-grip.BackgroundColor3 = currentTheme.textDim
+grip.Size = UDim2.new(0,18,0,2)
+grip.Position = UDim2.new(1,-28,0.5,-1)
+grip.BackgroundColor3 = Color3.fromRGB(85,85,85)
+grip.BorderSizePixel = 0
 grip.ZIndex = 16
 grip.Parent = bottomBar
-Instance.new("UICorner", grip).CornerRadius = UDim.new(1, 0)
-RegisterTheme(grip, "BackgroundColor3", "textDim")
+
+local keyBoxW = isMobile and 40 or 48
+actionUseBtn = Instance.new("TextButton")
+actionUseBtn.Name = "UseEmoteButton"
+actionUseBtn.Size = UDim2.new(1,-(keyBoxW+42),1,-18)
+actionUseBtn.Position = UDim2.new(0,22,0,9)
+actionUseBtn.BackgroundColor3 = Color3.fromRGB(5,5,5)
+actionUseBtn.Text = isES and "USAR EMOTE" or "USE EMOTE"
+actionUseBtn.TextColor3 = Color3.fromRGB(255,255,255)
+actionUseBtn.Font = Enum.Font.GothamBlack
+actionUseBtn.TextSize = isMobile and 12 or 14
+actionUseBtn.AutoButtonColor = false
+actionUseBtn.ZIndex = 17
+actionUseBtn.Parent = bottomBar
+Instance.new("UICorner",actionUseBtn).CornerRadius = UDim.new(0,5)
+local useStroke = Instance.new("UIStroke")
+useStroke.Color = Color3.fromRGB(245,245,245)
+useStroke.Thickness = 1
+useStroke.Parent = actionUseBtn
+
+actionKeyLbl = Instance.new("TextLabel")
+actionKeyLbl.Size = UDim2.new(0,keyBoxW,1,-18)
+actionKeyLbl.Position = UDim2.new(1,-(keyBoxW+10),0,9)
+actionKeyLbl.BackgroundColor3 = Color3.fromRGB(18,18,18)
+actionKeyLbl.Text = "—"
+actionKeyLbl.TextColor3 = Color3.fromRGB(220,220,220)
+actionKeyLbl.Font = Enum.Font.GothamBlack
+actionKeyLbl.TextSize = isMobile and 12 or 14
+actionKeyLbl.ZIndex = 17
+actionKeyLbl.Parent = bottomBar
+Instance.new("UICorner",actionKeyLbl).CornerRadius = UDim.new(0,5)
+local actionKeyStroke = Instance.new("UIStroke")
+actionKeyStroke.Color = Color3.fromRGB(58,58,58)
+actionKeyStroke.Thickness = 1
+actionKeyStroke.Parent = actionKeyLbl
+
+UpdateSelectedEmoteUI = function(emote, newStroke, newContainer)
+    if selectedCardStroke and selectedCardStroke ~= newStroke and selectedCardStroke.Parent then
+        selectedCardStroke.Color = Color3.fromRGB(58,58,58)
+        selectedCardStroke.Thickness = 1
+    end
+    if selectedCardContainer and selectedCardContainer ~= newContainer and selectedCardContainer.Parent then
+        selectedCardContainer.BackgroundColor3 = Color3.fromRGB(8,8,8)
+    end
+    selectedEmote = emote
+    selectedCardStroke = newStroke or selectedCardStroke
+    selectedCardContainer = newContainer or selectedCardContainer
+    if newStroke and newStroke.Parent then
+        newStroke.Color = Color3.fromRGB(255,255,255)
+        newStroke.Thickness = 1.6
+    end
+    if newContainer and newContainer.Parent then
+        newContainer.BackgroundColor3 = Color3.fromRGB(18,18,18)
+    end
+    if not emote then
+        actionKeyLbl.Text = "—"
+        return
+    end
+    local kb = GetKeybind(emote.id)
+    actionKeyLbl.Text = (kb and kb.key and tostring(kb.key)) or "—"
+end
+
+actionUseBtn.MouseEnter:Connect(function()
+    TweenService:Create(actionUseBtn,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(245,245,245),TextColor3=Color3.fromRGB(0,0,0)}):Play()
+end)
+actionUseBtn.MouseLeave:Connect(function()
+    TweenService:Create(actionUseBtn,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(5,5,5),TextColor3=Color3.fromRGB(255,255,255)}):Play()
+end)
+actionUseBtn.MouseButton1Click:Connect(function()
+    if not selectedEmote then
+        Notify(isES and "Selecciona un emote" or "Select an emote", "")
+        return
+    end
+    if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner = nil end
+    PlayEmote(selectedEmote.id, selectedEmote.name)
+end)
+
+end
 
 local scrollY = titleH + searchH + 14
 scroll = Instance.new("ScrollingFrame")
 scroll.ClipsDescendants = true
-scroll.Size = UDim2.new(1, -16, 1, -(scrollY + pageH + bottomBarH + 18))
+scroll.Size = UDim2.new(1, -16, 1, -(scrollY + pageH + bottomBarH + 22))
 scroll.Position = UDim2.new(0, 8, 0, scrollY)
 scroll.BackgroundTransparency = 1
-scroll.ScrollBarThickness = isMobile and 3 or 5
+scroll.ScrollBarThickness = isMobile and 2 or 3
 scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scroll.ScrollBarImageColor3 = currentTheme.stroke
 scroll.ZIndex = 1
 scroll.Parent = content
@@ -4352,27 +4456,21 @@ RegisterTheme(scroll, "ScrollBarImageColor3", "stroke")
 -- ===============================================================
 
 local function CalcLayout()
-	local PAD = isMobile and 4 or 6
-	local w = scroll.AbsoluteSize.X
-	
-	local minCardSize = isMobile and TARGET_MOBILE_CARD or TARGET_PC_CARD
-	
-	cols = math.floor(w / (minCardSize + PAD))
-	if cols < 1 then cols = 1 end
-	
-	currentCardSize = (w - (PAD * (cols - 1))) / cols
-	
-	local NAME_H = math.clamp(currentCardSize * 0.35, 18, 28)
-	local FAV_H = math.clamp(currentCardSize * 0.3, 18, 24)
-	local CARD_TOTAL_H = currentCardSize + NAME_H + FAV_H
-	
-	local rowsVisible = math.floor(scroll.AbsoluteSize.Y / (CARD_TOTAL_H + PAD))
-	if rowsVisible < 1 then rowsVisible = 1 end
-	
-	perPage = cols * rowsVisible
-	
-	pages = math.max(1, math.ceil(#filtered / perPage))
-	page = math.clamp(page, 1, pages)
+    local PAD = isMobile and 6 or 8
+    local w = math.max(scroll.AbsoluteSize.X, 1)
+    if isMobile then
+        cols = (workspace.CurrentCamera.ViewportSize.X >= 500) and 3 or 2
+        if currentTab == "animations" then cols = math.max(2, cols - 1) end
+    else
+        cols = 4
+    end
+    currentCardSize = math.max(54, (w - PAD * (cols - 1)) / cols)
+    local infoH = isMobile and 34 or 38
+    local CARD_TOTAL_H = currentCardSize + infoH
+    local rowsVisible = math.max(1, math.floor(scroll.AbsoluteSize.Y / (CARD_TOTAL_H + PAD)))
+    perPage = math.max(cols, cols * rowsVisible)
+    pages = math.max(1, math.ceil(#filtered / perPage))
+    page = math.clamp(page,1,pages)
 end
 
 local function UpdatePageUI()
@@ -4452,187 +4550,187 @@ end
 -- ===============================================================
 
 local function ShowKeybindDialog(emoteId, emote, isEdit)
-	local existing = main:FindFirstChild("VexroKeybindOverlay")
-	if existing then existing:Destroy() end
+    local existing = main:FindFirstChild("VexroKeybindOverlay")
+    if existing then existing:Destroy() end
 
-	local overlay = Instance.new("TextButton")
-	overlay.Name = "VexroKeybindOverlay"
-	overlay.Size = UDim2.new(1, 0, 1, 0)
-	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	overlay.BackgroundTransparency = 0.5
-	overlay.Text = ""
-	overlay.AutoButtonColor = false
-	overlay.ZIndex = 200
-	overlay.Parent = main
-	overlay.MouseButton1Click:Connect(function() end)
+    local overlay = Instance.new("TextButton")
+    overlay.Name = "VexroKeybindOverlay"
+    overlay.Size = UDim2.new(1,0,1,0)
+    overlay.BackgroundColor3 = Color3.new(0,0,0)
+    overlay.BackgroundTransparency = 0.36
+    overlay.Text = ""
+    overlay.AutoButtonColor = false
+    overlay.ZIndex = 200
+    overlay.Parent = main
 
-	local dialog = Instance.new("Frame")
-	dialog.Size = UDim2.new(0.85, 0, 0, 260)
-	dialog.Position = UDim2.fromScale(0.5, 0.5)
-	dialog.AnchorPoint = Vector2.new(0.5, 0.5)
-	dialog.BackgroundColor3 = currentTheme.secondary
-	dialog.ZIndex = 201
-	dialog.Parent = overlay
-	Instance.new("UICorner", dialog).CornerRadius = UDim.new(0, 16)
-	local dStroke = Instance.new("UIStroke")
-	dStroke.Color = currentTheme.accent
-	dStroke.Thickness = 2
-	dStroke.Transparency = 0.4
-	dStroke.Parent = dialog
+    local dialog = Instance.new("Frame")
+    dialog.Size = UDim2.new(0,0,0,0)
+    dialog.Position = UDim2.fromScale(0.5,0.5)
+    dialog.AnchorPoint = Vector2.new(0.5,0.5)
+    dialog.BackgroundColor3 = Color3.fromRGB(8,8,8)
+    dialog.BorderSizePixel = 0
+    dialog.ClipsDescendants = true
+    dialog.ZIndex = 201
+    dialog.Parent = overlay
+    Instance.new("UICorner",dialog).CornerRadius = UDim.new(0,8)
+    local dStroke = Instance.new("UIStroke")
+    dStroke.Color = Color3.fromRGB(235,235,235)
+    dStroke.Thickness = 1
+    dStroke.Parent = dialog
 
-	local titleLbl = Instance.new("TextLabel")
-	titleLbl.Size = UDim2.new(1, -16, 0, 36)
-	titleLbl.Position = UDim2.new(0, 8, 0, 8)
-	titleLbl.BackgroundTransparency = 1
-	titleLbl.Text = isEdit and L.editKeybind or L.newKeybind
-	titleLbl.TextColor3 = currentTheme.text
-	titleLbl.Font = Enum.Font.GothamBold
-	titleLbl.TextSize = 16
-	titleLbl.ZIndex = 202
-	titleLbl.Parent = dialog
+    local rail = Instance.new("Frame")
+    rail.Size = UDim2.new(0,4,0,46)
+    rail.Position = UDim2.new(0,14,0,14)
+    rail.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    rail.BorderSizePixel = 0
+    rail.ZIndex = 202
+    rail.Parent = dialog
 
-	local nameLblTitle = Instance.new("TextLabel")
-	nameLblTitle.Size = UDim2.new(0, 60, 0, 24)
-	nameLblTitle.Position = UDim2.new(0, 12, 0, 52)
-	nameLblTitle.BackgroundTransparency = 1
-	nameLblTitle.Text = L.kbName
-	nameLblTitle.TextColor3 = currentTheme.textDim
-	nameLblTitle.Font = Enum.Font.GothamBold
-	nameLblTitle.TextSize = 13
-	nameLblTitle.TextXAlignment = Enum.TextXAlignment.Left
-	nameLblTitle.ZIndex = 202
-	nameLblTitle.Parent = dialog
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1,-44,0,46)
+    titleLbl.Position = UDim2.new(0,28,0,12)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = isEdit and (isES and "EDITAR BINDING" or "EDIT BINDING") or (isES and "NUEVO BINDING" or "NEW BINDING")
+    titleLbl.TextColor3 = Color3.fromRGB(255,255,255)
+    titleLbl.Font = Enum.Font.GothamBlack
+    titleLbl.TextSize = isMobile and 14 or 16
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.ZIndex = 202
+    titleLbl.Parent = dialog
 
-	local nameBox = Instance.new("TextBox")
-	nameBox.Size = UDim2.new(1, -24, 0, 32)
-	nameBox.Position = UDim2.new(0, 12, 0, 78)
-	nameBox.BackgroundColor3 = currentTheme.tertiary
-	nameBox.PlaceholderText = emote.name
-	nameBox.Text = isEdit and (GetKeybind(emoteId) and GetKeybind(emoteId).name or "") or ""
-	nameBox.TextColor3 = currentTheme.text
-	nameBox.PlaceholderColor3 = currentTheme.textDim
-	nameBox.Font = Enum.Font.Gotham
-	nameBox.TextSize = 13
-	nameBox.ClearTextOnFocus = false
-	nameBox.ZIndex = 202
-	nameBox.Parent = dialog
-	Instance.new("UICorner", nameBox).CornerRadius = UDim.new(0, 8)
-	local nbStroke = Instance.new("UIStroke")
-	nbStroke.Color = currentTheme.stroke
-	nbStroke.Thickness = 1.5
-	nbStroke.Parent = nameBox
+    local emoteLbl = Instance.new("TextLabel")
+    emoteLbl.Size = UDim2.new(1,-28,0,22)
+    emoteLbl.Position = UDim2.new(0,14,0,68)
+    emoteLbl.BackgroundTransparency = 1
+    emoteLbl.Text = string.upper(tostring(emote.name or "EMOTE"))
+    emoteLbl.TextColor3 = Color3.fromRGB(135,135,135)
+    emoteLbl.Font = Enum.Font.GothamBold
+    emoteLbl.TextSize = isMobile and 9 or 10
+    emoteLbl.TextXAlignment = Enum.TextXAlignment.Left
+    emoteLbl.ZIndex = 202
+    emoteLbl.Parent = dialog
 
-	local atamaLbl = Instance.new("TextLabel")
-	atamaLbl.Size = UDim2.new(0, 80, 0, 24)
-	atamaLbl.Position = UDim2.new(0, 12, 0, 122)
-	atamaLbl.BackgroundTransparency = 1
-	atamaLbl.Text = L.kbAssign
-	atamaLbl.TextColor3 = currentTheme.textDim
-	atamaLbl.Font = Enum.Font.GothamBold
-	atamaLbl.TextSize = 13
-	atamaLbl.TextXAlignment = Enum.TextXAlignment.Left
-	atamaLbl.ZIndex = 202
-	atamaLbl.Parent = dialog
+    local recordedKey = isEdit and (GetKeybind(emoteId) and GetKeybind(emoteId).key or nil) or nil
+    local isRecording = false
+    local recordConn, recordTween
 
-	local recordedKey = isEdit and (GetKeybind(emoteId) and GetKeybind(emoteId).key or nil) or nil
-	local isRecording = false
-	local recordConn
+    local keyBtn = Instance.new("TextButton")
+    keyBtn.Size = UDim2.new(1,-28,0,54)
+    keyBtn.Position = UDim2.new(0,14,0,94)
+    keyBtn.BackgroundColor3 = Color3.fromRGB(13,13,13)
+    keyBtn.Text = recordedKey and ("[ "..recordedKey.." ]") or (isES and "PRESIONA UNA TECLA..." or "PRESS A KEY...")
+    keyBtn.TextColor3 = recordedKey and Color3.fromRGB(255,255,255) or Color3.fromRGB(165,165,165)
+    keyBtn.Font = Enum.Font.GothamBlack
+    keyBtn.TextSize = isMobile and 12 or 14
+    keyBtn.AutoButtonColor = false
+    keyBtn.ZIndex = 202
+    keyBtn.Parent = dialog
+    Instance.new("UICorner",keyBtn).CornerRadius = UDim.new(0,6)
+    local kbStroke = Instance.new("UIStroke")
+    kbStroke.Color = Color3.fromRGB(58,58,58)
+    kbStroke.Thickness = 1
+    kbStroke.Parent = keyBtn
 
-	local keyBtn = Instance.new("TextButton")
-	keyBtn.Size = UDim2.new(1, -24, 0, 36)
-	keyBtn.Position = UDim2.new(0, 12, 0, 148)
-	keyBtn.BackgroundColor3 = currentTheme.tertiary
-	keyBtn.Text = recordedKey and ("[" .. recordedKey .. "]") or L.kbRecording
-	keyBtn.TextColor3 = recordedKey and currentTheme.accent or currentTheme.textDim
-	keyBtn.Font = Enum.Font.GothamBold
-	keyBtn.TextSize = 13
-	keyBtn.ZIndex = 202
-	keyBtn.Parent = dialog
-	Instance.new("UICorner", keyBtn).CornerRadius = UDim.new(0, 8)
-	local kbStroke = Instance.new("UIStroke")
-	kbStroke.Color = currentTheme.stroke
-	kbStroke.Thickness = 1.5
-	kbStroke.Parent = keyBtn
+    local helper = Instance.new("TextLabel")
+    helper.Size = UDim2.new(1,-28,0,34)
+    helper.Position = UDim2.new(0,14,0,156)
+    helper.BackgroundTransparency = 1
+    helper.Text = isES and "BACKSPACE PARA ELIMINAR   ·   ESC PARA CANCELAR" or "BACKSPACE TO REMOVE   ·   ESC TO CANCEL"
+    helper.TextColor3 = Color3.fromRGB(105,105,105)
+    helper.Font = Enum.Font.GothamMedium
+    helper.TextSize = isMobile and 8 or 9
+    helper.TextWrapped = true
+    helper.ZIndex = 202
+    helper.Parent = dialog
 
-	keyBtn.MouseButton1Click:Connect(function()
-		if isRecording then return end
-		isRecording = true
-		keyBtn.Text = "..."
-		kbStroke.Color = currentTheme.accent
-		TweenService:Create(kbStroke, TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Transparency = 0.7}):Play()
-		local UIS2 = game:GetService("UserInputService")
-		recordConn = UIS2.InputBegan:Connect(function(inp, gp)
-			if gp then return end
-			if inp.UserInputType == Enum.UserInputType.Keyboard then
-				recordedKey = inp.KeyCode.Name
-				isRecording = false
-				recordConn:Disconnect()
-				keyBtn.Text = "[" .. recordedKey .. "]"
-				keyBtn.TextColor3 = currentTheme.accent
-				kbStroke.Color = currentTheme.stroke
-				TweenService:Create(kbStroke, TweenInfo.new(0.1), {Transparency = 0}):Play()
-			end
-		end)
-	end)
+    local function stopRecording()
+        isRecording = false
+        if recordConn then pcall(function() recordConn:Disconnect() end); recordConn=nil end
+        if recordTween then pcall(function() recordTween:Cancel() end); recordTween=nil end
+        kbStroke.Transparency = 0
+        kbStroke.Color = Color3.fromRGB(58,58,58)
+    end
 
-	local cancelBtn = Instance.new("TextButton")
-	cancelBtn.Size = UDim2.new(0.45, -6, 0, 38)
-	cancelBtn.Position = UDim2.new(0, 12, 0, 208)
-	cancelBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-	cancelBtn.Text = L.kbCancel
-	cancelBtn.TextColor3 = Color3.new(1, 1, 1)
-	cancelBtn.Font = Enum.Font.GothamBold
-	cancelBtn.TextSize = 14
-	cancelBtn.ZIndex = 202
-	cancelBtn.Parent = dialog
-	Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0, 10)
+    local function closeDialog()
+        stopRecording()
+        TweenService:Create(dialog,TweenInfo.new(0.16,Enum.EasingStyle.Quad,Enum.EasingDirection.In),{Size=UDim2.new(0,0,0,0)}):Play()
+        task.delay(0.16,function() if overlay and overlay.Parent then overlay:Destroy() end end)
+    end
 
-	local saveBtn = Instance.new("TextButton")
-	saveBtn.Size = UDim2.new(0.55, -18, 0, 38)
-	saveBtn.Position = UDim2.new(0.45, 6, 0, 208)
-	saveBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
-	saveBtn.Text = L.kbSave
-	saveBtn.TextColor3 = Color3.new(1, 1, 1)
-	saveBtn.Font = Enum.Font.GothamBold
-	saveBtn.TextSize = 14
-	saveBtn.ZIndex = 202
-	saveBtn.Parent = dialog
-	Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0, 10)
+    local function beginRecording()
+        if isRecording then return end
+        isRecording = true
+        keyBtn.Text = isES and "PRESIONA UNA TECLA..." or "PRESS A KEY..."
+        keyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+        kbStroke.Color = Color3.fromRGB(235,235,235)
+        recordTween = TweenService:Create(kbStroke,TweenInfo.new(0.28,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut,-1,true),{Transparency=0.55})
+        recordTween:Play()
+        recordConn = UserInputService.InputBegan:Connect(function(inp,gp)
+            if gp or inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+            local keyName = inp.KeyCode.Name
+            if keyName == "Escape" then
+                closeDialog()
+                return
+            elseif keyName == "Backspace" then
+                RemoveKeybind(emoteId)
+                if currentTab == "keybinds" and RefreshKeybindsPanel then RefreshKeybindsPanel() end
+                closeDialog()
+                return
+            end
+            recordedKey = keyName
+            stopRecording()
+            keyBtn.Text = "[ "..recordedKey.." ]"
+            keyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+        end)
+    end
 
-	cancelBtn.MouseButton1Click:Connect(function()
-		if recordConn then pcall(function() recordConn:Disconnect() end) end
-		overlay:Destroy()
-	end)
+    keyBtn.MouseButton1Click:Connect(beginRecording)
 
-	local _KB_BLACKLIST = {Unknown=true, Backspace=true, Delete=true, Escape=true,
-		Return=true, Tab=true, CapsLock=true, LeftShift=true, RightShift=true,
-		LeftControl=true, RightControl=true, LeftAlt=true, RightAlt=true,
-		LeftMeta=true, RightMeta=true, Insert=true, Home=true, End=true,
-		PageUp=true, PageDown=true, NumLock=true, ScrollLock=true, Pause=true, Print=true}
+    local removeBtn = Instance.new("TextButton")
+    removeBtn.Size = UDim2.new(0.36,-4,0,36)
+    removeBtn.Position = UDim2.new(0,14,1,-50)
+    removeBtn.BackgroundColor3 = Color3.fromRGB(28,28,28)
+    removeBtn.Text = isES and "ELIMINAR" or "REMOVE"
+    removeBtn.TextColor3 = Color3.fromRGB(175,175,175)
+    removeBtn.Font = Enum.Font.GothamBold
+    removeBtn.TextSize = isMobile and 9 or 10
+    removeBtn.AutoButtonColor = false
+    removeBtn.ZIndex = 202
+    removeBtn.Parent = dialog
+    Instance.new("UICorner",removeBtn).CornerRadius = UDim.new(0,5)
 
-	saveBtn.MouseButton1Click:Connect(function()
-		if not recordedKey then return end
-		if _KB_BLACKLIST[recordedKey] then
-			keyBtn.Text = L.kbInvalidKey or "Invalid key!"
-			keyBtn.TextColor3 = Color3.fromRGB(220, 50, 50)
-			task.delay(1.5, function()
-				if recordedKey then
-					keyBtn.Text = "[" .. recordedKey .. "]"
-					keyBtn.TextColor3 = currentTheme.accent
-				end
-			end)
-			return
-		end
-		if recordConn then pcall(function() recordConn:Disconnect() end) end
-		local kbName = nameBox.Text ~= "" and nameBox.Text or emote.name
-		SetKeybind(emoteId, kbName, recordedKey)
-		overlay:Destroy()
-		Refresh(false)
-		if currentTab == "keybinds" and RefreshKeybindsPanel then RefreshKeybindsPanel() end
-	end)
+    local saveBtn = Instance.new("TextButton")
+    saveBtn.Size = UDim2.new(0.64,-18,0,36)
+    saveBtn.Position = UDim2.new(0.36,10,1,-50)
+    saveBtn.BackgroundColor3 = Color3.fromRGB(245,245,245)
+    saveBtn.Text = isES and "GUARDAR" or "SAVE"
+    saveBtn.TextColor3 = Color3.fromRGB(0,0,0)
+    saveBtn.Font = Enum.Font.GothamBlack
+    saveBtn.TextSize = isMobile and 10 or 11
+    saveBtn.AutoButtonColor = false
+    saveBtn.ZIndex = 202
+    saveBtn.Parent = dialog
+    Instance.new("UICorner",saveBtn).CornerRadius = UDim.new(0,5)
 
-	dialog.Size = UDim2.new(0, 0, 0, 0)
-	TweenService:Create(dialog, TweenInfo.new(0.35, Enum.EasingStyle.Back), {Size = UDim2.new(0.85, 0, 0, 260)}):Play()
+    removeBtn.MouseButton1Click:Connect(function()
+        RemoveKeybind(emoteId)
+        if currentTab == "keybinds" and RefreshKeybindsPanel then RefreshKeybindsPanel() end
+        closeDialog()
+    end)
+    saveBtn.MouseButton1Click:Connect(function()
+        if not recordedKey then beginRecording(); return end
+        SetKeybind(emoteId, emote.name, recordedKey)
+        if currentTab == "keybinds" and RefreshKeybindsPanel then RefreshKeybindsPanel() end
+        closeDialog()
+        Refresh(false)
+    end)
+    overlay.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.Keyboard and inp.KeyCode == Enum.KeyCode.Escape then closeDialog() end
+    end)
+
+    local target = isMobile and UDim2.new(0,300,0,250) or UDim2.new(0,390,0,260)
+    TweenService:Create(dialog,TweenInfo.new(0.22,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=target}):Play()
+    task.delay(0.12,beginRecording)
 end
 
 RefreshKeybindsPanel = function()
@@ -4657,6 +4755,7 @@ RefreshKeybindsPanel = function()
 		thumb.Position = UDim2.new(0, 6, 0.5, -22)
 		thumb.BackgroundTransparency = 1
 		thumb.Image = "rbxthumb://type=Asset&id="..emoteId.."&w=420&h=420"
+		thumb.ImageColor3 = Color3.fromRGB(230,230,230)
 		thumb.ZIndex = 7
 		thumb.Parent = row
 		Instance.new("UICorner", thumb).CornerRadius = UDim.new(0, 6)
@@ -4696,7 +4795,7 @@ RefreshKeybindsPanel = function()
 		local delBtn = Instance.new("ImageButton")
 		delBtn.Size = UDim2.new(0, 42, 0, 42)
 		delBtn.Position = UDim2.new(1, -40, 0.5, -16)
-		delBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		delBtn.BackgroundColor3 = Color3.fromRGB(82, 82, 82)
 		delBtn.Image = ResolveAssetImage(Icons.KeybindRemove)
 		delBtn.ImageColor3 = Color3.new(1,1,1)
 		delBtn.ZIndex = 7
@@ -4726,434 +4825,187 @@ end
 -- ===============================================================
 
 local function MakeCard(emote, ci, animate)
-	local CARD = currentCardSize
-	local PAD = isMobile and 4 or 6
+    local CARD = currentCardSize
+    local PAD = isMobile and 6 or 8
+    local INFO_H = isMobile and 34 or 38
+    local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
+    local TOTAL_H = CARD + INFO_H + KB_H
 
-	local NAME_H = math.clamp(CARD * 0.35, 18, 28)
-	local FAV_H = math.clamp(CARD * 0.3, 18, 24)
-	local KB_H = ((not isMobile) or _isPlaylistMode) and math.clamp(CARD * 0.45, 30, 40) or 0
-	local CARD_TOTAL_H = KB_H + CARD + NAME_H + FAV_H
+    local cardContainer = Instance.new("Frame")
+    cardContainer.Name = "EmoteCard"
+    cardContainer.Size = UDim2.new(0,CARD,0,TOTAL_H)
+    cardContainer.BackgroundColor3 = Color3.fromRGB(8,8,8)
+    cardContainer.BorderSizePixel = 0
+    cardContainer.ZIndex = 2
+    cardContainer.Parent = scroll
+    Instance.new("UICorner",cardContainer).CornerRadius = UDim.new(0,6)
+    local containerStroke = Instance.new("UIStroke")
+    containerStroke.Color = Color3.fromRGB(58,58,58)
+    containerStroke.Thickness = 1
+    containerStroke.Transparency = 0.12
+    containerStroke.Parent = cardContainer
 
-	local cardContainer = Instance.new("Frame")
-	cardContainer.Size = UDim2.new(0, CARD, 0, CARD_TOTAL_H)
-	cardContainer.BackgroundTransparency = 1
-	cardContainer.ZIndex = 2
-	cardContainer.Parent = scroll
-	
-	local col = ci % cols
-	local row = math.floor(ci / cols)
-	
-	local targetX = col * (CARD + PAD)
-	local targetY = PAD + row * (CARD_TOTAL_H + PAD)
-	
-	if animate then
-		cardContainer.Position = UDim2.new(0, targetX, 0, targetY + 30)
-		cardContainer.BackgroundTransparency = 1
-		
-		task.delay(ci * 0.02, function()
-			if cardContainer.Parent then
-				TweenService:Create(cardContainer, TweenInfo.new(0.25, Enum.EasingStyle.Back), {
-					Position = UDim2.new(0, targetX, 0, targetY)
-				}):Play()
-			end
-		end)
-	else
-		cardContainer.Position = UDim2.new(0, targetX, 0, targetY)
-	end
-	
-	local card = Instance.new("ImageButton")
-	card.Size = UDim2.new(1, 0, 0, CARD)
-	card.Position = UDim2.new(0, 0, 0, KB_H)
-	card.BackgroundColor3 = currentTheme.tertiary
-	card.ScaleType = Enum.ScaleType.Fit
-	card.ZIndex = 3
-	card.Parent = cardContainer
-	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-	
-	if emote.isAnimationPack then
-		local packId = tostring(emote.id):gsub("anim_", "")
-		card.Image = "rbxthumb://type=BundleThumbnail&id=" .. packId .. "&w=420&h=420"
-	else
-		card.Image = "rbxthumb://type=Asset&id=" .. emote.id .. "&w=420&h=420"
-	end
-	card.BackgroundColor3 = currentTheme.tertiary
+    local col = ci % cols
+    local row = math.floor(ci / cols)
+    local targetX = col * (CARD + PAD)
+    local targetY = PAD + row * (TOTAL_H + PAD)
+    cardContainer.Position = UDim2.new(0,targetX,0,animate and targetY+16 or targetY)
+    if animate then
+        cardContainer.BackgroundTransparency = 1
+        task.delay(ci*0.012,function()
+            if cardContainer.Parent then
+                TweenService:Create(cardContainer,TweenInfo.new(0.20,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=UDim2.new(0,targetX,0,targetY),BackgroundTransparency=0}):Play()
+            end
+        end)
+    end
 
-	if not emote.isAnimationPack then
-		task.spawn(function()
-			local _done = false
-			local function _onResult(_, status)
-				if _done then return end
-				_done = true
-				if status == Enum.AssetFetchStatus.Failure then
-					task.defer(function()
-						if cardContainer and cardContainer.Parent then cardContainer:Destroy() end
-						_MarkBadEmote(emote.id)
-					end)
-				end
-			end
-			task.delay(15, function() _onResult(nil, Enum.AssetFetchStatus.Failure) end)
-			pcall(function()
-				game:GetService("ContentProvider"):PreloadAsync({card}, _onResult)
-			end)
-		end)
-	end
-	
-	if animate then
-		card.ImageTransparency = 1
-		task.delay(ci * 0.02, function()
-			if card.Parent then
-				TweenService:Create(card, TweenInfo.new(0.25), {ImageTransparency = 0}):Play()
-			end
-		end)
-	end
-	
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = currentTheme.accent
-	stroke.Thickness = 2
-	stroke.Transparency = 0.6
-	stroke.Parent = card
-	
-	local nameLbl = Instance.new("TextLabel")
-	nameLbl.Size = UDim2.new(1, -4, 0, NAME_H - 2) 
-	nameLbl.Position = UDim2.new(0, 2, 0, KB_H + CARD)
-	nameLbl.BackgroundColor3 = currentTheme.secondary
-	nameLbl.BackgroundTransparency = 0.28
-	nameLbl.Text = #emote.name > 20 and emote.name:sub(1, 19) .. "…" or emote.name
-	nameLbl.TextColor3 = currentTheme.text
-	nameLbl.Font = Enum.Font.GothamBold
-	nameLbl.TextScaled = true
-	nameLbl.TextWrapped = true 
-	nameLbl.Active = true 
-	nameLbl.ZIndex = 3
-	nameLbl.Parent = cardContainer
-	Instance.new("UICorner", nameLbl).CornerRadius = UDim.new(0, 8)
-	_AddTextGrad(nameLbl)
+    local visual = Instance.new("ImageButton")
+    visual.Name = "Visual"
+    visual.Size = UDim2.new(1,-10,0,CARD-10)
+    visual.Position = UDim2.new(0,5,0,5+KB_H)
+    visual.BackgroundColor3 = Color3.fromRGB(12,12,12)
+    visual.AutoButtonColor = false
+    visual.Image = ResolveAssetImage(EMOTE_ICON)
+    visual.ImageColor3 = Color3.fromRGB(242,242,242)
+    visual.ImageTransparency = 0.08
+    visual.ScaleType = Enum.ScaleType.Fit
+    visual.ZIndex = 3
+    visual.Parent = cardContainer
+    Instance.new("UICorner",visual).CornerRadius = UDim.new(0,5)
+    local visualStroke = Instance.new("UIStroke")
+    visualStroke.Color = Color3.fromRGB(48,48,48)
+    visualStroke.Thickness = 1
+    visualStroke.Parent = visual
 
-	nameLbl.MouseEnter:Connect(function()
-		TweenService:Create(nameLbl, TweenInfo.new(0.2, Enum.EasingStyle.Back), {
-			Size = UDim2.new(1, 4, 0, NAME_H + 4),
-			Rotation = 0
-		}):Play()
-	end)
-	
-	nameLbl.MouseLeave:Connect(function()
-		TweenService:Create(nameLbl, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-			Size = UDim2.new(1, -4, 0, NAME_H - 2),
-			Rotation = 0
-		}):Play()
-	end)
-	
-	
-	local isFav = IsFavorite(emote.id)
-	local favBtn = Instance.new("TextButton")
-	favBtn.Size = UDim2.new(1, 0, 0, FAV_H)
-	favBtn.Position = UDim2.new(0, 0, 0, KB_H + CARD + NAME_H)
-	favBtn.BackgroundColor3 = currentTheme.tertiary
-	favBtn.BackgroundTransparency = 0.25
-	favBtn.Text = ""
-	favBtn.ZIndex = 4
-	favBtn.Parent = cardContainer
-	Instance.new("UICorner", favBtn).CornerRadius = UDim.new(0, 8)
+    local slash = Instance.new("Frame")
+    slash.Size = UDim2.new(0,22,0,2)
+    slash.Position = UDim2.new(0,7,0,8)
+    slash.Rotation = -18
+    slash.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    slash.BackgroundTransparency = 0.72
+    slash.BorderSizePixel = 0
+    slash.ZIndex = 4
+    slash.Parent = visual
 
-	local favIcon = Instance.new("TextLabel")
-	local iconSize = isMobile and 28 or 34
-	favIcon.Size = UDim2.new(0, iconSize, 0, iconSize)
-	favIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-	favIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	favIcon.BackgroundTransparency = 1
-	favIcon.Text = isFav and SafeUtf8Char(0x2605) or SafeUtf8Char(0x2606)
-	favIcon.TextColor3 = isFav and Color3.fromRGB(255, 215, 0) or currentTheme.accent
-	favIcon.Font = Enum.Font.SourceSansLight
-	favIcon.TextSize = isMobile and 26 or 32
-	favIcon.TextScaled = false
-	favIcon.ZIndex = 50
-	favIcon.Parent = favBtn
-	
-	favBtn.MouseEnter:Connect(function()
-		TweenService:Create(favBtn, TweenInfo.new(0.15, Enum.EasingStyle.Back), {
-			BackgroundColor3 = isFav and currentTheme.tertiary or currentTheme.accent,
-			Size = UDim2.new(1, 6, 0, FAV_H + 6),
-			Rotation = 0
-		}):Play()
-	end)
-	favBtn.MouseLeave:Connect(function()
-		TweenService:Create(favBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
-			BackgroundColor3 = isFav and currentTheme.tertiary or currentTheme.stroke,
-			Size = UDim2.new(1, 0, 0, FAV_H),
-			Rotation = 0
-		}):Play()
-	end)
-	
-	favBtn.MouseButton1Click:Connect(function()
-		isFav = ToggleFavorite(emote.id)
-		
-		if isFav then
-			favIcon.Text = SafeUtf8Char(0x2605)
-			favIcon.TextColor3 = Color3.fromRGB(255, 215, 0)
-		else
-			favIcon.Text = SafeUtf8Char(0x2606)
-			favIcon.TextColor3 = currentTheme.accent
-		end
-		
-		TweenService:Create(favBtn, TweenInfo.new(0.2), {
-			BackgroundColor3 = isFav and currentTheme.tertiary or currentTheme.stroke
-		}):Play()
-		
-		if isFav then
-			favIcon.Size = UDim2.new(0, 0, 0, 0)
-			TweenService:Create(favIcon, TweenInfo.new(0.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
-				Size = UDim2.new(0, iconSize + 6, 0, iconSize + 6)
-			}):Play()
-			task.delay(0.2, function()
-				TweenService:Create(favIcon, TweenInfo.new(0.3, Enum.EasingStyle.Sine), {
-					Size = UDim2.new(0, iconSize, 0, iconSize)
-				}):Play()
-			end)
-			
-			local ripple = Instance.new("Frame")
-			ripple.Size = UDim2.new(0, 0, 0, 0)
-			ripple.Position = UDim2.fromScale(0.5, 0.5)
-			ripple.AnchorPoint = Vector2.new(0.5, 0.5)
-			ripple.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
-			ripple.BackgroundTransparency = 0.3
-			ripple.ZIndex = 4
-			ripple.Parent = favBtn
-			Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
-			
-			TweenService:Create(ripple, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Size = UDim2.new(2, 0, 2, 0),
-				BackgroundTransparency = 1
-			}):Play()
-			task.delay(0.4, function() if ripple then ripple:Destroy() end end)
-		else
-			TweenService:Create(favIcon, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-				Size = UDim2.new(0, iconSize - 4, 0, iconSize - 4)
-			}):Play()
-			task.delay(0.2, function()
-				TweenService:Create(favIcon, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-					Size = UDim2.new(0, iconSize, 0, iconSize)
-				}):Play()
-			end)
-		end
-		
-		if currentTab == "favorites" then
-			task.delay(0.4, function()
-				if currentTab == "favorites" then UpdateTabData() end
-			end)
-		end
-	end)
+    local isFav = IsFavorite(emote.id)
+    local favBtn = Instance.new("TextButton")
+    favBtn.Size = UDim2.new(0,isMobile and 27 or 30,0,isMobile and 27 or 30)
+    favBtn.Position = UDim2.new(1,-(isMobile and 31 or 34),0,4)
+    favBtn.BackgroundColor3 = Color3.fromRGB(6,6,6)
+    favBtn.BackgroundTransparency = 0.08
+    favBtn.Text = isFav and SafeUtf8Char(0x2605) or SafeUtf8Char(0x2606)
+    favBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    favBtn.Font = Enum.Font.GothamBold
+    favBtn.TextSize = isMobile and 17 or 19
+    favBtn.AutoButtonColor = false
+    favBtn.ZIndex = 8
+    favBtn.Parent = cardContainer
+    favBtn.Visible = not emote.isAnimationPack
+    Instance.new("UICorner",favBtn).CornerRadius = UDim.new(0,5)
+    local favStroke = Instance.new("UIStroke")
+    favStroke.Color = isFav and Color3.fromRGB(235,235,235) or Color3.fromRGB(60,60,60)
+    favStroke.Thickness = 1
+    favStroke.Parent = favBtn
 
-	local kbHasBinding = GetKeybind(emote.id) ~= nil
-	if (not isMobile) or _isPlaylistMode then
-		local kbBtn = Instance.new("TextButton")
-		kbBtn.Size = UDim2.new(1, 0, 0, KB_H)
-		kbBtn.Position = UDim2.new(0, 0, 0, 0)
-		kbBtn.BackgroundColor3 = _isPlaylistMode and Color3.fromRGB(0, 120, 255) or currentTheme.accent
-		kbBtn.BackgroundTransparency = _isPlaylistMode and 0 or 1
-		kbBtn.Text = _isPlaylistMode and L.selectEmote or ""
-		kbBtn.TextColor3 = Color3.new(1,1,1)
-		kbBtn.Font = Enum.Font.GothamBold
-		kbBtn.TextSize = 12
-		kbBtn.ZIndex = 4
-		if _isPlaylistMode then
-			kbBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-		end
-		kbBtn.ClipsDescendants = true
-		kbBtn.Parent = cardContainer
-		Instance.new("UICorner", kbBtn).CornerRadius = UDim.new(0, 4)
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(1,-46,0,INFO_H)
+    nameLbl.Position = UDim2.new(0,8,1,-INFO_H)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = string.upper(#emote.name>18 and emote.name:sub(1,17).."…" or emote.name)
+    nameLbl.TextColor3 = Color3.fromRGB(240,240,240)
+    nameLbl.Font = Enum.Font.GothamBlack
+    nameLbl.TextSize = isMobile and 9 or 10
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextWrapped = true
+    nameLbl.ZIndex = 5
+    nameLbl.Parent = cardContainer
 
-		local kbIcon = Instance.new("ImageLabel")
-		kbIcon.Size = UDim2.new(0.95, 0, 0.95, 0)
-		kbIcon.Position = UDim2.fromScale(0.5, 0.5)
-		kbIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-		kbIcon.BackgroundTransparency = 1
-		kbIcon.ScaleType = Enum.ScaleType.Fit
-		if _isPlaylistMode then
-			kbIcon.Image = ""
-		else
-			kbIcon.Image = ResolveAssetImage(kbHasBinding and Icons.KeybindActive or Icons.Keybind)
-		end
-		kbIcon.ImageColor3 = kbHasBinding and currentTheme.accent or currentTheme.textDim
-		kbIcon.ZIndex = 5
-		kbIcon.Active = false
-		kbIcon.Visible = not _isPlaylistMode
-		kbIcon.Parent = kbBtn
+    local tinyId = Instance.new("TextLabel")
+    tinyId.Size = UDim2.new(0,42,0,INFO_H)
+    tinyId.Position = UDim2.new(1,-48,1,-INFO_H)
+    tinyId.BackgroundTransparency = 1
+    tinyId.Text = "#"..tostring(ci+1+(page-1)*perPage)
+    tinyId.TextColor3 = Color3.fromRGB(95,95,95)
+    tinyId.Font = Enum.Font.GothamMedium
+    tinyId.TextSize = isMobile and 7 or 8
+    tinyId.TextXAlignment = Enum.TextXAlignment.Right
+    tinyId.ZIndex = 5
+    tinyId.Parent = cardContainer
 
-		kbBtn.MouseEnter:Connect(function()
-			local isSel = _selectedEmotesForPlaylist and _selectedEmotesForPlaylist[tostring(emote.id)]
-			local targetCol
-			if _isPlaylistMode then
-				if isSel then
-					targetCol = Color3.fromRGB(40, 180, 100)
-				else
-					targetCol = Color3.fromRGB(0, 150, 255)
-				end
-			else
-				targetCol = kbHasBinding and currentTheme.tertiary or currentTheme.accent
-			end
-			TweenService:Create(kbBtn, TweenInfo.new(0.15, Enum.EasingStyle.Back), {
-				BackgroundColor3 = targetCol,
-				BackgroundTransparency = _isPlaylistMode and 0 or 1,
-				Size = UDim2.new(1, 6, 0, KB_H + 6),
-				Rotation = 0
-			}):Play()
-		end)
-		kbBtn.MouseLeave:Connect(function()
-			local isSel = _selectedEmotesForPlaylist and _selectedEmotesForPlaylist[tostring(emote.id)]
-			local targetCol
-			if _isPlaylistMode then
-				if isSel then
-					targetCol = Color3.fromRGB(46, 204, 113)
-				else
-					targetCol = Color3.fromRGB(0, 120, 255)
-				end
-			else
-				targetCol = currentTheme.stroke
-			end
-			TweenService:Create(kbBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
-				BackgroundColor3 = targetCol,
-				BackgroundTransparency = _isPlaylistMode and 0 or 1,
-				Size = UDim2.new(1, 0, 0, KB_H),
-				Rotation = 0
-			}):Play()
-		end)
+    local kbHasBinding = GetKeybind(emote.id) ~= nil
+    if (not isMobile) or _isPlaylistMode then
+        local kbBtn = Instance.new("TextButton")
+        kbBtn.Size = UDim2.new(1,-10,0,KB_H-4)
+        kbBtn.Position = UDim2.new(0,5,0,3)
+        kbBtn.BackgroundColor3 = _isPlaylistMode and Color3.fromRGB(230,230,230) or Color3.fromRGB(12,12,12)
+        kbBtn.Text = _isPlaylistMode and (_selectedEmotesForPlaylist[tostring(emote.id)] and "✓" or L.selectEmote) or ((GetKeybind(emote.id) and GetKeybind(emote.id).key) and tostring(GetKeybind(emote.id).key) or (isES and "ASIGNAR" or "BIND"))
+        kbBtn.TextColor3 = _isPlaylistMode and Color3.fromRGB(0,0,0) or Color3.fromRGB(165,165,165)
+        kbBtn.Font = Enum.Font.GothamBold
+        kbBtn.TextSize = isMobile and 8 or 9
+        kbBtn.AutoButtonColor = false
+        kbBtn.ZIndex = 6
+        kbBtn.Parent = cardContainer
+        Instance.new("UICorner",kbBtn).CornerRadius = UDim.new(0,4)
+        local kst = Instance.new("UIStroke")
+        kst.Color = Color3.fromRGB(52,52,52)
+        kst.Thickness = 1
+        kst.Parent = kbBtn
+        kbBtn.MouseButton1Click:Connect(function()
+            if _isPlaylistMode then
+                local k = tostring(emote.id)
+                _selectedEmotesForPlaylist[k] = not _selectedEmotesForPlaylist[k]
+                kbBtn.Text = _selectedEmotesForPlaylist[k] and "✓" or L.selectEmote
+                kbBtn.BackgroundColor3 = _selectedEmotesForPlaylist[k] and Color3.fromRGB(245,245,245) or Color3.fromRGB(95,95,95)
+                kbBtn.TextColor3 = _selectedEmotesForPlaylist[k] and Color3.fromRGB(0,0,0) or Color3.fromRGB(255,255,255)
+                return
+            end
+            ShowKeybindDialog(emote.id, emote, kbHasBinding)
+        end)
+    end
 
-		local function _UpdateSelectState()
-		local isSel = _selectedEmotesForPlaylist[tostring(emote.id)]
-		print("[Vexro Emotes] _UpdateSelectState: " .. tostring(emote.name) .. " isSel=" .. tostring(isSel))
-		kbBtn.Text = isSel and "" or L.selectEmote
-		kbIcon.Image = isSel and "rbxthumb://type=Asset&id=120391439283611&w=150&h=150" or ""
-		if _isPlaylistMode then
-			kbIcon.Visible = isSel
-			kbIcon.ImageColor3 = Color3.new(1, 1, 1)
-			if isSel then
-				kbBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-				kbBtn.BackgroundTransparency = 0
-			else
-				kbBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-				kbBtn.BackgroundTransparency = 0
-			end
-		else
-			kbIcon.Visible = true
-		end
-	end
-	if _isPlaylistMode then _UpdateSelectState() end
+    favBtn.MouseEnter:Connect(function()
+        TweenService:Create(favBtn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(235,235,235),TextColor3=Color3.fromRGB(0,0,0)}):Play()
+    end)
+    favBtn.MouseLeave:Connect(function()
+        TweenService:Create(favBtn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(6,6,6),TextColor3=Color3.fromRGB(255,255,255)}):Play()
+    end)
+    favBtn.MouseButton1Click:Connect(function()
+        isFav = ToggleFavorite(emote.id)
+        favBtn.Text = isFav and SafeUtf8Char(0x2605) or SafeUtf8Char(0x2606)
+        favStroke.Color = isFav and Color3.fromRGB(245,245,245) or Color3.fromRGB(60,60,60)
+        if currentTab == "favorites" and not isFav then
+            task.delay(0.12,function() if currentTab=="favorites" then UpdateTabData() end end)
+        end
+    end)
 
-	kbBtn.MouseButton1Click:Connect(function()
-		print("[Vexro Emotes] kbBtn clicked: " .. tostring(emote.name) .. " isPlaylistMode=" .. tostring(_isPlaylistMode))
-		if _isPlaylistMode then
-			local k = tostring(emote.id)
-			_selectedEmotesForPlaylist[k] = not _selectedEmotesForPlaylist[k]
-			_UpdateSelectState()
-			return
-		end
+    visual.MouseEnter:Connect(function()
+        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(25,25,25),Position=UDim2.new(0,5,0,3+KB_H)}):Play()
+        TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(245,245,245),Thickness=1.4}):Play()
+        TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(180,180,180)}):Play()
+    end)
+    visual.MouseLeave:Connect(function()
+        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(12,12,12),Position=UDim2.new(0,5,0,5+KB_H)}):Play()
+        TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Thickness=1}):Play()
+        TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(58,58,58)}):Play()
+    end)
 
-			ShowKeybindDialog(emote.id, emote, kbHasBinding)
-		end)
+    visual.MouseButton1Click:Connect(function()
+        UpdateSelectedEmoteUI(emote, containerStroke, cardContainer)
+        TweenService:Create(containerStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
+        TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(20,20,20)}):Play()
+        task.delay(0.24,function()
+            if cardContainer.Parent then
+                TweenService:Create(containerStroke,TweenInfo.new(0.16),{Thickness=1}):Play()
+                TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8)}):Play()
+            end
+        end)
+        if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner=nil end
+        PlayEmote(emote.id, emote.name)
+    end)
 
-		local longPressTimer = nil
-		local longPressOverlay = nil
-
-		local function ShowRemoveOverlay()
-			if not GetKeybind(emote.id) then return end
-			if longPressOverlay then return end
-			longPressOverlay = Instance.new("Frame")
-			longPressOverlay.Size = UDim2.new(1, 0, 0, 0)
-			longPressOverlay.Position = UDim2.new(0, 0, 1, 0)
-			longPressOverlay.AnchorPoint = Vector2.new(0, 1)
-			longPressOverlay.BackgroundColor3 = Color3.fromRGB(180, 30, 30)
-			longPressOverlay.BackgroundTransparency = 0.2
-			longPressOverlay.ZIndex = 15
-			longPressOverlay.ClipsDescendants = true
-			longPressOverlay.Parent = card
-			Instance.new("UICorner", longPressOverlay).CornerRadius = UDim.new(0, 8)
-			TweenService:Create(longPressOverlay, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Size = UDim2.new(1, 0, 1, 0),
-				Position = UDim2.new(0, 0, 0, 0)
-			}):Play()
-			local removeIcon = Instance.new("ImageButton")
-			removeIcon.Size = UDim2.new(0, 42, 0, 42)
-			removeIcon.Position = UDim2.fromScale(0.5, 0.5)
-			removeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-			removeIcon.BackgroundTransparency = 1
-			removeIcon.Image = ResolveAssetImage(Icons.KeybindRemove)
-			removeIcon.ImageColor3 = Color3.new(1, 1, 1)
-			removeIcon.ZIndex = 16
-			removeIcon.Parent = longPressOverlay
-			removeIcon.MouseButton1Click:Connect(function()
-				RemoveKeybind(emote.id)
-				kbHasBinding = false
-				kbIcon.Image = ResolveAssetImage(Icons.Keybind)
-				kbIcon.ImageColor3 = currentTheme.textDim
-				if longPressOverlay then longPressOverlay:Destroy(); longPressOverlay = nil end
-			end)
-			task.delay(2.5, function()
-				if longPressOverlay then
-					TweenService:Create(longPressOverlay, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-					task.delay(0.2, function()
-						if longPressOverlay then longPressOverlay:Destroy(); longPressOverlay = nil end
-					end)
-				end
-			end)
-		end
-
-		local pressStart = 0
-		card.InputBegan:Connect(function(inp)
-			if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-				pressStart = tick()
-				longPressTimer = task.delay(0.6, ShowRemoveOverlay)
-			end
-		end)
-		card.InputEnded:Connect(function(inp)
-			if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-				if longPressTimer then task.cancel(longPressTimer); longPressTimer = nil end
-				if tick() - pressStart < 0.4 and longPressOverlay then
-					longPressOverlay:Destroy(); longPressOverlay = nil
-				end
-			end
-		end)
-	end
-
-	card.MouseEnter:Connect(function()
-		TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Back), {
-			Size = UDim2.new(1, 0, 0, CARD),
-			Rotation = 0
-		}):Play()
-		local hoverColor = currentTheme.strokeHover or currentTheme.accent
-		TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0, Thickness = 1.5, Color = hoverColor}):Play()
-	end)
-
-	card.MouseLeave:Connect(function()
-		TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-			Size = UDim2.new(1, 0, 0, CARD),
-			Rotation = 0
-		}):Play()
-		TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 0.38, Thickness = 1, Color = currentTheme.accent}):Play()
-	end)
-	
-	
-	card.MouseButton1Click:Connect(function()
-		TweenService:Create(card, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {Size = UDim2.new(0.9, 0, 0, CARD * 0.9)}):Play()
-		
-		task.delay(0.1, function()
-			TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Elastic), {Size = UDim2.new(1, 0, 0, CARD)}):Play()
-		end)
-		
-		TweenService:Create(stroke, TweenInfo.new(0.1), {Color = Color3.fromRGB(80, 220, 120)}):Play()
-		task.delay(0.3, function()
-			if card.Parent then
-				TweenService:Create(stroke, TweenInfo.new(0.2), {Color = currentTheme.accent}):Play()
-			end
-		end)
-		
-		if FriendData and FriendData.currentSyncPartner then
-			FriendData.currentSyncPartner = nil
-		end
-		PlayEmote(emote.id, emote.name)
-	end)
-
-	return cardContainer
+    return cardContainer
 end
+
 
 local function UpdateCards(animate)
 	ClearCards()
@@ -5170,10 +5022,10 @@ local function UpdateCards(animate)
 	end
 	
 	local CARD = currentCardSize
-	local PAD = isMobile and 4 or 6
-	local NAME_H = math.clamp(CARD * 0.35, 18, 28)
-	local FAV_H = math.clamp(CARD * 0.3, 18, 24)
-	local CARD_TOTAL_H = CARD + NAME_H + FAV_H
+	local PAD = isMobile and 6 or 8
+	local INFO_H = isMobile and 34 or 38
+	local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
+	local CARD_TOTAL_H = CARD + INFO_H + KB_H
 	
 	local rows = math.ceil(ci / math.max(cols, 1))
 	scroll.CanvasSize = UDim2.new(0, 0, 0, rows * (CARD_TOTAL_H + PAD) + PAD)
@@ -5230,33 +5082,26 @@ end)
 -- ===============================================================
 
 UpdateTabStyles = function()
-    for name, data in pairs(tabBtns) do
+    for name,data in pairs(tabBtns) do
         local active = currentTab == name
-        TweenService:Create(data.btn, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {
-            BackgroundColor3 = active and currentTheme.tertiary or currentTheme.tertiary,
-            BackgroundTransparency = active and 0.05 or 1
+        local activeBg = Color3.fromRGB(245,245,245)
+        local idleBg = data.primary and Color3.fromRGB(5,5,5) or Color3.fromRGB(12,12,12)
+        TweenService:Create(data.btn,TweenInfo.new(0.17,Enum.EasingStyle.Quad),{
+            BackgroundColor3 = active and activeBg or idleBg,
+            TextColor3 = active and Color3.fromRGB(0,0,0) or Color3.fromRGB(145,145,145)
         }):Play()
-        data.stroke.Transparency = active and 0.65 or 1
-
-        local iconColor = active and currentTheme.accent or currentTheme.textDim
+        if data.stroke then
+            TweenService:Create(data.stroke,TweenInfo.new(0.17),{Color=active and Color3.fromRGB(255,255,255) or Color3.fromRGB(52,52,52),Transparency=active and 0 or 0.35}):Play()
+        end
         if data.img then
-            if data.img:IsA("ImageLabel") then
-                TweenService:Create(data.img, TweenInfo.new(0.18), {ImageColor3 = iconColor}):Play()
+            if data.img:IsA("ImageLabel") or data.img:IsA("ImageButton") then
+                TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=active and Color3.fromRGB(0,0,0) or Color3.fromRGB(220,220,220)}):Play()
             elseif data.img:IsA("TextLabel") then
-                TweenService:Create(data.img, TweenInfo.new(0.18), {TextColor3 = iconColor}):Play()
+                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(0,0,0) or Color3.fromRGB(220,220,220)}):Play()
             end
         end
         if data.label then
-            TweenService:Create(data.label, TweenInfo.new(0.18), {
-                TextColor3 = active and currentTheme.text or currentTheme.textDim
-            }):Play()
-            data.label.Font = active and Enum.Font.GothamBold or Enum.Font.GothamMedium
-        end
-
-        if active and _tabIndicator then
-            TweenService:Create(_tabIndicator, TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                Position = UDim2.new(0, 2, 0, data.yPos + 7)
-            }):Play()
+            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(0,0,0) or Color3.fromRGB(185,185,185)}):Play()
         end
     end
 end
@@ -5370,7 +5215,7 @@ ShowSavePlaylistDialog = function(onSave)
 		local cancelBtn = Instance.new("TextButton")
 		cancelBtn.Size = UDim2.new(0.45, -6, 0, 38)
 		cancelBtn.Position = UDim2.new(0, 12, 0, 128)
-		cancelBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+		cancelBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 		cancelBtn.Text = L.kbCancel
 		cancelBtn.TextColor3 = Color3.new(1, 1, 1)
 		cancelBtn.Font = Enum.Font.GothamBold
@@ -5382,7 +5227,7 @@ ShowSavePlaylistDialog = function(onSave)
 		local saveBtn = Instance.new("TextButton")
 		saveBtn.Size = UDim2.new(0.55, -18, 0, 38)
 		saveBtn.Position = UDim2.new(0.45, 6, 0, 128)
-		saveBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 80)
+		saveBtn.BackgroundColor3 = Color3.fromRGB(129, 129, 129)
 		saveBtn.Text = L.kbSave
 		saveBtn.TextColor3 = Color3.new(1, 1, 1)
 		saveBtn.Font = Enum.Font.GothamBold
@@ -5562,7 +5407,7 @@ RefreshPlaylistsList = function()
 					local delBtn = Instance.new("TextButton")
 					delBtn.Size = UDim2.new(0, 38, 0, 38)
 					delBtn.Position = UDim2.new(1, -46, 0.5, -19)
-					delBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+					delBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 					delBtn.Text = L.deletePlaylist
 					delBtn.TextColor3 = Color3.new(1, 1, 1)
 					delBtn.Font = Enum.Font.GothamBold
@@ -5580,7 +5425,7 @@ RefreshPlaylistsList = function()
 							_delConfirm = true
 							delBtn.Text = L.deleteConfirm
 							delBtn.TextSize = 10
-							delBtn.BackgroundColor3 = Color3.fromRGB(220, 80, 20)
+							delBtn.BackgroundColor3 = Color3.fromRGB(105, 105, 105)
 							-- Auto reset after 3 seconds if not confirmed
 							if _delTimer then _delTimer:Disconnect() end
 							_delTimer = task.delay(3, function()
@@ -5588,7 +5433,7 @@ RefreshPlaylistsList = function()
 									_delConfirm = false
 									delBtn.Text = L.deletePlaylist
 									delBtn.TextSize = 12
-									delBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+									delBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 								end
 							end)
 						else
@@ -5667,16 +5512,18 @@ UpdateTabData = function()
 	local isKeybinds  = currentTab == "keybinds"
 	local isPlaylists = currentTab == "playlists"
 	local isAnimations = currentTab == "animations"
+	local isInfo = currentTab == "info"
 	settingsPanel.Visible  = isSettings
 	friendsPanel.Visible   = isFriends
 	keybindsPanel.Visible  = isKeybinds
+	aboutPanel.Visible = isInfo
 	local viewingPlaylist = isPlaylists and (_currentPlaylistId ~= nil)
 	
 	if isPlaylists and not viewingPlaylist then
 		if RefreshPlaylistsList then RefreshPlaylistsList() end
 	end
 	playlistsPanel.Visible = isPlaylists and not viewingPlaylist
-	local hideNormal = isSettings or isFriends or isKeybinds or (isPlaylists and not viewingPlaylist)
+	local hideNormal = isSettings or isFriends or isKeybinds or isInfo or (isPlaylists and not viewingPlaylist)
 	scroll.Visible  = not hideNormal
 	search.Visible  = not hideNormal
 	if playlistBackBtn then
@@ -5795,6 +5642,10 @@ UpdateTabData = function()
 		titleIcon.Image = ResolveAssetImage("rbxassetid://122679509852670")
 		titleIcon.ImageColor3 = (Settings.theme == "FrostedGlass" or Settings.theme == "DarkGlass") and currentTheme.accent or currentTheme.text
 		titleIcon.Visible = true
+	elseif currentTab == "info" then
+		title.Text = "INFO"
+		titleIcon.Image = ""
+		titleIcon.Visible = false
 	elseif currentTab == "animations" then
 		currentData = AnimationPacks
 		filtered = AnimationPacks
@@ -5810,7 +5661,7 @@ UpdateTabData = function()
 	titleIcon.AnchorPoint = Vector2.new(0, 0.5)
 	titleIcon.ImageColor3 = currentTheme.accent
 	title.Position = UDim2.new(0, 18 + tabIconSz + 9, 0, isMobile and 10 or 8)
-	title.Size = UDim2.new(1, -220, 0, 24)
+	title.Size = UDim2.new(1, isMobile and -88 or -110, 0, 24)
 	local subtitles = {
 		emotes = isES and "Biblioteca de emotes" or "Emote library",
 		animations = isES and "Paquetes de animación" or "Animation packs",
@@ -5820,32 +5671,34 @@ UpdateTabData = function()
 		keybinds = isES and "Accesos rápidos" or "Quick shortcuts",
 		playlists = isES and "Colecciones personalizadas" or "Custom collections",
 		settings = isES and "Preferencias de la interfaz" or "Interface preferences",
+		info = isES and "Información del sistema" or "System information",
 	}
 	titleSubtitle.Text = subtitles[currentTab] or ""
 	
 	UpdateTabStyles()
-	local shouldRefresh = not isSettings and not isKeybinds and not isFriends and (not isPlaylists or viewingPlaylist)
+	local shouldRefresh = not isSettings and not isKeybinds and not isFriends and not isInfo and (not isPlaylists or viewingPlaylist)
 	if shouldRefresh then Refresh(true) end
 end
 
 tabBtns["emotes"].btn.MouseButton1Click:Connect(function() currentTab = "emotes"; UpdateTabData() end)
 tabBtns["favorites"].btn.MouseButton1Click:Connect(function() currentTab = "favorites"; UpdateTabData() end)
+tabBtns["settings"].btn.MouseButton1Click:Connect(function() currentTab = "settings"; UpdateTabData() end)
+tabBtns["keybinds"].btn.MouseButton1Click:Connect(function() currentTab = "keybinds"; UpdateTabData() end)
+tabBtns["info"].btn.MouseButton1Click:Connect(function() currentTab = "info"; UpdateTabData() end)
 
 tabBtns["recent"].btn.MouseButton1Click:Connect(function() currentTab = "recent"; UpdateTabData() end)
 tabBtns["animations"].btn.MouseButton1Click:Connect(function() currentTab = "animations"; UpdateTabData() end)
-tabBtns["settings"].btn.MouseButton1Click:Connect(function() currentTab = "settings"; UpdateTabData() end)
 tabBtns["friends"].btn.MouseButton1Click:Connect(function() currentTab = "friends"; UpdateTabData() end)
 if tabBtns["playlists"] then tabBtns["playlists"].btn.MouseButton1Click:Connect(function() currentTab = "playlists"; _currentPlaylistId = nil
 _isPlaylistMode = false
 _selectedEmotesForPlaylist = {}
 if RefreshPlaylistsList then RefreshPlaylistsList() end
 ; UpdateTabData() end) end
-if not isMobile then tabBtns["keybinds"].btn.MouseButton1Click:Connect(function() currentTab = "keybinds"; UpdateTabData() end) end
 
 local searchToken = 0
 local recordToken = 0
 search:GetPropertyChangedSignal("Text"):Connect(function()
-	if currentTab == "settings" then return end
+	if currentTab == "settings" or currentTab == "info" or currentTab == "keybinds" or currentTab == "friends" then return end
 	searchToken = searchToken + 1
 	local myToken = searchToken
 	task.wait(0.08)
@@ -5910,18 +5763,7 @@ miniIconGrad.Color = ColorSequence.new{
 miniIconGrad.Rotation = 45
 miniIconGrad.Parent = miniIconStroke
 
-task.spawn(function()
-	while miniIcon.Parent do
-		if miniIcon.Visible then
-			TweenService:Create(miniIcon, TweenInfo.new(1, Enum.EasingStyle.Sine), {Size = UDim2.new(0, iconS + 4, 0, iconS + 4)}):Play()
-			task.wait(1)
-			TweenService:Create(miniIcon, TweenInfo.new(1, Enum.EasingStyle.Sine), {Size = UDim2.new(0, iconS, 0, iconS)}):Play()
-			task.wait(1)
-		else
-			task.wait(0.5)
-		end
-	end
-end)
+-- Static minimized icon: no visual maintenance loop.
 
 do
 local savedPos, savedSize = nil, nil
@@ -6276,7 +6118,7 @@ local function PlayComboStep(emoteId, emoteName)
 								if comboSlots[j] then
 									comboSlots[j].Text = L.slotLabel .. " " .. j
 									TweenService:Create(comboSlots[j], TweenInfo.new(0.15), {
-										BackgroundColor3 = Color3.fromRGB(30, 30, 46)
+										BackgroundColor3 = Color3.fromRGB(31, 31, 31)
 									}):Play()
 								end
 							end
@@ -6316,7 +6158,7 @@ HUD.Name                   = "VexroHUD"
 HUD.Size                   = isMobile and UDim2.new(0, 320, 0, 100) or UDim2.new(0, 500, 0, 104)
 HUD.Position               = UDim2.new(0.5, 0, 1, -120)
 HUD.AnchorPoint            = Vector2.new(0.5, 1)
-HUD.BackgroundColor3       = Color3.fromRGB(8, 8, 12)
+HUD.BackgroundColor3       = Color3.fromRGB(8, 8, 8)
 HUD.BackgroundTransparency = 0.30
 HUD.BorderSizePixel        = 0
 HUD.Visible                = false
@@ -6348,7 +6190,7 @@ hudStroke.Parent       = HUD
 hudFavBtn = Instance.new("ImageButton")
 hudFavBtn.Size                   = UDim2.new(0, 22, 0, 22)
 hudFavBtn.Position               = UDim2.new(0, 9, 0, 6)
-hudFavBtn.BackgroundColor3       = Color3.fromRGB(30, 30, 46)
+hudFavBtn.BackgroundColor3       = Color3.fromRGB(31, 31, 31)
 hudFavBtn.BackgroundTransparency = 0.20
 hudFavBtn.Image                  = ResolveAssetImage(Icons.FavoriteEmpty)
 hudFavBtn.ImageColor3            = currentTheme.accent
@@ -6361,8 +6203,8 @@ local function RefreshHUDFavBtn()
 	local isFav = IsFavorite(_currentInfoId)
 	hudFavBtn.Image      = ResolveAssetImage(isFav and Icons.FavoriteFull or Icons.FavoriteEmpty)
 	TweenService:Create(hudFavBtn, TweenInfo.new(0.15), {
-		ImageColor3      = isFav and Color3.fromRGB(255, 215, 0) or currentTheme.accent,
-		BackgroundColor3 = isFav and Color3.fromRGB(55, 45, 10) or Color3.fromRGB(30, 30, 46)
+		ImageColor3      = isFav and Color3.fromRGB(208, 208, 208) or currentTheme.accent,
+		BackgroundColor3 = isFav and Color3.fromRGB(45, 45, 45) or Color3.fromRGB(31, 31, 31)
 	}):Play()
 end
 
@@ -6402,8 +6244,8 @@ hudCreator = Instance.new("TextLabel")
 hudCreator.Size                   = UDim2.new(1, -130, 0, 15)
 hudCreator.Position               = UDim2.new(0, 44, 0, 30)
 hudCreator.BackgroundTransparency = 1
-hudCreator.Text                   = "Vexro Emotes"
-hudCreator.TextColor3             = Color3.fromRGB(120, 120, 145)
+hudCreator.Text                   = "UNIVERSAL EMOTES"
+hudCreator.TextColor3             = Color3.fromRGB(122, 122, 122)
 hudCreator.Font                   = Enum.Font.Gotham
 hudCreator.TextSize               = isMobile and 10 or 11
 hudCreator.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6413,7 +6255,7 @@ hudCreator.Parent                 = HUD
 hudSliderBg = Instance.new("Frame")
 hudSliderBg.Size             = UDim2.new(1, -148, 0, 4)
 hudSliderBg.Position         = UDim2.new(0, 44, 0, 54)
-hudSliderBg.BackgroundColor3 = Color3.fromRGB(42, 42, 58)
+hudSliderBg.BackgroundColor3 = Color3.fromRGB(43, 43, 43)
 hudSliderBg.ZIndex           = 501
 hudSliderBg.Parent           = HUD
 Instance.new("UICorner", hudSliderBg).CornerRadius = UDim.new(1, 0)
@@ -6439,7 +6281,7 @@ hudPauseBtn = Instance.new("ImageButton")
 hudPauseBtn.Size                   = UDim2.new(0, 60, 0, 22)
 hudPauseBtn.AnchorPoint            = Vector2.new(0.5, 0)
 hudPauseBtn.Position               = UDim2.new(0.5, 0, 0, 66)
-hudPauseBtn.BackgroundColor3       = Color3.fromRGB(30, 30, 46)
+hudPauseBtn.BackgroundColor3       = Color3.fromRGB(31, 31, 31)
 hudPauseBtn.BackgroundTransparency = 0.10
 hudPauseBtn.Image                  = ResolveAssetImage("rbxassetid://113416463749658")
 hudPauseBtn.ImageColor3            = Color3.new(1, 1, 1)
@@ -6460,7 +6302,7 @@ local function RefreshHudPauseBtn()
 		hudPauseBtn.BackgroundColor3 = currentTheme.accent
 	else
 		hudPauseBtn.Image = ResolveAssetImage("rbxassetid://113416463749658")
-		hudPauseBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
+		hudPauseBtn.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
 	end
 end
 
@@ -6489,7 +6331,7 @@ local function RefreshHUDSpeedBtns()
 	for i, btn in ipairs(hudSpeedBtns) do
 		local active = math.abs(HUD_SPEEDS[i] - Settings.speed) < 0.01
 		TweenService:Create(btn, TweenInfo.new(0.15), {
-			BackgroundColor3 = active and currentTheme.accent or Color3.fromRGB(30, 30, 46)
+			BackgroundColor3 = active and currentTheme.accent or Color3.fromRGB(31, 31, 31)
 		}):Play()
 	end
 end
@@ -6500,7 +6342,7 @@ for si, spd in ipairs(HUD_SPEEDS) do
 	sBtn.Size                   = UDim2.new(0, spBtnW, 0, 20)
 	sBtn.Position               = UDim2.new(1, xOff, 0, 7)
 	sBtn.BackgroundColor3       = (math.abs(spd - Settings.speed) < 0.01)
-		and currentTheme.accent or Color3.fromRGB(30, 30, 46)
+		and currentTheme.accent or Color3.fromRGB(31, 31, 31)
 	sBtn.BackgroundTransparency = 0.15
 	sBtn.Text                   = HUD_LABELS[si]
 	sBtn.TextColor3             = Color3.new(1, 1, 1)
@@ -6525,7 +6367,7 @@ infoPanel = Instance.new("Frame")
 infoPanel.Name                   = "VexroInfoPanel"
 infoPanel.Size                   = UDim2.new(0, 270, 0, 260)
 infoPanel.Position               = UDim2.new(0, -290, 1, -285)
-infoPanel.BackgroundColor3       = Color3.fromRGB(10, 10, 18)
+infoPanel.BackgroundColor3       = Color3.fromRGB(11, 11, 11)
 infoPanel.BackgroundTransparency = 0.08
 infoPanel.BorderSizePixel        = 0
 infoPanel.Visible                = false
@@ -6580,7 +6422,7 @@ infoPanelTitleLbl.Parent                 = infoPanelTitle
 infoPanelClose = Instance.new("TextButton")
 infoPanelClose.Size             = UDim2.new(0, 24, 0, 24)
 infoPanelClose.Position         = UDim2.new(1, -30, 0.5, -12)
-infoPanelClose.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+infoPanelClose.BackgroundColor3 = Color3.fromRGB(94, 94, 94)
 infoPanelClose.BackgroundTransparency = 0.30
 infoPanelClose.Text             = ""
 infoPanelClose.ZIndex           = 703
@@ -6630,7 +6472,7 @@ infoDescLbl.Size                   = UDim2.new(1, 0, 0, 28)
 infoDescLbl.Position               = UDim2.new(0, 0, 0, 24)
 infoDescLbl.BackgroundTransparency = 1
 infoDescLbl.Text                   = "—"
-infoDescLbl.TextColor3             = Color3.fromRGB(140, 140, 165)
+infoDescLbl.TextColor3             = Color3.fromRGB(142, 142, 142)
 infoDescLbl.Font                   = Enum.Font.Gotham
 infoDescLbl.TextSize               = 11
 infoDescLbl.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6642,7 +6484,7 @@ infoDescLbl.Parent                 = infoPanelBody
 infoDivider = Instance.new("Frame")
 infoDivider.Size             = UDim2.new(1, 0, 0, 1)
 infoDivider.Position         = UDim2.new(0, 0, 0, 56)
-infoDivider.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+infoDivider.BackgroundColor3 = Color3.fromRGB(61, 61, 61)
 infoDivider.BorderSizePixel  = 0
 infoDivider.ZIndex           = 702
 infoDivider.Parent           = infoPanelBody
@@ -6658,7 +6500,7 @@ infoCreatorLbl.Size                   = UDim2.new(1, -18, 0, 16)
 infoCreatorLbl.Position               = UDim2.new(0, 18, 0, 61)
 infoCreatorLbl.BackgroundTransparency = 1
 infoCreatorLbl.Text                   = "—"
-infoCreatorLbl.TextColor3             = Color3.fromRGB(140, 200, 255)
+infoCreatorLbl.TextColor3             = Color3.fromRGB(191, 191, 191)
 infoCreatorLbl.Font                   = Enum.Font.Gotham
 infoCreatorLbl.TextSize               = 12
 infoCreatorLbl.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6676,7 +6518,7 @@ infoSpeedLbl.Size                   = UDim2.new(1, -18, 0, 16)
 infoSpeedLbl.Position               = UDim2.new(0, 18, 0, 81)
 infoSpeedLbl.BackgroundTransparency = 1
 infoSpeedLbl.Text                   = L.speed .. ": 1x"
-infoSpeedLbl.TextColor3             = Color3.fromRGB(160, 160, 185)
+infoSpeedLbl.TextColor3             = Color3.fromRGB(162, 162, 162)
 infoSpeedLbl.Font                   = Enum.Font.Gotham
 infoSpeedLbl.TextSize               = 12
 infoSpeedLbl.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6695,7 +6537,7 @@ infoPriceLbl.Size                   = UDim2.new(1, 0, 0, 16)
 infoPriceLbl.Position               = UDim2.new(0, 0, 0, 101)
 infoPriceLbl.BackgroundTransparency = 1
 infoPriceLbl.Text                   = "—"
-infoPriceLbl.TextColor3             = Color3.fromRGB(160, 160, 185)
+infoPriceLbl.TextColor3             = Color3.fromRGB(162, 162, 162)
 infoPriceLbl.Font                   = Enum.Font.GothamBold
 infoPriceLbl.TextSize               = 12
 infoPriceLbl.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6707,7 +6549,7 @@ infoFavLbl.Size                   = UDim2.new(1, 0, 0, 16)
 infoFavLbl.Position               = UDim2.new(0, 0, 0, 120)
 infoFavLbl.BackgroundTransparency = 1
 infoFavLbl.Text                   = "—"
-infoFavLbl.TextColor3             = Color3.fromRGB(160, 160, 185)
+infoFavLbl.TextColor3             = Color3.fromRGB(162, 162, 162)
 infoFavLbl.Font                   = Enum.Font.Gotham
 infoFavLbl.TextSize               = 12
 infoFavLbl.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6725,7 +6567,7 @@ infoDateLbl.Size                   = UDim2.new(1, -18, 0, 16)
 infoDateLbl.Position               = UDim2.new(0, 18, 0, 139)
 infoDateLbl.BackgroundTransparency = 1
 infoDateLbl.Text                   = "—"
-infoDateLbl.TextColor3             = Color3.fromRGB(130, 130, 155)
+infoDateLbl.TextColor3             = Color3.fromRGB(132, 132, 132)
 infoDateLbl.Font                   = Enum.Font.Gotham
 infoDateLbl.TextSize               = 11
 infoDateLbl.TextXAlignment         = Enum.TextXAlignment.Left
@@ -6739,16 +6581,16 @@ infoDateLbl.Parent                 = infoPanelBody
 local copyIdBtn = Instance.new("TextButton")
 copyIdBtn.Size             = UDim2.new(0.52, -2, 0, 26)
 copyIdBtn.Position         = UDim2.new(0.48, 2, 0, 161)
-copyIdBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+copyIdBtn.BackgroundColor3 = Color3.fromRGB(36, 36, 36)
 copyIdBtn.Text             = L.copyId
-copyIdBtn.TextColor3       = Color3.fromRGB(180, 180, 210)
+copyIdBtn.TextColor3       = Color3.fromRGB(182, 182, 182)
 copyIdBtn.Font             = Enum.Font.GothamBold
 copyIdBtn.TextSize         = 12
 copyIdBtn.ZIndex           = 703
 copyIdBtn.Parent           = infoPanelBody
 Instance.new("UICorner", copyIdBtn).CornerRadius = UDim.new(0, 8)
 local copyIdStroke = Instance.new("UIStroke")
-copyIdStroke.Color       = Color3.fromRGB(70, 70, 100)
+copyIdStroke.Color       = Color3.fromRGB(72, 72, 72)
 copyIdStroke.Thickness   = 1
 copyIdStroke.Parent      = copyIdBtn
 
@@ -6765,13 +6607,13 @@ local function _applyMetaToInfoPanel(meta)
 	infoDescLbl.Text    = (meta.description and meta.description ~= "") and meta.description or L.noDesc
 	if meta.priceStatus == "Free" or meta.price == 0 then
 		infoPriceLbl.Text       = L.freePrice
-		infoPriceLbl.TextColor3 = Color3.fromRGB(100, 220, 130)
+		infoPriceLbl.TextColor3 = Color3.fromRGB(188, 188, 188)
 	elseif meta.price and meta.price > 0 then
 		infoPriceLbl.Text       = tostring(meta.price) .. " R$"
-		infoPriceLbl.TextColor3 = Color3.fromRGB(255, 200, 80)
+		infoPriceLbl.TextColor3 = Color3.fromRGB(203, 203, 203)
 	else
 		infoPriceLbl.Text       = (meta.priceStatus and meta.priceStatus ~= "") and meta.priceStatus or "—"
-		infoPriceLbl.TextColor3 = Color3.fromRGB(160, 160, 185)
+		infoPriceLbl.TextColor3 = Color3.fromRGB(162, 162, 162)
 	end
 	infoFavLbl.Text = meta.favoriteCount
 		and ("♥ " .. tostring(meta.favoriteCount))
@@ -6781,7 +6623,7 @@ local function _applyMetaToInfoPanel(meta)
 	else
 		infoDateLbl.Text = "—"
 	end
-	hudCreator.Text = (meta.creatorName and meta.creatorName ~= "") and meta.creatorName or "Vexro Emotes"
+	hudCreator.Text = (meta.creatorName and meta.creatorName ~= "") and meta.creatorName or "UNIVERSAL EMOTES"
 end
 
 local function _fetchAndCacheMeta(numId, targetId)
@@ -6843,10 +6685,10 @@ local function OpenInfoPanel(emoteId, emoteName)
 		infoCreatorLbl.Text = "…"
 		infoDescLbl.Text    = "…"
 		infoPriceLbl.Text   = "…"
-		infoPriceLbl.TextColor3 = Color3.fromRGB(160, 160, 185)
+		infoPriceLbl.TextColor3 = Color3.fromRGB(162, 162, 162)
 		infoFavLbl.Text     = "…"
 		infoDateLbl.Text    = "…"
-		hudCreator.Text     = "Vexro Emotes"
+		hudCreator.Text     = "UNIVERSAL EMOTES"
 		if numId and numId > 0 then
 			task.spawn(_fetchAndCacheMeta, numId, numId)
 		end
@@ -6873,10 +6715,10 @@ copyIdBtn.MouseButton1Click:Connect(function()
 	end)
 	local orig = copyIdBtn.Text
 	copyIdBtn.Text            = L.copied
-	copyIdBtn.TextColor3      = Color3.fromRGB(100, 220, 130)
+	copyIdBtn.TextColor3      = Color3.fromRGB(188, 188, 188)
 	task.delay(1.5, function()
 		copyIdBtn.Text       = orig
-		copyIdBtn.TextColor3 = Color3.fromRGB(180, 180, 210)
+		copyIdBtn.TextColor3 = Color3.fromRGB(182, 182, 182)
 	end)
 end)
 
@@ -7014,7 +6856,7 @@ ShowEmoteHUD = function(emoteId, emoteName)
 
 	RefreshHUDFavBtn()
 	hudName.Text    = emoteName or "Emote"
-	hudCreator.Text = "Vexro Emotes"
+	hudCreator.Text = "UNIVERSAL EMOTES"
 
 	_isPaused = false
 	RefreshHudPauseBtn()
@@ -7147,9 +6989,9 @@ comboSlots = {}
 for si = 1, 3 do
 	local s = Instance.new("TextButton")
 	s.Size             = UDim2.new(0.316, 0, 1, 0)
-	s.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
+	s.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
 	s.Text             = L.slotLabel .. " " .. si
-	s.TextColor3       = Color3.fromRGB(120, 120, 148)
+	s.TextColor3       = Color3.fromRGB(122, 122, 122)
 	s.Font             = Enum.Font.Gotham
 	s.TextSize         = 11
 	s.ZIndex           = 9
@@ -7163,7 +7005,7 @@ for si = 1, 3 do
 				local e = comboQueue_UI[j]
 				comboSlots[j].Text = e and e.name:sub(1,9) or ("Slot " .. j)
 				TweenService:Create(comboSlots[j], TweenInfo.new(0.15), {
-					BackgroundColor3 = e and currentTheme.accent or Color3.fromRGB(30,30,46)
+					BackgroundColor3 = e and currentTheme.accent or Color3.fromRGB(31, 31, 31)
 				}):Play()
 			end
 		end
@@ -7183,7 +7025,7 @@ comboBtnLayout.Parent           = comboBtnHolder
 
 addComboBtn = Instance.new("TextButton")
 addComboBtn.Size             = UDim2.new(0.5, -2, 1, 0)
-addComboBtn.BackgroundColor3 = Color3.fromRGB(50, 100, 170)
+addComboBtn.BackgroundColor3 = Color3.fromRGB(94, 94, 94)
 addComboBtn.Text             = L.addEmote
 addComboBtn.TextColor3       = Color3.new(1, 1, 1)
 addComboBtn.Font             = Enum.Font.GothamBold
@@ -7194,7 +7036,7 @@ Instance.new("UICorner", addComboBtn).CornerRadius = UDim.new(0, 8)
 
 playComboBtn = Instance.new("TextButton")
 playComboBtn.Size             = UDim2.new(0.5, -2, 1, 0)
-playComboBtn.BackgroundColor3 = Color3.fromRGB(60, 140, 80)
+playComboBtn.BackgroundColor3 = Color3.fromRGB(119, 119, 119)
 playComboBtn.Text             = L.playCombo
 playComboBtn.TextColor3       = Color3.new(1, 1, 1)
 playComboBtn.Font             = Enum.Font.GothamBold
@@ -7206,16 +7048,16 @@ Instance.new("UICorner", playComboBtn).CornerRadius = UDim.new(0, 8)
 loopComboBtn = Instance.new("TextButton")
 loopComboBtn.Size             = UDim2.new(1, -12, 0, 26)
 loopComboBtn.Position         = UDim2.new(0, 6, 0, 106)
-loopComboBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
+loopComboBtn.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
 loopComboBtn.Text             = L.loopText .. ": " .. L.off
-loopComboBtn.TextColor3       = Color3.fromRGB(120, 120, 148)
+loopComboBtn.TextColor3       = Color3.fromRGB(122, 122, 122)
 loopComboBtn.Font             = Enum.Font.GothamBold
 loopComboBtn.TextSize         = 12
 loopComboBtn.ZIndex           = 9
 loopComboBtn.Parent           = comboRow
 Instance.new("UICorner", loopComboBtn).CornerRadius = UDim.new(0, 8)
 loopStroke = Instance.new("UIStroke")
-loopStroke.Color        = Color3.fromRGB(60, 60, 90)
+loopStroke.Color        = Color3.fromRGB(62, 62, 62)
 loopStroke.Thickness    = 1
 loopStroke.Transparency = 0.5
 loopStroke.Parent       = loopComboBtn
@@ -7224,7 +7066,7 @@ loopIcon.Size                   = UDim2.new(0, 14, 0, 14)
 loopIcon.Position               = UDim2.new(0, 8, 0.5, -7)
 loopIcon.BackgroundTransparency = 1
 loopIcon.Image                  = ResolveAssetImage(Icons.Refresh)
-loopIcon.ImageColor3            = Color3.fromRGB(120, 120, 148)
+loopIcon.ImageColor3            = Color3.fromRGB(122, 122, 122)
 loopIcon.ZIndex                 = 10
 loopIcon.Parent                 = loopComboBtn
 loopComboBtn.TextXAlignment = Enum.TextXAlignment.Center
@@ -7241,19 +7083,19 @@ loopComboBtn.MouseButton1Click:Connect(function()
 		loopStroke.Color = currentTheme.accent
 	else
 		loopComboBtn.Text             = L.loopText .. ": " .. L.off
-		loopComboBtn.TextColor3       = Color3.fromRGB(120, 120, 148)
-		loopIcon.ImageColor3          = Color3.fromRGB(120, 120, 148)
+		loopComboBtn.TextColor3       = Color3.fromRGB(122, 122, 122)
+		loopIcon.ImageColor3          = Color3.fromRGB(122, 122, 122)
 		TweenService:Create(loopComboBtn, TweenInfo.new(0.2), {
-			BackgroundColor3 = Color3.fromRGB(30, 30, 46)
+			BackgroundColor3 = Color3.fromRGB(31, 31, 31)
 		}):Play()
-		loopStroke.Color = Color3.fromRGB(60, 60, 90)
+		loopStroke.Color = Color3.fromRGB(62, 62, 62)
 	end
 end)
 
 clearComboBtn = Instance.new("TextButton")
 clearComboBtn.Size             = UDim2.new(1, -12, 0, 26)
 clearComboBtn.Position         = UDim2.new(0, 6, 0, 138)
-clearComboBtn.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
+clearComboBtn.BackgroundColor3 = Color3.fromRGB(61, 61, 61)
 clearComboBtn.Text             = L.clearCombo
 clearComboBtn.TextColor3       = Color3.new(1, 1, 1)
 clearComboBtn.Font             = Enum.Font.GothamBold
@@ -7266,7 +7108,7 @@ addComboBtn.MouseButton1Click:Connect(function()
 	if #comboQueue_UI >= 3 then return end
 	if not _currentInfoId then
 		local origCol = addComboBtn.BackgroundColor3
-		addComboBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+		addComboBtn.BackgroundColor3 = Color3.fromRGB(78, 78, 78)
 		addComboBtn.Text = L.selectFirst
 		task.delay(0.7, function()
 			addComboBtn.BackgroundColor3 = origCol
@@ -7299,15 +7141,15 @@ clearComboBtn.MouseButton1Click:Connect(function()
 	if _comboLoopEnabled then
 		_comboLoopEnabled             = false
 		loopComboBtn.Text             = L.loopText .. ": " .. L.off
-		loopComboBtn.TextColor3       = Color3.fromRGB(120, 120, 148)
-		loopComboBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 46)
-		loopStroke.Color              = Color3.fromRGB(60, 60, 90)
-		loopIcon.ImageColor3          = Color3.fromRGB(120, 120, 148)
+		loopComboBtn.TextColor3       = Color3.fromRGB(122, 122, 122)
+		loopComboBtn.BackgroundColor3 = Color3.fromRGB(31, 31, 31)
+		loopStroke.Color              = Color3.fromRGB(62, 62, 62)
+		loopIcon.ImageColor3          = Color3.fromRGB(122, 122, 122)
 	end
 	for j = 1, 3 do
 		comboSlots[j].Text = L.slotLabel .. " " .. j
 		TweenService:Create(comboSlots[j], TweenInfo.new(0.15), {
-			BackgroundColor3 = Color3.fromRGB(30, 30, 46)
+			BackgroundColor3 = Color3.fromRGB(31, 31, 31)
 		}):Play()
 	end
 end)
