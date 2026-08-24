@@ -2979,32 +2979,32 @@ end))
 --====================================================
 local walkSpeed = 16
 local jumpPower = 50
-local boatSpeed = 120
-local tweenTPSpeed = 180
-local safeCFrame
-local lastHealth
-local initialGravity = Workspace.Gravity
-local initialGlobalShadows = Lighting.GlobalShadows
-local initialQuality
-local initialTerrain = {
+ENV.__HX_boatSpeed = 120
+ENV.__HX_tweenTPSpeed = 180
+ENV.__HX_safeCFrame = nil
+ENV.__HX_lastHealth = nil
+ENV.__HX_initialGravity = Workspace.Gravity
+ENV.__HX_initialGlobalShadows = Lighting.GlobalShadows
+ENV.__HX_initialQuality = nil
+ENV.__HX_initialTerrain = {
     WaterWaveSize = Workspace.Terrain.WaterWaveSize,
     WaterWaveSpeed = Workspace.Terrain.WaterWaveSpeed,
     WaterReflectance = Workspace.Terrain.WaterReflectance,
     WaterTransparency = Workspace.Terrain.WaterTransparency,
 }
-pcall(function() initialQuality = settings().Rendering.QualityLevel end)
+pcall(function() ENV.__HX_initialQuality = settings().Rendering.QualityLevel end)
 
-local farmStartedAt
-local farmAccumulated = 0
-local sessionGoldStart
-local lastKnownGold
-local sessionGoldEarned = 0
-local playerFlySpeed = 90
-local lastSeatAttempt = 0
+ENV.__HX_farmStartedAt = nil
+ENV.__HX_farmAccumulated = 0
+ENV.__HX_sessionGoldStart = nil
+ENV.__HX_lastKnownGold = nil
+ENV.__HX_sessionGoldEarned = 0
+ENV.__HX_playerFlySpeed = 90
+ENV.__HX_lastSeatAttempt = 0
 
 local function getFarmElapsed()
-    local elapsed = farmAccumulated
-    if farmStartedAt then elapsed += os.clock() - farmStartedAt end
+    local elapsed = ENV.__HX_farmAccumulated
+    if ENV.__HX_farmStartedAt then elapsed += os.clock() - ENV.__HX_farmStartedAt end
     return elapsed
 end
 
@@ -3752,7 +3752,7 @@ local function applyPerformanceState()
     if disableShadows then
         Lighting.GlobalShadows = false
     else
-        Lighting.GlobalShadows = initialGlobalShadows
+        Lighting.GlobalShadows = ENV.__HX_initialGlobalShadows
         for d, old in pairs(shadowCache) do if d and d.Parent then pcall(function() d.CastShadow = old end) end end
         table.clear(shadowCache)
     end
@@ -3766,16 +3766,16 @@ local function applyPerformanceState()
         end)
     else
         pcall(function()
-            Workspace.Terrain.WaterWaveSize = initialTerrain.WaterWaveSize
-            Workspace.Terrain.WaterWaveSpeed = initialTerrain.WaterWaveSpeed
-            Workspace.Terrain.WaterReflectance = initialTerrain.WaterReflectance
-            Workspace.Terrain.WaterTransparency = initialTerrain.WaterTransparency
+            Workspace.Terrain.WaterWaveSize = ENV.__HX_initialTerrain.WaterWaveSize
+            Workspace.Terrain.WaterWaveSpeed = ENV.__HX_initialTerrain.WaterWaveSpeed
+            Workspace.Terrain.WaterReflectance = ENV.__HX_initialTerrain.WaterReflectance
+            Workspace.Terrain.WaterTransparency = ENV.__HX_initialTerrain.WaterTransparency
         end)
     end
 
     pcall(function()
         if lowQuality then settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        elseif initialQuality then settings().Rendering.QualityLevel = initialQuality end
+        elseif ENV.__HX_initialQuality then settings().Rendering.QualityLevel = ENV.__HX_initialQuality end
     end)
 end
 
@@ -3804,7 +3804,7 @@ toggleRow(pages.Farm, "Auto Farm Gold / Auto Finish",
         local token = activeStates._farmToken
 
         if on then
-            if not farmStartedAt then farmStartedAt = os.clock() end
+            if not ENV.__HX_farmStartedAt then ENV.__HX_farmStartedAt = os.clock() end
             task.spawn(function()
                 while alive and activeStates.autoFarm and activeStates._farmToken == token do
                     if getRoot() and not activeStates._finishBusy then
@@ -3826,9 +3826,9 @@ toggleRow(pages.Farm, "Auto Farm Gold / Auto Finish",
                     end
                 end
             end)
-        elseif farmStartedAt then
-            farmAccumulated += os.clock() - farmStartedAt
-            farmStartedAt = nil
+        elseif ENV.__HX_farmStartedAt then
+            ENV.__HX_farmAccumulated += os.clock() - ENV.__HX_farmStartedAt
+            ENV.__HX_farmStartedAt = nil
         end
     end)
 
@@ -6645,10 +6645,10 @@ toggleRow(pages.Boat, "Boat Fly", "WASD para moverte, Espacio para subir y Ctrl 
     if not on then destroyFlyObjects() end
 end)
 
-toggleRow(pages.Boat, "Boat Speed", "Aplica un boost de velocidad mientras conduces un asiento del barco.", "boatSpeed", false)
+toggleRow(pages.Boat, "Boat Speed", "Aplica un boost de velocidad mientras conduces un asiento del barco.", "ENV.__HX_boatSpeed", false)
 
 sliderRow(pages.Boat, "Potencia del barco", "Velocidad usada por Boat Fly, Boat Speed y Auto Pilot.", 40, 450, 120, 10, function(v)
-    boatSpeed = v
+    ENV.__HX_boatSpeed = v
 end)
 
 toggleRow(pages.Boat, "Auto Pilot", "Guía el barco automáticamente hacia el tesoro.", "autoPilot", false)
@@ -6881,10 +6881,10 @@ toggleRow(pages.Movement, "Player Fly", "Vuelo del personaje separado del Boat F
 end)
 
 sliderRow(pages.Movement, "Player Fly Speed", "Velocidad usada únicamente por Player Fly.", 30, 300, 90, 10, function(v)
-    playerFlySpeed = v
+    ENV.__HX_playerFlySpeed = v
 end)
 
-sliderRow(pages.Movement, "Gravity", "Ajusta la gravedad del juego.", 0, 300, math.floor(initialGravity + 0.5), 5, function(v)
+sliderRow(pages.Movement, "Gravity", "Ajusta la gravedad del juego.", 0, 300, math.floor(ENV.__HX_initialGravity + 0.5), 5, function(v)
     Workspace.Gravity = v
 end)
 
@@ -6967,7 +6967,7 @@ end, "SENTARSE")
 toggleRow(pages.Teleport, "Click TP", "Con el toggle activo, haz clic en el mundo para teletransportarte al punto seleccionado.", "clickTP", false)
 toggleRow(pages.Teleport, "Tween TP", "Convierte los teleports del hub en desplazamientos progresivos en vez de instantáneos.", "tweenTP", false)
 sliderRow(pages.Teleport, "Tween TP Speed", "Velocidad del desplazamiento progresivo.", 50, 500, 180, 10, function(v)
-    tweenTPSpeed = v
+    ENV.__HX_tweenTPSpeed = v
     ENV.__BABFT_TWEEN_SPEED = v
 end)
 
@@ -7126,15 +7126,15 @@ selectPage("Farm")
 --====================================================
 -- Runtime loops (optimized)
 --====================================================
-local lastNoclipUpdate = 0
-local lastMovementUpdate = 0
-local lastSafetySample = 0
+ENV.__HX_lastNoclipUpdate = 0
+ENV.__HX_lastMovementUpdate = 0
+ENV.__HX_lastSafetySample = 0
 
 track(RunService.Stepped:Connect(function()
     if not alive or not activeStates.noclip then return end
     local now = os.clock()
-    if now - lastNoclipUpdate < 0.12 then return end
-    lastNoclipUpdate = now
+    if now - ENV.__HX_lastNoclipUpdate < 0.12 then return end
+    ENV.__HX_lastNoclipUpdate = now
 
     local char = getChar()
     if char then
@@ -7154,8 +7154,8 @@ track(RunService.Heartbeat:Connect(function()
     local root = getRoot()
 
     -- Character stats do not need to be rewritten 60 times per second.
-    if hum and now - lastMovementUpdate >= 0.20 then
-        lastMovementUpdate = now
+    if hum and now - ENV.__HX_lastMovementUpdate >= 0.20 then
+        ENV.__HX_lastMovementUpdate = now
         pcall(function() if hum.WalkSpeed ~= walkSpeed then hum.WalkSpeed = walkSpeed end end)
         pcall(function() if hum.JumpPower ~= jumpPower then hum.JumpPower = jumpPower end end)
         local desiredJumpHeight = math.max(7.2, jumpPower / 7)
@@ -7165,24 +7165,24 @@ track(RunService.Heartbeat:Connect(function()
     if hum and root then
         -- Safety features are cheap but do not need Heartbeat frequency.
         -- ~8 Hz is responsive enough and removes dozens of checks per second.
-        if now - lastSafetySample >= 0.12 then
-            lastSafetySample = now
+        if now - ENV.__HX_lastSafetySample >= 0.12 then
+            ENV.__HX_lastSafetySample = now
 
             if not activeStates._farmTeleporting and hum.Health > 0 and hum.FloorMaterial ~= Enum.Material.Air and root.Position.Y > Workspace.FallenPartsDestroyHeight + 35 then
-                safeCFrame = root.CFrame
+                ENV.__HX_safeCFrame = root.CFrame
             end
 
             if activeStates.antiHazard and not activeStates._farmTeleporting then
-                local damaged = lastHealth and hum.Health < lastHealth
-                if damaged and safeCFrame then
-                    root.CFrame = safeCFrame * CFrame.new(0, 3, 0)
+                local damaged = ENV.__HX_lastHealth and hum.Health < ENV.__HX_lastHealth
+                if damaged and ENV.__HX_safeCFrame then
+                    root.CFrame = ENV.__HX_safeCFrame * CFrame.new(0, 3, 0)
                     root.AssemblyLinearVelocity = Vector3.zero
                     pcall(function() hum.Health = hum.MaxHealth end)
                 end
             end
 
             if activeStates.antiVoid and not activeStates._farmTeleporting and root.Position.Y <= Workspace.FallenPartsDestroyHeight + 28 then
-                local rescue = safeCFrame
+                local rescue = ENV.__HX_safeCFrame
                 if not rescue then
                     local teamSpawn = getTeamSpawn()
                     rescue = teamSpawn and (teamSpawn.CFrame * CFrame.new(0, 5, 0)) or CFrame.new(0, 50, 0)
@@ -7197,16 +7197,16 @@ track(RunService.Heartbeat:Connect(function()
                 local v = root.AssemblyLinearVelocity
                 root.AssemblyLinearVelocity = Vector3.new(v.X, -24, v.Z)
             end
-            lastHealth = hum.Health
+            ENV.__HX_lastHealth = hum.Health
         end
     else
-        lastHealth = nil
+        ENV.__HX_lastHealth = nil
     end
 
     if activeStates.playerFly and root then
         ensurePlayerFlyObjects(root)
         local dir = getMoveVector()
-        playerFlyObjects.velocity.Velocity = dir * playerFlySpeed
+        playerFlyObjects.velocity.Velocity = dir * ENV.__HX_playerFlySpeed
         Camera = Workspace.CurrentCamera or Camera
         if Camera then
             local look = Camera.CFrame.LookVector
@@ -7232,7 +7232,7 @@ track(RunService.Heartbeat:Connect(function()
     end
 
     local seatFeatureActive = activeStates.antiSeat or activeStates.seatLock or activeStates.autoSit
-        or activeStates.boatFly or activeStates.boatSpeed or activeStates.boatAntiFlip
+        or activeStates.boatFly or activeStates.ENV.__HX_boatSpeed or activeStates.boatAntiFlip
         or activeStates.autoPilot or activeStates.boatStabilizer
 
     if hum and seatFeatureActive then
@@ -7241,14 +7241,14 @@ track(RunService.Heartbeat:Connect(function()
         if activeStates.antiSeat and seatNow then
             hum.Sit = false
             hum.Jump = true
-        elseif not seatNow and now - lastSeatAttempt > 0.8 then
+        elseif not seatNow and now - ENV.__HX_lastSeatAttempt > 0.8 then
             if activeStates.seatLock and lastSeat and lastSeat.Parent then
-                lastSeatAttempt = now
+                ENV.__HX_lastSeatAttempt = now
                 pcall(function() lastSeat:Sit(hum) end)
             elseif activeStates.autoSit then
                 local candidate = lastSeat and lastSeat.Parent and lastSeat or getNearestSeat(220)
                 if candidate then
-                    lastSeatAttempt = now
+                    ENV.__HX_lastSeatAttempt = now
                     lastSeat = candidate
                     pcall(function() candidate:Sit(hum) end)
                 end
@@ -7256,14 +7256,14 @@ track(RunService.Heartbeat:Connect(function()
         end
     end
 
-    local boatRealtime = activeStates.boatFly or activeStates.boatSpeed or activeStates.boatAntiFlip
+    local boatRealtime = activeStates.boatFly or activeStates.ENV.__HX_boatSpeed or activeStates.boatAntiFlip
         or activeStates.autoPilot or activeStates.boatStabilizer
     local seat = boatRealtime and getSeat() or nil
 
     if activeStates.boatFly and seat then
         ensureBoatFlyObjects(seat)
         local dir = getMoveVector()
-        flyObjects.velocity.Velocity = dir * boatSpeed
+        flyObjects.velocity.Velocity = dir * ENV.__HX_boatSpeed
         Camera = Workspace.CurrentCamera or Camera
         if Camera then
             local look = Camera.CFrame.LookVector
@@ -7278,14 +7278,14 @@ track(RunService.Heartbeat:Connect(function()
         destroyFlyObjects()
     end
 
-    if activeStates.boatSpeed and seat and not activeStates.boatFly then
+    if activeStates.ENV.__HX_boatSpeed and seat and not activeStates.boatFly then
         local throttle = 0
         if seat:IsA("VehicleSeat") then throttle = seat.ThrottleFloat end
         if pressed.W then throttle = 1 elseif pressed.S then throttle = -1 end
         if throttle ~= 0 then
             local look = seat.CFrame.LookVector
             local flat = Vector3.new(look.X, 0, look.Z)
-            if flat.Magnitude > 0.01 then seat.AssemblyLinearVelocity = flat.Unit * boatSpeed * throttle end
+            if flat.Magnitude > 0.01 then seat.AssemblyLinearVelocity = flat.Unit * ENV.__HX_boatSpeed * throttle end
         end
     end
 
@@ -7308,7 +7308,7 @@ track(RunService.Heartbeat:Connect(function()
                 local delta = pos - boatRoot.Position
                 local flat = Vector3.new(delta.X, 0, delta.Z)
                 if flat.Magnitude > 10 then
-                    boatRoot.AssemblyLinearVelocity = flat.Unit * boatSpeed + Vector3.new(0, math.clamp(delta.Y * 0.6, -25, 25), 0)
+                    boatRoot.AssemblyLinearVelocity = flat.Unit * ENV.__HX_boatSpeed + Vector3.new(0, math.clamp(delta.Y * 0.6, -25, 25), 0)
                     local gyro = ensureBoatGyro(boatRoot)
                     gyro.CFrame = CFrame.lookAt(boatRoot.Position, boatRoot.Position + flat.Unit)
                 else
@@ -7342,12 +7342,12 @@ task.spawn(function()
 
         local gold = getGoldValue()
         if gold ~= nil then
-            if sessionGoldStart == nil then sessionGoldStart = gold end
-            if lastKnownGold ~= nil and gold > lastKnownGold then sessionGoldEarned += gold - lastKnownGold end
-            lastKnownGold = gold
+            if ENV.__HX_sessionGoldStart == nil then ENV.__HX_sessionGoldStart = gold end
+            if ENV.__HX_lastKnownGold ~= nil and gold > ENV.__HX_lastKnownGold then ENV.__HX_sessionGoldEarned += gold - ENV.__HX_lastKnownGold end
+            ENV.__HX_lastKnownGold = gold
         end
         local elapsed = getFarmElapsed()
-        local perMinute = elapsed > 0 and (sessionGoldEarned / elapsed) * 60 or 0
+        local perMinute = elapsed > 0 and (ENV.__HX_sessionGoldEarned / elapsed) * 60 or 0
         local perHour = perMinute * 60
         local mins = math.floor(elapsed / 60)
         local secs = math.floor(elapsed % 60)
@@ -7355,7 +7355,7 @@ task.spawn(function()
             ENV.__HX_LANG == "en"
                 and "Gold earned: +%s   ·   Runs: %d\nFarm: %02d:%02d   ·   Gold/min: %.1f   ·   Est. Gold/h: %.0f"
                 or "Oro ganado: +%s   ·   Recorridos: %d\nFarmeo: %02d:%02d   ·   Oro/min: %.1f   ·   Est. Oro/h: %.0f",
-            tostring(sessionGoldEarned), runsCompleted, mins, secs, perMinute, perHour
+            tostring(ENV.__HX_sessionGoldEarned), runsCompleted, mins, secs, perMinute, perHour
         )
         task.wait(2.0)
     end
@@ -7439,8 +7439,8 @@ end))
 
 track(LP.CharacterAdded:Connect(function()
     table.clear(characterCollisionCache)
-    safeCFrame = nil
-    lastHealth = nil
+    ENV.__HX_safeCFrame = nil
+    ENV.__HX_lastHealth = nil
     lastSeat = nil
     worldCache.nearestSeat = nil
     worldCache.boatRoot = nil
@@ -7479,7 +7479,7 @@ local function cleanup()
     restoreHiddenPlayers()
     restoreHiddenBoats()
     applyPerformanceState()
-    Workspace.Gravity = initialGravity
+    Workspace.Gravity = ENV.__HX_initialGravity
     ENV.__BABFT_TWEEN_SPEED = nil
     followTarget = nil
 
