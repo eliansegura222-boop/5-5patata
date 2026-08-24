@@ -36,6 +36,11 @@ return {
 
     ["11448706751"] = { --discord id 1529222910021996696 (!suerte)
         vip = true,
-        expires = "2026-08-28"                
+        expires = "2026-08-28"
+    },    
+        
+    ["7708255764"] = { --pana Robert rbx
+        vip = true,
+        expires = "permanent"                
     }
 }
