@@ -46,119 +46,17 @@ if not playerGui then return end
 local function debugLog(msg) end
 
 -- ===============================================================
--- VEXRO CLOUD V1 - API SYSTEM
+-- HX EMOTES - LOCAL MODE (NO VEXRO API)
 -- ===============================================================
-local BASE_URL = "https://vexroscripts.com.tr/api"
-local myToken = ""
-
-local mySessionToken = HttpService:GenerateGUID(false)
-_genv().VexroSessionToken = mySessionToken
-
-request = request
-http_request = http_request
-HttpFunc = nil
-
-synLib = syn or (Drawing and Drawing.new and {})
-httpLib = http
-fluxusLib = fluxus
-krnlLoaded = (KRNL_LOADED ~= nil)
-
-if synLib and synLib.request then HttpFunc = synLib.request
-elseif httpLib and httpLib.request then HttpFunc = httpLib.request
-elseif http_request then HttpFunc = http_request
-elseif request then HttpFunc = request
-elseif fluxusLib and fluxusLib.request then HttpFunc = fluxusLib.request
-elseif krnlLoaded and request then HttpFunc = request end
-
-local function getOrCreateToken()
-    if myToken ~= "" then return myToken end
-    local tokenFile = "VexroEmotes_Token_" .. tostring(player.UserId) .. ".txt"
-    pcall(function()
-        if readfile and isfile and isfile(tokenFile) then
-            myToken = readfile(tokenFile)
-        end
-    end)
-    if not myToken or myToken == "" then
-        local chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        local temp = {}
-        math.randomseed(os.time())
-        for i = 1, 32 do
-            local rand = math.random(1, #chars)
-            table.insert(temp, chars:sub(rand, rand))
-        end
-        myToken = table.concat(temp)
-        pcall(function()
-            if writefile then
-                writefile(tokenFile, myToken)
-            end
-        end)
-    end
-    return myToken
-end
-
-local lastApiRequestTime = 0
-local function ApiRequest(method, endpoint, body)
-	debugLog("ApiRequest: " .. tostring(method) .. " " .. tostring(endpoint))
-    if not HttpFunc then 
-        print("[Vexro Debug] ApiRequest error: HttpFunc is nil. Please ensure your executor supports Http requests.")
-        return nil 
-    end
-    
-    -- Throttle to avoid localtonet 429 Too Many Requests
-    while tick() - lastApiRequestTime < 1.2 do
-        task.wait(0.1)
-    end
-    lastApiRequestTime = tick()
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    local url = BASE_URL .. endpoint
-    local response = nil
-    local success, err = pcall(function()
-        local reqData = {
-            Url = url,
-            Method = method,
-            Headers = headers
-        }
-        if method ~= "GET" and method ~= "HEAD" then
-            reqData.Body = body and HttpService:JSONEncode(body) or ""
-        end
-        response = HttpFunc(reqData)
-    end)
-	debugLog("ApiRequest " .. tostring(endpoint) .. " done. success=" .. tostring(success) .. " status=" .. tostring(response and response.StatusCode or "nil"))
-    if not success then
-        print("[Vexro Debug] ApiRequest transport error: " .. tostring(err))
-        return nil
-    end
-    if response then
-        if response.StatusCode == 200 then
-            local ok, decoded = pcall(HttpService.JSONDecode, HttpService, response.Body)
-            if ok then return decoded end
-            print("[Vexro Debug] JSON decode error: " .. tostring(response.Body))
-        elseif (response.StatusCode == 401 or response.StatusCode == 403) and endpoint ~= "/auth/register" then
-            if not _genv().VexroKicked then
-                _genv().VexroKicked = true
-                _genv().VexroSessionToken = nil -- Kill active loops
-                Notify(SafeUtf8Char(0x26A0), "Oturum başka bir cihazda açıldığı için sonlandırıldı.")
-            end
-            return nil
-        else
-            print("[Vexro Debug] HTTP error " .. tostring(response.StatusCode) .. ": " .. tostring(response.Body))
-        end
-    else
-        print("[Vexro Debug] Response is nil")
-    end
-    return nil
-end
-
-local old = playerGui:FindFirstChild("VexroEmotes")
+local old = playerGui:FindFirstChild("HXEmotes") or playerGui:FindFirstChild("VexroEmotes")
 if old then old:Destroy() end
 
 -- ===============================================================
 -- DATA SYSTEM
 -- ===============================================================
 
-local DATA_FILE = "VexroEmotes_Data_" .. tostring(player.UserId) .. ".json"
+local DATA_FILE = "HXEmotes_Data_" .. tostring(player.UserId) .. ".json"
+local LEGACY_DATA_FILE = "VexroEmotes_Data_" .. tostring(player.UserId) .. ".json"
 local Settings = {theme = "Dark", speed = 1, notifications = true, loopEmote = true, language = nil, copyEmoteEnabled = false, stopOnWalk = true, showHUD = true}
 
 local FriendData = {
@@ -194,7 +92,6 @@ local function SaveData()
 	task.delay(0.25, function()
 		_savePending = false
 		pcall(function()
-			-- Write local backup
 			if writefile then
 				writefile(DATA_FILE, HttpService:JSONEncode({
 					favorites = Favorites,
@@ -206,74 +103,52 @@ local function SaveData()
 						playFriendEmote = FriendData.playFriendEmote,
 						syncEmote = FriendData.syncEmote
 					},
+					friends = FriendData.friends,
 					keybinds = Keybinds,
-					playlists = Playlists
+					playlists = Playlists,
+					playlistFavorites = PlaylistFavorites
 				}))
-			end
-			-- Merge FriendData into Settings for Cloud Sync
-			Settings.autoReject = FriendData.autoReject
-			Settings.acceptRequests = FriendData.acceptRequests
-			Settings.playFriendEmote = FriendData.playFriendEmote
-			Settings.syncEmote = FriendData.syncEmote
-			
-			-- Save to server
-			ApiRequest("POST", "/emote/settings", {
-				userId = tostring(player.UserId),
-				token = getOrCreateToken(),
-				action = "save",
-				settings = Settings
-			})
-			ApiRequest("POST", "/emote/keybinds", {
-				userId = tostring(player.UserId),
-				token = getOrCreateToken(),
-				action = "save",
-				keybinds = Keybinds
-			})
-			for _, pl in ipairs(Playlists) do
-				if tostring(pl.creatorId) == tostring(player.UserId) then
-					task.spawn(function()
-						ApiRequest("POST", "/emote/playlist/save", {
-							userId = tostring(player.UserId),
-							token = getOrCreateToken(),
-							playlist = pl
-						})
-					end)
-				end
 			end
 		end)
 	end)
 end
 
 local function LoadData()
-	debugLog("LoadData starting")
-	_genv().VexroServerAccessible = false
+	debugLog("LoadData starting (local mode)")
 	pcall(function()
-		-- 1. Load local backup
-		if readfile and isfile and isfile(DATA_FILE) then
-			local data = HttpService:JSONDecode(readfile(DATA_FILE))
+		local sourceFile = nil
+		if readfile and isfile then
+			if isfile(DATA_FILE) then
+				sourceFile = DATA_FILE
+			elseif isfile(LEGACY_DATA_FILE) then
+				sourceFile = LEGACY_DATA_FILE
+			end
+		end
+
+		if sourceFile then
+			local data = HttpService:JSONDecode(readfile(sourceFile))
 			if data then
-				Playlists = {
-					{ id = "1", name = "Top 10 TikTok", creator = "Zyrovell", creatorId = 1530132336, emotes = {3576686446, 3576823880, 3576720708} },
-					{ id = "2", name = "Chill Vibes", creator = "Oyuncu15q", creatorId = 1530132336, emotes = {3576686446} }
-				}
-				if data.playlists then
-					Playlists = data.playlists
-				end
+				Playlists = type(data.playlists) == "table" and data.playlists or {}
 				MockPlaylists = Playlists
+				PlaylistFavorites = type(data.playlistFavorites) == "table" and data.playlistFavorites or {}
 
 				Favorites = {}
-				if data.favorites then
+				if type(data.favorites) == "table" then
 					for _, v in pairs(data.favorites) do
-						table.insert(Favorites, tonumber(v)) 
+						local n = tonumber(v)
+						if n then Favorites[#Favorites + 1] = n end
 					end
 				end
+
 				RecentEmotes = {}
-				if data.recent then
+				if type(data.recent) == "table" then
 					for _, v in pairs(data.recent) do
-						table.insert(RecentEmotes, tonumber(v))
+						local n = tonumber(type(v) == "table" and v.emote or v)
+						if n then RecentEmotes[#RecentEmotes + 1] = n end
 					end
 				end
-				if data.settings then
+
+				if type(data.settings) == "table" then
 					Settings.theme = data.settings.theme or "Dark"
 					Settings.speed = data.settings.speed or 1
 					Settings.notifications = data.settings.notifications ~= false
@@ -281,125 +156,40 @@ local function LoadData()
 					Settings.language = data.settings.language or nil
 					Settings.stopOnWalk = data.settings.stopOnWalk ~= false
 					Settings.showHUD = data.settings.showHUD ~= false
+					Settings.copyEmoteEnabled = data.settings.copyEmoteEnabled == true
 				end
-				if data.friendSettings then
+
+				if type(data.friendSettings) == "table" then
 					FriendData.autoReject = data.friendSettings.autoReject == true
 					FriendData.acceptRequests = data.friendSettings.acceptRequests ~= false
 					FriendData.playFriendEmote = data.friendSettings.playFriendEmote ~= false
 					FriendData.syncEmote = data.friendSettings.syncEmote ~= false
 				end
+				FriendData.friends = type(data.friends) == "table" and data.friends or {}
+
 				Keybinds = {}
-				if data.keybinds then
+				if type(data.keybinds) == "table" then
 					for k, v in pairs(data.keybinds) do
 						Keybinds[tostring(k)] = v
 					end
 				end
 			end
+		else
+			Playlists = {}
+			MockPlaylists = Playlists
 		end
-
-		-- 2. Call server register & sync settings/keybinds
-		local reg = ApiRequest("POST", "/auth/init", {
-			username = player.Name,
-			userId = tostring(player.UserId),
-			token = getOrCreateToken()
-		})
-		if reg and reg.ok then
-			_genv().VexroServerAccessible = true
-			-- Save the token returned by the server in case the server rotated or initialized a new one
-			if reg.token and reg.token ~= "" then
-				myToken = reg.token
-				local tokenFile = "VexroEmotes_Token_" .. tostring(player.UserId) .. ".txt"
-				pcall(function()
-					if writefile then
-						writefile(tokenFile, myToken)
-					end
-				end)
-			end
-			
-			-- Populate player data
-			if reg.player then
-				local pInfo = reg.player
-				if pInfo.settings then
-					for k, v in pairs(pInfo.settings) do
-						Settings[k] = v
-					end
-					-- Unpack FriendData from Settings
-					if Settings.autoReject ~= nil then FriendData.autoReject = Settings.autoReject end
-					if Settings.acceptRequests ~= nil then FriendData.acceptRequests = Settings.acceptRequests end
-					if Settings.playFriendEmote ~= nil then FriendData.playFriendEmote = Settings.playFriendEmote end
-					if Settings.syncEmote ~= nil then FriendData.syncEmote = Settings.syncEmote end
-				end
-				if pInfo.keybinds then
-					Keybinds = {}
-					for k, v in pairs(pInfo.keybinds) do
-						Keybinds[tostring(k)] = v
-					end
-					KeybindsSet = {}
-					for k, v in pairs(Keybinds) do
-						local num = tonumber(k)
-						if num then
-							KeybindsSet[num] = v
-						else
-							KeybindsSet[k] = v
-						end
-					end
-				end
-				if pInfo.favorites then
-					Favorites = {}
-					for _, v in ipairs(pInfo.favorites) do
-						table.insert(Favorites, tonumber(v))
-					end
-					FavoritesSet = {}
-					for _, v in ipairs(Favorites) do FavoritesSet[v] = true end
-				end
-				if pInfo.history then
-					RecentEmotes = {}
-					for _, item in ipairs(pInfo.history) do
-						if type(item) == "table" and item.emote then
-							table.insert(RecentEmotes, tonumber(item.emote))
-						elseif tonumber(item) then
-							table.insert(RecentEmotes, tonumber(item))
-						end
-					end
-				end
-			end
-		end
-		
-		-- 3. Load playlists from server
-		task.spawn(function()
-			local plRes = ApiRequest("GET", "/emote/playlist/list?userId=" .. tostring(player.UserId) .. "&token=" .. getOrCreateToken())
-			if plRes and plRes.ok and plRes.playlists then
-				Playlists = plRes.playlists
-				MockPlaylists = Playlists
-				
-				-- Sync favorites
-				PlaylistFavorites = {}
-				if plRes.favoritePlaylists then
-					for _, favId in ipairs(plRes.favoritePlaylists) do
-						PlaylistFavorites[tostring(favId)] = true
-					end
-				end
-				
-				if RefreshPlaylistsList then RefreshPlaylistsList() end
-			end
-		end)
 	end)
-	
-	-- Post-process Favorites and Keybinds
+
+	FriendData.isLoaded = true
 	FavoritesSet = {}
 	for _, v in ipairs(Favorites) do FavoritesSet[v] = true end
 
 	KeybindsSet = {}
 	for k, v in pairs(Keybinds) do
 		local num = tonumber(k)
-		if num then
-			KeybindsSet[num] = v
-		else
-			KeybindsSet[k] = v
-		end
+		KeybindsSet[num or k] = v
 	end
 end
-
 
 local function GetKeybind(emoteId) return KeybindsSet[emoteId] end
 local function SetKeybind(emoteId, name, keyStr)
@@ -470,7 +260,7 @@ local function SafeUtf8Char(code)
 	return UTF8_FALLBACK[code] or ""
 end
 
-local logo = "UNIVERSAL EMOTES"
+local logo = "HX Emotes // UNIVERSAL"
 
 -- ===============================================================
 -- THEMES
@@ -530,7 +320,7 @@ end
 local function Notify(title, text, iconId)
 	if not Settings.notifications then return end
 	pcall(function()
-		local screenGui = playerGui:FindFirstChild("VexroEmotes") or game:GetService("CoreGui"):FindFirstChild("VexroEmotes")
+		local screenGui = playerGui:FindFirstChild("HXEmotes") or game:GetService("CoreGui"):FindFirstChild("HXEmotes")
 		if not screenGui then
 			game:GetService("StarterGui"):SetCore("SendNotification", {Title = title, Text = text, Duration = 3})
 			return
@@ -623,66 +413,7 @@ local function Notify(title, text, iconId)
 	end)
 end
 
-local VEXRO_REMOTE_URL = "https://raw.githubusercontent.com/zyrovell/Vexro/main/src/vexroemotes.lua"
-local VEXRO_LOCAL_RELOAD_PATHS = {
-	"vexroemote.txt",
-	"vexroemotes.lua",
-	"VexroEmotes.lua",
-	"C:\\Users\\merte\\Desktop\\vexroemote.txt",
-}
-
-local function RunVexroSource(source, label)
-	local loader = (type(loadstring) == "function" and loadstring) or (type(load) == "function" and load)
-	if type(loader) ~= "function" then
-		warn("[Vexro] " .. label .. " failed: loadstring is not available")
-		Notify("UNIVERSAL EMOTES", "Executor loadstring desteklemiyor.")
-		return false
-	end
-	if type(source) ~= "string" or source == "" then
-		warn("[Vexro] " .. label .. " failed: empty source")
-		Notify("UNIVERSAL EMOTES", "Reload kaynagi bos geldi.")
-		return false
-	end
-
-	local chunk, compileErr = loader(source)
-	if type(chunk) ~= "function" then
-		warn("[Vexro] " .. label .. " compile failed: " .. tostring(compileErr))
-		Notify("UNIVERSAL EMOTES", "Reload scripti derlenemedi.")
-		return false
-	end
-
-	local ok, runErr = pcall(chunk)
-	if not ok then
-		warn("[Vexro] " .. label .. " runtime failed: " .. tostring(runErr))
-		Notify("UNIVERSAL EMOTES", "Reload calisirken hata verdi.")
-		return false
-	end
-	return true
-end
-
-local function ReloadVexro()
-	if type(readfile) == "function" and type(isfile) == "function" then
-		for _, path in ipairs(VEXRO_LOCAL_RELOAD_PATHS) do
-			local ok, exists = pcall(isfile, path)
-			if ok and exists then
-				local readOk, source = pcall(readfile, path)
-				if readOk and RunVexroSource(source, "local reload") then
-					return true
-				end
-			end
-		end
-	end
-
-	local ok, source = pcall(function()
-		return game:HttpGet(VEXRO_REMOTE_URL)
-	end)
-	if not ok then
-		warn("[Vexro] remote reload http failed: " .. tostring(source))
-		Notify("UNIVERSAL EMOTES", "Remote reload indirilemedi.")
-		return false
-	end
-	return RunVexroSource(source, "remote reload")
-end
+-- Remote source reload removed: HX Emotes runs independently.
 
 local function ApplyTheme(name)
 	currentTheme = Themes[name] or Themes.Dark
@@ -727,7 +458,7 @@ end
 -- ===============================================================
 
 gui = Instance.new("ScreenGui")
-gui.Name = "VexroEmotes"
+gui.Name = "HXEmotes"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.DisplayOrder = 999
@@ -805,6 +536,16 @@ if not selectedLang then
     whiteRail.ZIndex = 20003
     whiteRail.Parent = langBox
 
+    local langLogo = Instance.new("ImageLabel")
+    langLogo.Size = UDim2.new(0, 24, 0, 24)
+    langLogo.Position = UDim2.new(1, -42, 0, 22)
+    langLogo.BackgroundTransparency = 1
+    langLogo.Image = "rbxassetid://72742584610344"
+    langLogo.ImageColor3 = Color3.fromRGB(255,255,255)
+    langLogo.ScaleType = Enum.ScaleType.Fit
+    langLogo.ZIndex = 20003
+    langLogo.Parent = langBox
+
     langTitle = Instance.new("TextLabel")
     langTitle.Size = UDim2.new(1, -62, 0, 52)
     langTitle.Position = UDim2.new(0, 34, 0, 17)
@@ -822,7 +563,7 @@ if not selectedLang then
     langSub.Size = UDim2.new(1, -50, 0, 22)
     langSub.Position = UDim2.new(0, 34, 0, 72)
     langSub.BackgroundTransparency = 1
-    langSub.Text = "UNIVERSAL EMOTES  //  ES · EN"
+    langSub.Text = "HX EMOTES  //  UNIVERSAL  //  ES · EN"
     langSub.TextColor3 = Color3.fromRGB(130,130,130)
     langSub.Font = Enum.Font.GothamMedium
     langSub.TextSize = isMobile and 9 or 10
@@ -1008,7 +749,7 @@ local L = {
 	blocked = isES and "Bloqueado" or "Blocked",
 	requestSent = isES and "✓ Solicitud Enviada" or "✓ Request Sent",
 	addFriendMode = isES and "+ Modo Añadir Amigo" or "+ Add Friend Mode",
-	friendInfoTxt = isES and "Agregar amigos permite sincronizar emotes juntos." or "Adding friends lets you sync emotes together.",
+	friendInfoTxt = isES and "Guarda jugadores del servidor y síguelos con SYNC sin usar servicios externos." or "Save players from this server and follow them with SYNC without external services.",
 	friendListHeader = isES and "Lista de Amigos" or "Friend List",
 	noFriends = isES and "Sin amigos. ¡Usa el botón Añadir Amigo!" or "No friends yet. Use Add Friend button!",
 	emoteLoadFail = isES and "¡Error al cargar emote!" or "Failed to load emote!",
@@ -1043,7 +784,7 @@ local FriendL = {
 	playEmoteLbl = isES and "Reproducir emote de amigo" or "Play friend's emote",
 	playEmoteDesc = isES and "Se reproduce automáticamente cuando tu amigo lo inicia." or "Plays automatically when your friend starts it.",
 	syncEmoteLbl = isES and "Sincronizar emote con amigos" or "Sync emote with friends",
-	syncEmoteDesc = isES and "Al reproducirlo, envía la sincronización a tus amigos." or "When played, it sends sync to your friends.",
+	syncEmoteDesc = isES and "Permite seguir localmente el emote de un jugador guardado del mismo servidor." or "Lets you locally follow a saved player emote in the same server.",
 	syncOn = isES and "Sincronizado" or "Sync",
 	syncOff = isES and "Desactivado" or "Off",
 }
@@ -1147,19 +888,21 @@ splashStroke.Thickness = 1
 splashStroke.Transparency = 0.16
 splashStroke.Parent = splashBox
 
-local splashMark = Instance.new("Frame")
-splashMark.Size = UDim2.new(0,5,0,66)
-splashMark.Position = UDim2.new(0,20,0,22)
-splashMark.BackgroundColor3 = Color3.fromRGB(255,255,255)
-splashMark.BorderSizePixel = 0
-splashMark.ZIndex = 10003
-splashMark.Parent = splashBox
+local splashLogo = Instance.new("ImageLabel")
+splashLogo.Size = UDim2.new(0, isMobile and 52 or 62, 0, isMobile and 52 or 62)
+splashLogo.Position = UDim2.new(0, 20, 0, 20)
+splashLogo.BackgroundTransparency = 1
+splashLogo.Image = "rbxassetid://72742584610344"
+splashLogo.ImageColor3 = Color3.fromRGB(255,255,255)
+splashLogo.ScaleType = Enum.ScaleType.Fit
+splashLogo.ZIndex = 10003
+splashLogo.Parent = splashBox
 
 logo = Instance.new("TextLabel")
-logo.Size = UDim2.new(1,-60,0,68)
-logo.Position = UDim2.new(0,38,0,20)
+logo.Size = UDim2.new(1,-108,0,34)
+logo.Position = UDim2.new(0,isMobile and 82 or 94,0,22)
 logo.BackgroundTransparency = 1
-logo.Text = "UNIVERSAL\nEMOTES"
+logo.Text = "HX Emotes"
 logo.TextColor3 = Color3.fromRGB(255,255,255)
 logo.Font = Enum.Font.GothamBlack
 logo.TextSize = isMobile and 20 or 25
@@ -1168,11 +911,24 @@ logo.TextYAlignment = Enum.TextYAlignment.Center
 logo.ZIndex = 10003
 logo.Parent = splashBox
 
+local splashUniversal = Instance.new("TextLabel")
+splashUniversal.Size = UDim2.new(1,-108,0,18)
+splashUniversal.Position = UDim2.new(0,isMobile and 82 or 94,0,55)
+splashUniversal.BackgroundTransparency = 1
+splashUniversal.Text = "UNIVERSAL"
+splashUniversal.TextColor3 = Color3.fromRGB(125,125,125)
+splashUniversal.TextTransparency = 0.2
+splashUniversal.Font = Enum.Font.GothamBold
+splashUniversal.TextSize = isMobile and 9 or 10
+splashUniversal.TextXAlignment = Enum.TextXAlignment.Left
+splashUniversal.ZIndex = 10003
+splashUniversal.Parent = splashBox
+
 local splashTag = Instance.new("TextLabel")
 splashTag.Size = UDim2.new(1,-40,0,20)
 splashTag.Position = UDim2.new(0,20,0,96)
 splashTag.BackgroundTransparency = 1
-splashTag.Text = "UNIVERSAL EMOTE SYSTEM  //  V5.0"
+splashTag.Text = "HX EMOTES  //  LOCAL MODE  //  V5.0"
 splashTag.TextColor3 = Color3.fromRGB(125,125,125)
 splashTag.Font = Enum.Font.GothamMedium
 splashTag.TextSize = isMobile and 9 or 10
@@ -1551,9 +1307,9 @@ local currentTab = "emotes"
 local page, perPage, pages, cols = 1, 14, 1, 7
 local cards = {}
 local lastVexroAnimationPack = nil
-local sideBarW = isMobile and 72 or 184
-local tabBtnS = isMobile and 50 or 44
-local bottomBarH = isMobile and 58 or 64
+local sideBarW = isMobile and 88 or 184
+local tabBtnS = isMobile and math.clamp(math.floor((workspace.CurrentCamera.ViewportSize.Y - 132) / 5), 40, 52) or 44
+local bottomBarH = isMobile and 74 or 64
 local currentCardSize = 0
 local _badEmotes = {}
 local _refreshPending = false
@@ -1580,14 +1336,6 @@ local function ToggleFavorite(id)
 			end
 		end
 		SaveData()
-		task.spawn(function()
-			ApiRequest("POST", "/emote/favorite", {
-				userId = tostring(player.UserId),
-				token = getOrCreateToken(),
-				emoteId = tostring(id),
-				action = "remove"
-			})
-		end)
 		return false
 	end
 	
@@ -1600,33 +1348,19 @@ local function ToggleFavorite(id)
 	FavoritesSet[id] = true
 	Favorites[#Favorites + 1] = id
 	SaveData()
-	task.spawn(function()
-		ApiRequest("POST", "/emote/favorite", {
-			userId = tostring(player.UserId),
-			token = getOrCreateToken(),
-			emoteId = tostring(id),
-			action = "add"
-		})
-	end)
 	return true
 end
 
 local function AddToRecent(id)
 	id = tonumber(id)
-	task.spawn(function()
-		local res = ApiRequest("POST", "/emote/history/add", {
-			userId = tostring(player.UserId),
-			token = getOrCreateToken(),
-			emoteId = tostring(id)
-		})
-		if res and res.status == "success" and res.history then
-			RecentEmotes = res.history
-			SaveData()
-			if currentTab == "recent" and UpdateTabData then
-				UpdateTabData()
-			end
-		end
-	end)
+	if not id then return end
+	for i = #RecentEmotes, 1, -1 do
+		if tonumber(RecentEmotes[i]) == id then table.remove(RecentEmotes, i) end
+	end
+	table.insert(RecentEmotes, 1, id)
+	while #RecentEmotes > MAX_RECENT do table.remove(RecentEmotes) end
+	SaveData()
+	if currentTab == "recent" and UpdateTabData then UpdateTabData() end
 end
 
 -- ===============================================================
@@ -1635,6 +1369,7 @@ end
 
 local currentAnimTrack = nil
 local lastEmoteTime = 0
+local PlayEmote
 
 local function GetAnimator()
 	local character = player.Character
@@ -1674,61 +1409,46 @@ end
 local function StopEmote(showNotif)
 	StopAllTracks()
 	if showNotif then Notify(L.stopped, "", 113416463749658) end
-	if FriendData.currentSyncPartner then
-		pcall(function()
-			ApiRequest("POST", "/emote/sync/status", {
-				userId = tostring(player.UserId),
-				token = getOrCreateToken(),
-				targetId = FriendData.currentSyncPartner,
-				action = "cancel"
-			})
-		end)
-		FriendData.currentSyncPartner = nil
-	end
-	if _genv().VexroBroadcastStop then
-		pcall(_genv().VexroBroadcastStop)
-	end
+	FriendData.currentSyncPartner = nil
+	if _genv().VexroBroadcastStop then pcall(_genv().VexroBroadcastStop) end
 end
 
+local _lastPartnerSyncCheck = 0
 local _heartbeatConn = RunService.Heartbeat:Connect(function()
 	if Settings.stopOnWalk and currentAnimTrack and currentAnimTrack.IsPlaying then
 		local character = player.Character
-		if character then
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			if humanoid and humanoid.MoveDirection.Magnitude > 0 then
-				StopEmote(false)
-			end
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.MoveDirection.Magnitude > 0 and not FriendData.currentSyncPartner then
+			StopEmote(false)
 		end
-		
-		-- Instant sync partner walk & emote change detection
-		if FriendData.currentSyncPartner then
-			local partnerPlayer = Players:GetPlayerByUserId(tonumber(FriendData.currentSyncPartner))
-			if partnerPlayer and partnerPlayer.Character then
-				local partnerHumanoid = partnerPlayer.Character:FindFirstChildOfClass("Humanoid")
-				if partnerHumanoid then
-					if partnerHumanoid.MoveDirection.Magnitude > 0 then
-						StopEmote(false)
-					else
-						local partnerAnimator = partnerHumanoid:FindFirstChildOfClass("Animator")
-						if partnerAnimator then
-							local tracks = partnerAnimator:GetPlayingAnimationTracks()
-							for _, pt in ipairs(tracks) do
-								if pt.Priority == Enum.AnimationPriority.Action4 and pt.IsPlaying and pt.Animation then
-									local animIdStr = pt.Animation.AnimationId:match("%d+")
-									if animIdStr then
-										local animId = tonumber(animIdStr)
-										if animId and _genv().lastVexroEmote and _genv().lastVexroEmote.id ~= animId then
-											if EmotesById and EmotesById[animId] then
-												local spd = Settings.speed > 0 and Settings.speed or 1
-												local calcStartTime = workspace:GetServerTimeNow() - (pt.TimePosition / spd)
-												PlayEmote(animId, EmotesById[animId].name, true, calcStartTime)
-												break
-											end
-										end
-									end
-								end
-							end
+	end
+
+	if FriendData.currentSyncPartner and tick() - _lastPartnerSyncCheck >= 0.15 then
+		_lastPartnerSyncCheck = tick()
+		local partnerPlayer = Players:GetPlayerByUserId(tonumber(FriendData.currentSyncPartner))
+		if not partnerPlayer then
+			FriendData.currentSyncPartner = nil
+			return
+		end
+		local partnerCharacter = partnerPlayer.Character
+		local partnerHumanoid = partnerCharacter and partnerCharacter:FindFirstChildOfClass("Humanoid")
+		local partnerAnimator = partnerHumanoid and partnerHumanoid:FindFirstChildOfClass("Animator")
+		if partnerHumanoid and partnerHumanoid.MoveDirection.Magnitude > 0 then
+			if currentAnimTrack and currentAnimTrack.IsPlaying then StopAllTracks() end
+			return
+		end
+		if partnerAnimator then
+			for _, pt in ipairs(partnerAnimator:GetPlayingAnimationTracks()) do
+				if pt.IsPlaying and pt.Animation then
+					local animId = tonumber(pt.Animation.AnimationId:match("%d+"))
+					if animId and EmotesById[animId] then
+						local lastId = _genv().lastVexroEmote and tonumber(_genv().lastVexroEmote.id) or nil
+						if lastId ~= animId or not currentAnimTrack or not currentAnimTrack.IsPlaying then
+							local spd = Settings.speed > 0 and Settings.speed or 1
+							local calcStartTime = workspace:GetServerTimeNow() - (pt.TimePosition / spd)
+							PlayEmote(animId, EmotesById[animId].name, true, calcStartTime)
 						end
+						break
 					end
 				end
 			end
@@ -1738,7 +1458,7 @@ end)
 
 local _animCache = {}
 
-local function PlayEmote(id, name, silent, syncStartTime)
+PlayEmote = function(id, name, silent, syncStartTime)
 	local animator = GetAnimator()
 	if not animator then return end
 	
@@ -1826,21 +1546,36 @@ end
 -- ===============================================================
 
 local TARGET_PC_CARD = 112
-local TARGET_MOBILE_CARD = 78
+local TARGET_MOBILE_CARD = 86
 
 local function GetDefaultSize()
     local vp = workspace.CurrentCamera.ViewportSize
     local pad = isMobile and 6 or 8
     local targetCard = isMobile and TARGET_MOBILE_CARD or TARGET_PC_CARD
-    local desiredCols = isMobile and ((vp.X >= 500) and 3 or 2) or 4
-    local perfectWidth = sideBarW + 30 + desiredCols * targetCard + (desiredCols - 1) * pad
-    local minW = isMobile and 330 or 650
-    local maxW = math.max(minW, vp.X * (isMobile and 0.96 or 0.88))
+    local desiredCols = isMobile and ((vp.X >= 520) and 3 or 2) or 4
+    local perfectWidth = sideBarW + 26 + desiredCols * targetCard + (desiredCols - 1) * pad
+
+    local minW
+    local maxW
+    if isMobile then
+        minW = math.max(300, math.min(350, vp.X - 10))
+        maxW = math.max(minW, vp.X - 8)
+    else
+        minW = 650
+        maxW = math.max(minW, vp.X * 0.88)
+    end
     local finalW = math.clamp(perfectWidth, minW, maxW)
 
-    local perfectHeight = isMobile and 430 or 520
-    local minH = isMobile and 365 or 455
-    local maxH = math.max(minH, vp.Y * (isMobile and 0.94 or 0.86))
+    local perfectHeight = isMobile and 470 or 520
+    local minH
+    local maxH
+    if isMobile then
+        minH = math.max(340, math.min(400, vp.Y - 10))
+        maxH = math.max(minH, vp.Y - 8)
+    else
+        minH = 455
+        maxH = math.max(minH, vp.Y * 0.86)
+    end
     local finalH = math.clamp(perfectHeight, minH, maxH)
     return UDim2.new(0, finalW, 0, finalH)
 end
@@ -1993,8 +1728,8 @@ navDivider.ZIndex = 9
 navDivider.Parent = sidebar
 
 local brand = Instance.new("Frame")
-brand.Name = "UniversalBrand"
-brand.Size = UDim2.new(1,-16,0,isMobile and 54 or 88)
+brand.Name = "HXBrand"
+brand.Size = UDim2.new(1,-16,0,isMobile and 66 or 88)
 brand.Position = UDim2.new(0,8,0,8)
 brand.BackgroundColor3 = Color3.fromRGB(8,8,8)
 brand.BorderSizePixel = 0
@@ -2006,28 +1741,44 @@ brandStroke.Color = Color3.fromRGB(70,70,70)
 brandStroke.Thickness = 1
 brandStroke.Parent = brand
 
-local brandRail = Instance.new("Frame")
-brandRail.Size = UDim2.new(0,4,1,-18)
-brandRail.Position = UDim2.new(0,9,0,9)
-brandRail.BackgroundColor3 = Color3.fromRGB(255,255,255)
-brandRail.BorderSizePixel = 0
-brandRail.ZIndex = 11
-brandRail.Parent = brand
+local brandLogo = Instance.new("ImageLabel")
+brandLogo.Size = UDim2.new(0, isMobile and 34 or 44, 0, isMobile and 34 or 44)
+brandLogo.Position = UDim2.new(0, 10, 0.5, 0)
+brandLogo.AnchorPoint = Vector2.new(0, 0.5)
+brandLogo.BackgroundTransparency = 1
+brandLogo.Image = "rbxassetid://72742584610344"
+brandLogo.ImageColor3 = Color3.fromRGB(255,255,255)
+brandLogo.ScaleType = Enum.ScaleType.Fit
+brandLogo.ZIndex = 11
+brandLogo.Parent = brand
 
 local brandText = Instance.new("TextLabel")
-brandText.Size = UDim2.new(1,-28,1,-14)
-brandText.Position = UDim2.new(0,21,0,7)
+brandText.Size = UDim2.new(1, -(isMobile and 50 or 64), 0, isMobile and 24 or 30)
+brandText.Position = UDim2.new(0, isMobile and 50 or 62, 0, isMobile and 13 or 17)
 brandText.BackgroundTransparency = 1
-brandText.Text = isMobile and "U\nE" or "UNIVERSAL\nEMOTES"
+brandText.Text = "HX Emotes"
 brandText.TextColor3 = Color3.fromRGB(255,255,255)
 brandText.Font = Enum.Font.GothamBlack
-brandText.TextSize = isMobile and 16 or 19
+brandText.TextSize = isMobile and 11 or 16
 brandText.TextXAlignment = Enum.TextXAlignment.Left
 brandText.TextYAlignment = Enum.TextYAlignment.Center
 brandText.ZIndex = 11
 brandText.Parent = brand
 
-tabStartY = isMobile and 70 or 108
+local brandSub = Instance.new("TextLabel")
+brandSub.Size = UDim2.new(1, -(isMobile and 50 or 64), 0, 16)
+brandSub.Position = UDim2.new(0, isMobile and 50 or 62, 0, isMobile and 35 or 48)
+brandSub.BackgroundTransparency = 1
+brandSub.Text = "UNIVERSAL"
+brandSub.TextColor3 = Color3.fromRGB(125,125,125)
+brandSub.TextTransparency = 0.22
+brandSub.Font = Enum.Font.GothamBold
+brandSub.TextSize = isMobile and 7 or 9
+brandSub.TextXAlignment = Enum.TextXAlignment.Left
+brandSub.ZIndex = 11
+brandSub.Parent = brand
+
+tabStartY = isMobile and 78 or 108
 tabBtns = {}
 tabLabels = {
     emotes = "EMOTES",
@@ -2094,7 +1845,7 @@ local function CreateTabBtn(icon, tabName, yPos)
     label.Text = tabLabels[tabName] or tabName:upper()
     label.TextColor3 = Color3.fromRGB(185,185,185)
     label.Font = Enum.Font.GothamBold
-    label.TextSize = isMobile and 8 or 10
+    label.TextSize = isMobile and 9 or 10
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 12
     label.Parent = btn
@@ -2139,7 +1890,7 @@ content.ZIndex = 2
 content.ClipsDescendants = true
 content.Parent = main
 
-local titleH = isMobile and 76 or 86
+local titleH = isMobile and 84 or 86
 titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, titleH)
 titleBar.BackgroundTransparency = 1
@@ -2147,7 +1898,7 @@ titleBar.ZIndex = 5
 titleBar.Parent = content
 
 local headerSurface = Instance.new("Frame")
-headerSurface.Size = UDim2.new(1, -16, 0, isMobile and 68 or 78)
+headerSurface.Size = UDim2.new(1, -16, 0, isMobile and 76 or 78)
 headerSurface.Position = UDim2.new(0, 8, 0, 5)
 headerSurface.BackgroundColor3 = currentTheme.secondary
 headerSurface.BackgroundTransparency = 0.12
@@ -2508,7 +2259,7 @@ end
 
 -- Trending Dropdown UI
 trendingDropdown = Instance.new("Frame")
-trendingDropdown.Name = "VexroTrendingDropdown"
+trendingDropdown.Name = "HXTrendingDropdown"
 trendingDropdown.Size = UDim2.new(1, -16, 0, 0)
 trendingDropdown.Position = UDim2.new(0, 8, 0, titleH + 6 + searchH + 2)
 trendingDropdown.BackgroundColor3 = currentTheme.secondary
@@ -2616,33 +2367,12 @@ local function refreshTrendingDropdown()
 		hideTrendingDropdown()
 		return
 	end
-
-	-- Show cached/fallback immediately so throttle never blanks the dropdown
 	populateTrendingDropdown(_cachedTrending)
-
-	local res = ApiRequest("GET", "/emote/search/trending")
-	local trendingItems = {}
-	if res and res.ok and type(res.trending) == "table" then
-		trendingItems = res.trending
-	end
-	if #trendingItems > 0 then
-		populateTrendingDropdown(trendingItems)
-	end
 end
 
 local function recordSearchQuery(raw)
-	local q = string.match(tostring(raw or ""), "^%s*(.-)%s*$") or ""
-	if q == "" or #q < 2 then return end
-	if q == _lastRecordedQuery and (tick() - _lastRecordedAt) < 8 then return end
-	_lastRecordedQuery = q
-	_lastRecordedAt = tick()
-	task.spawn(function()
-		ApiRequest("POST", "/emote/search/record", {
-			userId = tostring(player.UserId),
-			token = getOrCreateToken(),
-			query = q
-		})
-	end)
+	-- Search is fully local; no telemetry is recorded.
+	return
 end
 
 search.Focused:Connect(function()
@@ -2959,7 +2689,7 @@ local heroText = Instance.new("TextLabel")
 heroText.Size = UDim2.new(1,-45,1,-18)
 heroText.Position = UDim2.new(0,30,0,9)
 heroText.BackgroundTransparency = 1
-heroText.Text = "UNIVERSAL\nEMOTES"
+heroText.Text = "HX Emotes\nUNIVERSAL"
 heroText.TextColor3 = Color3.fromRGB(255,255,255)
 heroText.Font = Enum.Font.GothamBlack
 heroText.TextSize = isMobile and 20 or 24
@@ -2969,7 +2699,7 @@ heroText.Parent = infoHero
 
 local _infoVersionValue = MakeInfoBlock(isES and "Versión" or "Version", "V5.0", 1)
 local _infoCountValue = MakeInfoBlock(isES and "Cantidad de emotes" or "Emote count", tostring(#Emotes), 2)
-local _infoStatusValue = MakeInfoBlock(isES and "Estado" or "Status", (_genv().VexroServerAccessible and (isES and "CONECTADO" or "CONNECTED") or (isES and "MODO LOCAL / SERVIDOR NO DISPONIBLE" or "LOCAL MODE / SERVER UNAVAILABLE")), 3)
+local _infoStatusValue = MakeInfoBlock(isES and "Estado" or "Status", isES and "MODO LOCAL" or "LOCAL MODE", 3)
 local _infoLanguageValue = MakeInfoBlock(isES and "Idioma" or "Language", isES and "ESPAÑOL" or "ENGLISH", 4)
 local _infoExtraValue = MakeInfoBlock(isES and "Información" or "Information", isES and "R15 · Favoritos · Bindings · Playlists · Animaciones" or "R15 · Favorites · Bindings · Playlists · Animations", 5)
 
@@ -3319,7 +3049,7 @@ do
 	resetBtn.MouseButton1Click:Connect(function()
 		Settings.language = nil
 		SaveData()
-		Notify("UNIVERSAL EMOTES", isES and "Idioma restablecido. Ejecuta el script otra vez para elegir." or "Language reset. Run the script again to choose.")
+		Notify("HX Emotes", isES and "Idioma restablecido. Ejecuta el script otra vez para elegir." or "Language reset. Run the script again to choose.")
 	end)
 end
 
@@ -3567,16 +3297,9 @@ ShowFriendRequestPanel = function(senderUserId, senderName)
 	end)
 
 	accBtn.MouseButton1Click:Connect(function()
-		local res = ApiRequest("POST", "/friends/request/accept", {
-			userId = tostring(player.UserId),
-			token = getOrCreateToken(),
-			targetId = tostring(senderUserId)
-		})
-		if res and res.status == "success" then
-			FriendData.friends[tostring(senderUserId)] = {name = senderName, syncEnabled = true}
-			RefreshFriendList()
-			Notify(L.friendReqAcceptedYou:format(tostring(senderName)), "", nil)
-		end
+		FriendData.friends[tostring(senderUserId)] = {name = senderName, syncEnabled = true, online = Players:GetPlayerByUserId(tonumber(senderUserId)) ~= nil}
+		_SaveFriend()
+		if RefreshFriendList then RefreshFriendList() end
 		_close()
 	end)
 
@@ -3718,11 +3441,10 @@ local function RenderNotifications(reqs, syncs)
 		Instance.new("UICorner", btnNo).CornerRadius = UDim.new(0, 6)
 		
 		btnYes.MouseButton1Click:Connect(function()
-			btnYes.Text = "..."
-			task.spawn(function()
-				ApiRequest("POST", "/friends/request/accept", { userId = tostring(player.UserId), targetId = tostring(r.userId), token = getOrCreateToken() })
-				card:Destroy()
-			end)
+			FriendData.friends[tostring(r.userId)] = {name = r.username, syncEnabled = true, online = Players:GetPlayerByUserId(tonumber(r.userId)) ~= nil}
+			_SaveFriend()
+			if RefreshFriendList then RefreshFriendList() end
+			card:Destroy()
 		end)
 		btnNo.MouseButton1Click:Connect(function()
 			card:Destroy()
@@ -3795,20 +3517,11 @@ local function RenderNotifications(reqs, syncs)
 		Instance.new("UICorner", btnNo).CornerRadius = UDim.new(0, 6)
 		
 		btnPlay.MouseButton1Click:Connect(function()
-			btnPlay.Text = "..."
-			task.spawn(function()
-				ApiRequest("POST", "/emote/sync/status", { userId = tostring(player.UserId), token = getOrCreateToken(), syncId = s.syncId, status = "accepted" })
-				FriendData.currentSyncPartner = s.initiatorId
-				PlayEmote(s.emoteId, s.emoteName, true, s.syncStartTime)
-				card:Destroy()
-			end)
+			FriendData.currentSyncPartner = tostring(s.initiatorId or s.senderId or "")
+			PlayEmote(s.emoteId, s.emoteName, true, s.syncStartTime)
+			card:Destroy()
 		end)
-		btnNo.MouseButton1Click:Connect(function()
-			task.spawn(function()
-				ApiRequest("POST", "/emote/sync/status", { userId = tostring(player.UserId), token = getOrCreateToken(), syncId = s.syncId, status = "rejected" })
-				card:Destroy()
-			end)
-		end)
+		btnNo.MouseButton1Click:Connect(function() card:Destroy() end)
 	end
 	
 	npScroll.CanvasSize = UDim2.new(0, 0, 0, npLayout.AbsoluteContentSize.Y + 10)
@@ -3816,140 +3529,16 @@ end
 end
 
 
--- Active loop for server polling (Friends list, Sync status, Incoming Sync Requests, Heartbeats)
-task.spawn(function()
-    while task.wait(3) do
-        if _genv().VexroSessionToken ~= mySessionToken then break end
-        pcall(function()
-            -- 1. Heartbeat
-            local activeEmote = nil
-            if currentAnimTrack and currentAnimTrack.IsPlaying then
-                activeEmote = _genv().lastVexroEmote
-            end
-            ApiRequest("POST", "/session/heartbeat", {
-                userId = tostring(player.UserId),
-                token = getOrCreateToken(),
-                jobId = game.JobId ~= "" and game.JobId or "Studio_" .. tostring(game.PlaceId),
-                activeEmote = activeEmote,
-                syncPartner = FriendData.currentSyncPartner
-            })
-
-            -- 2. Fetch friends and incoming requests
-            local res = ApiRequest("GET", "/friends/list?userId=" .. tostring(player.UserId) .. "&token=" .. getOrCreateToken())
-            if res and res.status == "success" then
-                -- Rebuild FriendData.friends
-                local newFriends = {}
-                for _, f in ipairs(res.friends) do
-                    newFriends[tostring(f.userId)] = {
-                        name = f.username,
-                        syncEnabled = true,
-                        online = f.online
-                    }
-                end
-                FriendData.friends = newFriends
-                FriendData.isLoaded = true
-                RefreshFriendList()
-
-                -- Handle incoming requests
-                if res.incomingRequests then
-                    FriendData.incomingRequests = res.incomingRequests
-                    RenderNotifications()
-                end
-            end
-
-        end)
-    end
-end)
-
--- 2.5-second interval for fast sync polling & active sync heartbeat
-task.spawn(function()
-    while task.wait(2.5) do
-        if _genv().VexroSessionToken ~= mySessionToken then break end
-        pcall(function()
-            -- Poll incoming Sync requests instantly
-            if FriendData.syncEmote then
-                local syncRes = ApiRequest("POST", "/emote/sync/status", {
-                    userId = tostring(player.UserId),
-                    token = getOrCreateToken(),
-                    action = "poll_incoming"
-                })
-                if syncRes and syncRes.status == "success" and syncRes.incomingRequests then
-                    FriendData.incomingSyncs = {}
-                    for _, sreq in ipairs(syncRes.incomingRequests) do
-                        if FriendData.playFriendEmote then
-                            -- Auto-accept sync
-                            ApiRequest("POST", "/emote/sync/status", {
-                                userId = tostring(player.UserId),
-                                token = getOrCreateToken(),
-                                syncId = sreq.syncId,
-                                status = "accepted"
-                            })
-                            FriendData.currentSyncPartner = sreq.initiatorId
-                            local reqAnimId = tonumber(sreq.emoteId)
-                            if not (_genv().lastVexroEmote and _genv().lastVexroEmote.id == reqAnimId) then
-                                PlayEmote(reqAnimId, sreq.emoteName, true, sreq.syncStartTime)
-                            end
-                        else
-                            table.insert(FriendData.incomingSyncs, sreq)
-                        end
-                    end
-                    RenderNotifications()
-                end
-            end
-
-            -- Sync partner heartbeat
-            if FriendData.currentSyncPartner and currentAnimTrack and currentAnimTrack.IsPlaying then
-                local hbRes = ApiRequest("POST", "/session/heartbeat", {
-                    userId = tostring(player.UserId),
-                    token = getOrCreateToken(),
-                    jobId = game.JobId ~= "" and game.JobId or "Studio_" .. tostring(game.PlaceId),
-                    activeEmote = _genv().lastVexroEmote,
-                    syncPartner = FriendData.currentSyncPartner
-                })
-                
-                if hbRes and hbRes.syncCancelled then
-                    FriendData.currentSyncPartner = nil
-                    StopAllTracks()
-                    Notify(L.stopped, "Partner stopped the emote", 113416463749658)
-                    if _genv().VexroBroadcastStop then pcall(_genv().VexroBroadcastStop) end
-                end
-            end
-        end)
-    end
-end)
-
-local function _WatchAll()
-    -- Handled in our main polling task above
-end
-
--- Add friend mode removed
-
-
+-- HX local mode: no server polling, no cloud heartbeats, no remote friend requests.
+local function _WatchAll() end
 
 _genv().VexroBroadcastStop = function()
-	_MyAttr(ATTR_STOP, tostring(tick()))
 	FriendData.currentSyncPartner = nil
-	pcall(function()
-		ApiRequest("POST", "/emote/sync/status", {
-			userId = tostring(player.UserId),
-			token = getOrCreateToken(),
-			action = "cancel_all"
-		})
-	end)
 end
 
 _genv().VexroBroadcastSync = function(emoteId, emoteName, syncStartTime)
-	if not FriendData or not FriendData.friends then return end
-	task.spawn(function()
-		ApiRequest("POST", "/emote/sync/broadcast", {
-			userId = tostring(player.UserId),
-			emoteId = tostring(emoteId),
-			emoteName = tostring(emoteName),
-			jobId = game.JobId ~= "" and game.JobId or "Studio_" .. tostring(game.PlaceId),
-			syncStartTime = syncStartTime and tostring(syncStartTime) or tostring(workspace:GetServerTimeNow()),
-			token = getOrCreateToken()
-		})
-	end)
+	-- Outbound cross-client sync required the removed backend.
+	-- Local follow-sync remains available from the Friends/Players panel.
 end
 
 local function _MakeFriendToggle(txt, desc, order, getVal, setVal)
@@ -4083,64 +3672,44 @@ local function RefreshServerPlayersList()
 			Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 6)
 			
 			addBtn.MouseButton1Click:Connect(function()
-				addBtn.Text = "..."
-				task.spawn(function()
-					local res = ApiRequest("POST", "/friends/request/send", {
-						userId = tostring(player.UserId),
-						targetId = tostring(pdata.userId),
-						token = getOrCreateToken()
-					})
-					if res and res.status == "success" then
-						addBtn.Text = "OK"
-						addBtn.BackgroundColor3 = currentTheme.success
-					else
-						addBtn.Text = "Err"
-						if res and res.error then
-							Notify(SafeUtf8Char(0x274C), res.error)
-						end
-					end
-				end)
+				FriendData.friends[tostring(pdata.userId)] = {name = pdata.username, syncEnabled = true, online = true}
+				_SaveFriend()
+				addBtn.Text = "OK"
+				if RefreshFriendList then RefreshFriendList() end
+				RefreshServerPlayersList()
 			end)
 		end
 	end
 	emptySpLbl.Visible = not hasAny
 end
 
-serverPlayersBtn.MouseButton1Click:Connect(function()
-	serverPlayersContainer.Visible = not serverPlayersContainer.Visible
-	if serverPlayersContainer.Visible then
-		serverPlayersBtn.Text = L.serverPlayersUp
-	else
-		serverPlayersBtn.Text = L.serverPlayersDown
-	end
-end)
-
-task.spawn(function()
-	while task.wait(10) do
-		if _genv().VexroSessionToken ~= mySessionToken then break end
-		if not gui or not gui.Parent then break end
-		if serverPlayersContainer.Visible then
-			local res = ApiRequest("GET", "/friends/players-in-server?jobId=" .. (game.JobId ~= "" and game.JobId or "Studio_" .. tostring(game.PlaceId)) .. "&userId=" .. tostring(player.UserId) .. "&token=" .. getOrCreateToken())
-			if res and res.status == "success" and res.players then
-				-- compare array 
-				local changed = false
-				if #res.players ~= #serverPlayersData then
-					changed = true
-				else
-					for i, p in ipairs(res.players) do
-						if serverPlayersData[i].userId ~= p.userId then changed = true; break end
-					end
-				end
-				if changed then
-					serverPlayersData = res.players
-					RefreshServerPlayersList()
-				end
-			end
+local function RebuildServerPlayersData()
+	serverPlayersData = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then
+			serverPlayersData[#serverPlayersData + 1] = {userId = tostring(p.UserId), username = p.Name}
 		end
 	end
-end)
+	RefreshServerPlayersList()
 end
 
+serverPlayersBtn.MouseButton1Click:Connect(function()
+	serverPlayersContainer.Visible = not serverPlayersContainer.Visible
+	serverPlayersBtn.Text = serverPlayersContainer.Visible and L.serverPlayersUp or L.serverPlayersDown
+	if serverPlayersContainer.Visible then RebuildServerPlayersData() end
+end)
+
+local _playerAddedConn = Players.PlayerAdded:Connect(function()
+	if serverPlayersContainer.Visible then RebuildServerPlayersData() end
+	if RefreshFriendList then RefreshFriendList() end
+end)
+local _playerRemovingConn = Players.PlayerRemoving:Connect(function()
+	if serverPlayersContainer.Visible then RebuildServerPlayersData() end
+	if RefreshFriendList then task.defer(RefreshFriendList) end
+end)
+_friendConns[#_friendConns + 1] = _playerAddedConn
+_friendConns[#_friendConns + 1] = _playerRemovingConn
+end
 
 
 do
@@ -4208,6 +3777,8 @@ RefreshFriendList = function()
 	for userId, fdata in pairs(FriendData.friends) do
 		hasAny = true
 		local uid = tonumber(userId)
+		local livePlayer = uid and Players:GetPlayerByUserId(uid) or nil
+		fdata.online = livePlayer ~= nil
 		local row = Instance.new("Frame")
 		row.Size = UDim2.new(1,0,0,50); row.BackgroundColor3 = currentTheme.tertiary
 		row.ZIndex = 6; row.Parent = friendListContainer
@@ -4232,8 +3803,7 @@ RefreshFriendList = function()
 		statusLbl.Size = UDim2.new(0, 100, 0, 14)
 		statusLbl.Position = UDim2.new(0, 62, 0, 10)
 		statusLbl.BackgroundTransparency = 1
-		local stxt = fdata.online and "Aktif" or "Pasif"
-		if not isTR then stxt = fdata.online and "Active" or "Inactive" end
+		local stxt = isES and (fdata.online and "Activo" or "Inactivo") or (fdata.online and "Active" or "Inactive")
 		statusLbl.Text = stxt
 		statusLbl.TextColor3 = currentTheme.text
 		statusLbl.Font = Enum.Font.GothamMedium
@@ -4259,21 +3829,39 @@ RefreshFriendList = function()
 		end
 
 		local syncBtn = Instance.new("TextButton")
+		local isFollowing = tostring(FriendData.currentSyncPartner or "") == tostring(userId)
 		syncBtn.Visible = (fdata.online == true)
-		syncBtn.Size = UDim2.new(0,46,0,24); syncBtn.Position = UDim2.new(1,-84,0.5,-12)
-		syncBtn.BackgroundColor3 = fdata.syncEnabled and currentTheme.success or currentTheme.critical
-		syncBtn.Text = fdata.syncEnabled and FriendL.syncOn or FriendL.syncOff
+		syncBtn.Size = UDim2.new(0,56,0,24); syncBtn.Position = UDim2.new(1,-94,0.5,-12)
+		syncBtn.BackgroundColor3 = isFollowing and currentTheme.success or currentTheme.stroke
+		syncBtn.Text = isFollowing and (isES and "SIGUIENDO" or "FOLLOW") or (isES and "SYNC" or "SYNC")
 		syncBtn.TextColor3 = Color3.new(1,1,1); syncBtn.Font = Enum.Font.GothamBold
-		syncBtn.TextSize = 10; syncBtn.ZIndex = 7; syncBtn.Parent = row
+		syncBtn.TextSize = 9; syncBtn.ZIndex = 7; syncBtn.Parent = row
 		Instance.new("UICorner", syncBtn).CornerRadius = UDim.new(0,8)
 
 		syncBtn.MouseButton1Click:Connect(function()
-			fdata.syncEnabled = not fdata.syncEnabled
-			syncBtn.Text = fdata.syncEnabled and FriendL.syncOn or FriendL.syncOff
-			TweenService:Create(syncBtn, TweenInfo.new(0.2), {
-				BackgroundColor3 = fdata.syncEnabled and currentTheme.success or currentTheme.critical
-			}):Play()
+			if tostring(FriendData.currentSyncPartner or "") == tostring(userId) then
+				FriendData.currentSyncPartner = nil
+				StopEmote(false)
+			else
+				FriendData.currentSyncPartner = tostring(userId)
+				local p = Players:GetPlayerByUserId(uid)
+				if p and p.Character then
+					local h = p.Character:FindFirstChildOfClass("Humanoid")
+					local a = h and h:FindFirstChildOfClass("Animator")
+					if a then
+						for _, pt in ipairs(a:GetPlayingAnimationTracks()) do
+							local animId = pt.Animation and tonumber(pt.Animation.AnimationId:match("%d+"))
+							if animId and EmotesById[animId] then
+								local startAt = workspace:GetServerTimeNow() - (pt.TimePosition / math.max(Settings.speed, 0.01))
+								PlayEmote(animId, EmotesById[animId].name, true, startAt)
+								break
+							end
+						end
+					end
+				end
+			end
 			_SaveFriend()
+			RefreshFriendList()
 		end)
 
 		local rmBtn = Instance.new("TextButton")
@@ -4290,15 +3878,9 @@ RefreshFriendList = function()
 		end)
 	end
 	
-	if not FriendData.isLoaded then
-		emptyFriendLbl.Text = isES and "Cargando..." or "Loading..."
-		emptyFriendLbl.Visible = true
-		flHeader.Visible = false
-	else
-		emptyFriendLbl.Text = L.noFriends
-		emptyFriendLbl.Visible = not hasAny
-		flHeader.Visible = hasAny
-	end
+	emptyFriendLbl.Text = isES and "No hay jugadores guardados. Abre Jugadores del servidor para añadir uno." or "No saved players. Open Server Players to add one."
+	emptyFriendLbl.Visible = not hasAny
+	flHeader.Visible = hasAny
 end
 RefreshFriendList()
 
@@ -4306,17 +3888,9 @@ RefreshFriendList()
 
 local _prevClean = _genv().VexroEmotesCleanup
 _genv().VexroEmotesCleanup = function()
-	-- Graceful logout (Wait for server confirmation before closing)
-	pcall(function()
-		ApiRequest("POST", "/session/logout", {
-			userId = tostring(player.UserId),
-			token = getOrCreateToken()
-		})
-	end)
 	if _prevClean then pcall(_prevClean) end
 	for _, c in ipairs(_friendConns) do pcall(function() c:Disconnect() end) end
 	_friendConns = {}
-	_SetAddMode(false)
 	pcall(function() _genv().VexroBroadcastSync = nil end)
 	pcall(function() _genv().VexroBroadcastStop = nil end)
 end
@@ -4362,8 +3936,8 @@ grip.Parent = bottomBar
 local keyBoxW = isMobile and 40 or 48
 actionUseBtn = Instance.new("TextButton")
 actionUseBtn.Name = "UseEmoteButton"
-actionUseBtn.Size = UDim2.new(1,-(keyBoxW+42),1,-18)
-actionUseBtn.Position = UDim2.new(0,22,0,9)
+actionUseBtn.Size = isMobile and UDim2.new(1,-(keyBoxW+42),0,40) or UDim2.new(1,-(keyBoxW+42),1,-18)
+actionUseBtn.Position = isMobile and UDim2.new(0,22,0,25) or UDim2.new(0,22,0,9)
 actionUseBtn.BackgroundColor3 = Color3.fromRGB(5,5,5)
 actionUseBtn.Text = isES and "USAR EMOTE" or "USE EMOTE"
 actionUseBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -4379,8 +3953,8 @@ useStroke.Thickness = 1
 useStroke.Parent = actionUseBtn
 
 actionKeyLbl = Instance.new("TextLabel")
-actionKeyLbl.Size = UDim2.new(0,keyBoxW,1,-18)
-actionKeyLbl.Position = UDim2.new(1,-(keyBoxW+10),0,9)
+actionKeyLbl.Size = isMobile and UDim2.new(0,keyBoxW,0,40) or UDim2.new(0,keyBoxW,1,-18)
+actionKeyLbl.Position = isMobile and UDim2.new(1,-(keyBoxW+10),0,25) or UDim2.new(1,-(keyBoxW+10),0,9)
 actionKeyLbl.BackgroundColor3 = Color3.fromRGB(18,18,18)
 actionKeyLbl.Text = "—"
 actionKeyLbl.TextColor3 = Color3.fromRGB(220,220,220)
@@ -4393,6 +3967,21 @@ local actionKeyStroke = Instance.new("UIStroke")
 actionKeyStroke.Color = Color3.fromRGB(58,58,58)
 actionKeyStroke.Thickness = 1
 actionKeyStroke.Parent = actionKeyLbl
+
+actionSelectedLbl = Instance.new("TextLabel")
+actionSelectedLbl.Name = "SelectedEmoteLabel"
+actionSelectedLbl.Size = UDim2.new(1,-32,0,14)
+actionSelectedLbl.Position = UDim2.new(0,22,0,7)
+actionSelectedLbl.BackgroundTransparency = 1
+actionSelectedLbl.Text = isES and "SELECCIONA UN EMOTE" or "SELECT AN EMOTE"
+actionSelectedLbl.TextColor3 = Color3.fromRGB(125,125,125)
+actionSelectedLbl.Font = Enum.Font.GothamBold
+actionSelectedLbl.TextSize = 8
+actionSelectedLbl.TextXAlignment = Enum.TextXAlignment.Left
+actionSelectedLbl.TextTruncate = Enum.TextTruncate.AtEnd
+actionSelectedLbl.Visible = isMobile
+actionSelectedLbl.ZIndex = 17
+actionSelectedLbl.Parent = bottomBar
 
 UpdateSelectedEmoteUI = function(emote, newStroke, newContainer)
     if selectedCardStroke and selectedCardStroke ~= newStroke and selectedCardStroke.Parent then
@@ -4414,7 +4003,11 @@ UpdateSelectedEmoteUI = function(emote, newStroke, newContainer)
     end
     if not emote then
         actionKeyLbl.Text = "—"
+        if actionSelectedLbl then actionSelectedLbl.Text = isES and "SELECCIONA UN EMOTE" or "SELECT AN EMOTE" end
         return
+    end
+    if actionSelectedLbl then
+        actionSelectedLbl.Text = (isES and "SELECCIONADO  //  " or "SELECTED  //  ") .. string.upper(tostring(emote.name or "EMOTE"))
     end
     local kb = GetKeybind(emote.id)
     actionKeyLbl.Text = (kb and kb.key and tostring(kb.key)) or "—"
@@ -4456,16 +4049,16 @@ RegisterTheme(scroll, "ScrollBarImageColor3", "stroke")
 -- ===============================================================
 
 local function CalcLayout()
-    local PAD = isMobile and 6 or 8
+    local PAD = isMobile and 7 or 8
     local w = math.max(scroll.AbsoluteSize.X, 1)
     if isMobile then
-        cols = (workspace.CurrentCamera.ViewportSize.X >= 500) and 3 or 2
+        cols = (workspace.CurrentCamera.ViewportSize.X >= 520) and 3 or 2
         if currentTab == "animations" then cols = math.max(2, cols - 1) end
     else
         cols = 4
     end
     currentCardSize = math.max(54, (w - PAD * (cols - 1)) / cols)
-    local infoH = isMobile and 34 or 38
+    local infoH = isMobile and 46 or 40
     local CARD_TOTAL_H = currentCardSize + infoH
     local rowsVisible = math.max(1, math.floor(scroll.AbsoluteSize.Y / (CARD_TOTAL_H + PAD)))
     perPage = math.max(cols, cols * rowsVisible)
@@ -4550,11 +4143,11 @@ end
 -- ===============================================================
 
 local function ShowKeybindDialog(emoteId, emote, isEdit)
-    local existing = main:FindFirstChild("VexroKeybindOverlay")
+    local existing = main:FindFirstChild("HXKeybindOverlay")
     if existing then existing:Destroy() end
 
     local overlay = Instance.new("TextButton")
-    overlay.Name = "VexroKeybindOverlay"
+    overlay.Name = "HXKeybindOverlay"
     overlay.Size = UDim2.new(1,0,1,0)
     overlay.BackgroundColor3 = Color3.new(0,0,0)
     overlay.BackgroundTransparency = 0.36
@@ -4826,8 +4419,8 @@ end
 
 local function MakeCard(emote, ci, animate)
     local CARD = currentCardSize
-    local PAD = isMobile and 6 or 8
-    local INFO_H = isMobile and 34 or 38
+    local PAD = isMobile and 7 or 8
+    local INFO_H = isMobile and 46 or 40
     local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
     local TOTAL_H = CARD + INFO_H + KB_H
 
@@ -4839,98 +4432,160 @@ local function MakeCard(emote, ci, animate)
     cardContainer.ZIndex = 2
     cardContainer.Parent = scroll
     Instance.new("UICorner",cardContainer).CornerRadius = UDim.new(0,6)
+
     local containerStroke = Instance.new("UIStroke")
     containerStroke.Color = Color3.fromRGB(58,58,58)
     containerStroke.Thickness = 1
-    containerStroke.Transparency = 0.12
+    containerStroke.Transparency = 0.08
     containerStroke.Parent = cardContainer
 
     local col = ci % cols
     local row = math.floor(ci / cols)
     local targetX = col * (CARD + PAD)
     local targetY = PAD + row * (TOTAL_H + PAD)
-    cardContainer.Position = UDim2.new(0,targetX,0,animate and targetY+16 or targetY)
+    cardContainer.Position = UDim2.new(0,targetX,0,animate and targetY+14 or targetY)
     if animate then
         cardContainer.BackgroundTransparency = 1
         task.delay(ci*0.012,function()
             if cardContainer.Parent then
-                TweenService:Create(cardContainer,TweenInfo.new(0.20,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=UDim2.new(0,targetX,0,targetY),BackgroundTransparency=0}):Play()
+                TweenService:Create(cardContainer,TweenInfo.new(0.20,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{
+                    Position=UDim2.new(0,targetX,0,targetY),
+                    BackgroundTransparency=0
+                }):Play()
             end
         end)
     end
 
     local visual = Instance.new("ImageButton")
-    visual.Name = "Visual"
+    visual.Name = "EmotePreview"
     visual.Size = UDim2.new(1,-10,0,CARD-10)
     visual.Position = UDim2.new(0,5,0,5+KB_H)
-    visual.BackgroundColor3 = Color3.fromRGB(12,12,12)
+    visual.BackgroundColor3 = Color3.fromRGB(13,13,13)
     visual.AutoButtonColor = false
-    visual.Image = ResolveAssetImage(EMOTE_ICON)
-    visual.ImageColor3 = Color3.fromRGB(242,242,242)
-    visual.ImageTransparency = 0.08
     visual.ScaleType = Enum.ScaleType.Fit
+    visual.ImageColor3 = Color3.fromRGB(255,255,255)
+    visual.ImageTransparency = animate and 1 or 0
     visual.ZIndex = 3
     visual.Parent = cardContainer
     Instance.new("UICorner",visual).CornerRadius = UDim.new(0,5)
+
+    if emote.isAnimationPack then
+        local packId = tostring(emote.id):gsub("anim_", "")
+        visual.Image = "rbxthumb://type=BundleThumbnail&id=" .. packId .. "&w=420&h=420"
+    else
+        visual.Image = "rbxthumb://type=Asset&id=" .. tostring(emote.id) .. "&w=420&h=420"
+    end
+
+    if animate then
+        task.delay(ci*0.012,function()
+            if visual.Parent then
+                TweenService:Create(visual,TweenInfo.new(0.22,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{ImageTransparency=0}):Play()
+            end
+        end)
+    end
+
     local visualStroke = Instance.new("UIStroke")
     visualStroke.Color = Color3.fromRGB(48,48,48)
     visualStroke.Thickness = 1
     visualStroke.Parent = visual
 
-    local slash = Instance.new("Frame")
-    slash.Size = UDim2.new(0,22,0,2)
-    slash.Position = UDim2.new(0,7,0,8)
-    slash.Rotation = -18
-    slash.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    slash.BackgroundTransparency = 0.72
-    slash.BorderSizePixel = 0
-    slash.ZIndex = 4
-    slash.Parent = visual
+    -- Subtle dark gradient over the bottom of the real thumbnail.
+    local previewShade = Instance.new("Frame")
+    previewShade.Size = UDim2.new(1,0,0,math.max(28,math.floor(CARD*0.30)))
+    previewShade.Position = UDim2.new(0,0,1,-math.max(28,math.floor(CARD*0.30)))
+    previewShade.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    previewShade.BackgroundTransparency = 0.24
+    previewShade.BorderSizePixel = 0
+    previewShade.ZIndex = 4
+    previewShade.Parent = visual
+    Instance.new("UICorner",previewShade).CornerRadius = UDim.new(0,5)
+    local shadeGrad = Instance.new("UIGradient")
+    shadeGrad.Rotation = 90
+    shadeGrad.Transparency = NumberSequence.new{
+        NumberSequenceKeypoint.new(0,1),
+        NumberSequenceKeypoint.new(1,0.08)
+    }
+    shadeGrad.Parent = previewShade
+
+    local previewTag = Instance.new("TextLabel")
+    previewTag.Size = UDim2.new(0,isMobile and 42 or 48,0,16)
+    previewTag.Position = UDim2.new(0,7,0,7)
+    previewTag.BackgroundColor3 = Color3.fromRGB(3,3,3)
+    previewTag.BackgroundTransparency = 0.12
+    previewTag.Text = emote.isAnimationPack and "PACK" or "EMOTE"
+    previewTag.TextColor3 = Color3.fromRGB(225,225,225)
+    previewTag.Font = Enum.Font.GothamBlack
+    previewTag.TextSize = isMobile and 7 or 8
+    previewTag.ZIndex = 6
+    previewTag.Parent = visual
+    Instance.new("UICorner",previewTag).CornerRadius = UDim.new(0,4)
+    local tagStroke = Instance.new("UIStroke")
+    tagStroke.Color = Color3.fromRGB(78,78,78)
+    tagStroke.Thickness = 1
+    tagStroke.Transparency = 0.25
+    tagStroke.Parent = previewTag
+
+    -- Small monochrome scratch accents; decorative only.
+    local scratch1 = Instance.new("Frame")
+    scratch1.Size = UDim2.new(0,18,0,1)
+    scratch1.Position = UDim2.new(0,7,1,-10)
+    scratch1.Rotation = -13
+    scratch1.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    scratch1.BackgroundTransparency = 0.58
+    scratch1.BorderSizePixel = 0
+    scratch1.ZIndex = 6
+    scratch1.Parent = visual
+    local scratch2 = scratch1:Clone()
+    scratch2.Size = UDim2.new(0,11,0,1)
+    scratch2.Position = UDim2.new(0,13,1,-7)
+    scratch2.BackgroundTransparency = 0.74
+    scratch2.Parent = visual
 
     local isFav = IsFavorite(emote.id)
     local favBtn = Instance.new("TextButton")
-    favBtn.Size = UDim2.new(0,isMobile and 27 or 30,0,isMobile and 27 or 30)
-    favBtn.Position = UDim2.new(1,-(isMobile and 31 or 34),0,4)
-    favBtn.BackgroundColor3 = Color3.fromRGB(6,6,6)
-    favBtn.BackgroundTransparency = 0.08
+    favBtn.Size = UDim2.new(0,isMobile and 28 or 30,0,isMobile and 28 or 30)
+    favBtn.Position = UDim2.new(1,-(isMobile and 33 or 35),0,5+KB_H)
+    favBtn.BackgroundColor3 = Color3.fromRGB(4,4,4)
+    favBtn.BackgroundTransparency = 0.06
     favBtn.Text = isFav and SafeUtf8Char(0x2605) or SafeUtf8Char(0x2606)
     favBtn.TextColor3 = Color3.fromRGB(255,255,255)
     favBtn.Font = Enum.Font.GothamBold
-    favBtn.TextSize = isMobile and 17 or 19
+    favBtn.TextSize = isMobile and 18 or 19
     favBtn.AutoButtonColor = false
-    favBtn.ZIndex = 8
+    favBtn.ZIndex = 9
     favBtn.Parent = cardContainer
     favBtn.Visible = not emote.isAnimationPack
     Instance.new("UICorner",favBtn).CornerRadius = UDim.new(0,5)
     local favStroke = Instance.new("UIStroke")
-    favStroke.Color = isFav and Color3.fromRGB(235,235,235) or Color3.fromRGB(60,60,60)
+    favStroke.Color = isFav and Color3.fromRGB(245,245,245) or Color3.fromRGB(70,70,70)
     favStroke.Thickness = 1
     favStroke.Parent = favBtn
 
     local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size = UDim2.new(1,-46,0,INFO_H)
-    nameLbl.Position = UDim2.new(0,8,1,-INFO_H)
+    nameLbl.Size = UDim2.new(1,-12,0,isMobile and 24 or 22)
+    nameLbl.Position = UDim2.new(0,7,1,-INFO_H+3)
     nameLbl.BackgroundTransparency = 1
-    nameLbl.Text = string.upper(#emote.name>18 and emote.name:sub(1,17).."…" or emote.name)
-    nameLbl.TextColor3 = Color3.fromRGB(240,240,240)
+    nameLbl.Text = string.upper(#tostring(emote.name)>20 and tostring(emote.name):sub(1,19).."…" or tostring(emote.name))
+    nameLbl.TextColor3 = Color3.fromRGB(245,245,245)
     nameLbl.Font = Enum.Font.GothamBlack
-    nameLbl.TextSize = isMobile and 9 or 10
+    nameLbl.TextSize = isMobile and 10 or 10
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-    nameLbl.TextWrapped = true
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
     nameLbl.ZIndex = 5
     nameLbl.Parent = cardContainer
 
-    local tinyId = Instance.new("TextLabel")
-    tinyId.Size = UDim2.new(0,42,0,INFO_H)
-    tinyId.Position = UDim2.new(1,-48,1,-INFO_H)
-    tinyId.BackgroundTransparency = 1
-    tinyId.Text = "#"..tostring(ci+1+(page-1)*perPage)
-    tinyId.TextColor3 = Color3.fromRGB(95,95,95)
-    tinyId.Font = Enum.Font.GothamMedium
-    tinyId.TextSize = isMobile and 7 or 8
-    tinyId.TextXAlignment = Enum.TextXAlignment.Right
-    tinyId.ZIndex = 5
-    tinyId.Parent = cardContainer
+    local metaLbl = Instance.new("TextLabel")
+    metaLbl.Size = UDim2.new(1,-12,0,14)
+    metaLbl.Position = UDim2.new(0,7,1,-17)
+    metaLbl.BackgroundTransparency = 1
+    metaLbl.Text = (emote.isAnimationPack and "ANIMATION PACK" or "EMOTE") .. "   //   #" .. tostring(ci+1+(page-1)*perPage)
+    metaLbl.TextColor3 = Color3.fromRGB(100,100,100)
+    metaLbl.Font = Enum.Font.GothamMedium
+    metaLbl.TextSize = isMobile and 7 or 8
+    metaLbl.TextXAlignment = Enum.TextXAlignment.Left
+    metaLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    metaLbl.ZIndex = 5
+    metaLbl.Parent = cardContainer
 
     local kbHasBinding = GetKeybind(emote.id) ~= nil
     if (not isMobile) or _isPlaylistMode then
@@ -4967,24 +4622,24 @@ local function MakeCard(emote, ci, animate)
         TweenService:Create(favBtn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(235,235,235),TextColor3=Color3.fromRGB(0,0,0)}):Play()
     end)
     favBtn.MouseLeave:Connect(function()
-        TweenService:Create(favBtn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(6,6,6),TextColor3=Color3.fromRGB(255,255,255)}):Play()
+        TweenService:Create(favBtn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(4,4,4),TextColor3=Color3.fromRGB(255,255,255)}):Play()
     end)
     favBtn.MouseButton1Click:Connect(function()
         isFav = ToggleFavorite(emote.id)
         favBtn.Text = isFav and SafeUtf8Char(0x2605) or SafeUtf8Char(0x2606)
-        favStroke.Color = isFav and Color3.fromRGB(245,245,245) or Color3.fromRGB(60,60,60)
+        favStroke.Color = isFav and Color3.fromRGB(245,245,245) or Color3.fromRGB(70,70,70)
         if currentTab == "favorites" and not isFav then
             task.delay(0.12,function() if currentTab=="favorites" then UpdateTabData() end end)
         end
     end)
 
     visual.MouseEnter:Connect(function()
-        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(25,25,25),Position=UDim2.new(0,5,0,3+KB_H)}):Play()
-        TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(245,245,245),Thickness=1.4}):Play()
+        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(22,22,22),Position=UDim2.new(0,5,0,3+KB_H)}):Play()
+        TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(245,245,245),Thickness=1.35}):Play()
         TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(180,180,180)}):Play()
     end)
     visual.MouseLeave:Connect(function()
-        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(12,12,12),Position=UDim2.new(0,5,0,5+KB_H)}):Play()
+        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(13,13,13),Position=UDim2.new(0,5,0,5+KB_H)}):Play()
         TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Thickness=1}):Play()
         TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(58,58,58)}):Play()
     end)
@@ -5022,8 +4677,8 @@ local function UpdateCards(animate)
 	end
 	
 	local CARD = currentCardSize
-	local PAD = isMobile and 6 or 8
-	local INFO_H = isMobile and 34 or 38
+	local PAD = isMobile and 7 or 8
+	local INFO_H = isMobile and 46 or 40
 	local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
 	local CARD_TOTAL_H = CARD + INFO_H + KB_H
 	
@@ -5142,11 +4797,11 @@ RegisterTheme(playlistDoneBtn, "BackgroundColor3", "accent")
 
 ShowSavePlaylistDialog = function(onSave)
 	local success, err = pcall(function()
-		local existing = main:FindFirstChild("VexroSavePlaylistOverlay")
+		local existing = main:FindFirstChild("HXSavePlaylistOverlay")
 		if existing then existing:Destroy() end
 
 		local overlay = Instance.new("TextButton")
-		overlay.Name = "VexroSavePlaylistOverlay"
+		overlay.Name = "HXSavePlaylistOverlay"
 		overlay.Size = UDim2.new(1, 0, 1, 0)
 		overlay.BackgroundColor3 = Color3.new(0, 0, 0)
 		overlay.BackgroundTransparency = 0.5
@@ -5248,7 +4903,7 @@ ShowSavePlaylistDialog = function(onSave)
 		end)
 	end)
 	if not success then
-		warn("[Vexro Emotes] ShowSavePlaylistDialog Error: " .. tostring(err))
+		warn("[HX Emotes] ShowSavePlaylistDialog Error: " .. tostring(err))
 	end
 end
 
@@ -5288,15 +4943,15 @@ playlistDoneBtn.MouseButton1Click:Connect(function()
 		end)
 	end)
 	if not success then
-		warn("[Vexro Emotes] playlistDoneBtn.Click Error: " .. tostring(err))
+		warn("[HX Emotes] playlistDoneBtn.Click Error: " .. tostring(err))
 	end
 end)
 
 RefreshPlaylistsList = function()
 	local success, err = pcall(function()
-		print("[Vexro Emotes] RefreshPlaylistsList running. Playlists count: " .. tostring(#Playlists))
+		print("[HX Emotes] RefreshPlaylistsList running. Playlists count: " .. tostring(#Playlists))
 		if not playlistsPanel then
-			warn("[Vexro Emotes] playlistsPanel is NIL inside RefreshPlaylistsList!")
+			warn("[HX Emotes] playlistsPanel is NIL inside RefreshPlaylistsList!")
 			return
 		end
 		
@@ -5360,18 +5015,8 @@ RefreshPlaylistsList = function()
 
 				favBtn.MouseButton1Click:Connect(function()
 					local plId = tostring(pl.id)
-					local isCurrentlyFav = PlaylistFavorites[plId]
-					PlaylistFavorites[plId] = not isCurrentlyFav
-					
-					task.spawn(function()
-						ApiRequest("POST", "/emote/playlist/favorite", {
-							userId = tostring(player.UserId),
-							token = getOrCreateToken(),
-							playlistId = plId,
-							action = PlaylistFavorites[plId] and "add" or "remove"
-						})
-					end)
-					
+					PlaylistFavorites[plId] = not PlaylistFavorites[plId]
+					SaveData()
 					if RefreshPlaylistsList then RefreshPlaylistsList() end
 				end)
 
@@ -5445,13 +5090,6 @@ RefreshPlaylistsList = function()
 									break
 								end
 							end
-							task.spawn(function()
-								ApiRequest("POST", "/emote/playlist/delete", {
-									userId = tostring(player.UserId),
-									token = getOrCreateToken(),
-									playlistId = tostring(pl.id)
-								})
-							end)
 							SaveData()
 							if RefreshPlaylistsList then RefreshPlaylistsList() end
 						end
@@ -5472,7 +5110,7 @@ RefreshPlaylistsList = function()
 		playlistsPanel.CanvasSize = UDim2.new(0, 0, 0, yOffset + 20)
 	end)
 	if not success then
-		warn("[Vexro Emotes] RefreshPlaylistsList Inner Error: " .. tostring(err))
+		warn("[HX Emotes] RefreshPlaylistsList Inner Error: " .. tostring(err))
 	end
 end
 
@@ -5540,17 +5178,17 @@ UpdateTabData = function()
 		task.delay(0.1, function()
 		pcall(function()
 			if playlistsPanel then
-				print("[Vexro Emotes] Delayed check: playlistsPanel Parent=" .. tostring(playlistsPanel.Parent and playlistsPanel.Parent.Name or "nil") .. ", Visible=" .. tostring(playlistsPanel.Visible) .. ", Size=" .. tostring(playlistsPanel.Size) .. ", AbsSize=" .. tostring(playlistsPanel.AbsoluteSize) .. ", AbsPos=" .. tostring(playlistsPanel.AbsolutePosition) .. ", ZIndex=" .. tostring(playlistsPanel.ZIndex) .. ", CanvasSize=" .. tostring(playlistsPanel.CanvasSize))
+				print("[HX Emotes] Delayed check: playlistsPanel Parent=" .. tostring(playlistsPanel.Parent and playlistsPanel.Parent.Name or "nil") .. ", Visible=" .. tostring(playlistsPanel.Visible) .. ", Size=" .. tostring(playlistsPanel.Size) .. ", AbsSize=" .. tostring(playlistsPanel.AbsoluteSize) .. ", AbsPos=" .. tostring(playlistsPanel.AbsolutePosition) .. ", ZIndex=" .. tostring(playlistsPanel.ZIndex) .. ", CanvasSize=" .. tostring(playlistsPanel.CanvasSize))
 				for _, child in ipairs(playlistsPanel:GetChildren()) do
-					print("[Vexro Emotes] Delayed child: Name=" .. child.Name .. ", Class=" .. child.ClassName .. ", Size=" .. tostring(child:IsA("GuiObject") and child.Size or "N/A") .. ", AbsSize=" .. tostring(child:IsA("GuiObject") and child.AbsoluteSize or "N/A") .. ", AbsPos=" .. tostring(child:IsA("GuiObject") and child.AbsolutePosition or "N/A") .. ", Visible=" .. tostring(child:IsA("GuiObject") and child.Visible or "N/A"))
+					print("[HX Emotes] Delayed child: Name=" .. child.Name .. ", Class=" .. child.ClassName .. ", Size=" .. tostring(child:IsA("GuiObject") and child.Size or "N/A") .. ", AbsSize=" .. tostring(child:IsA("GuiObject") and child.AbsoluteSize or "N/A") .. ", AbsPos=" .. tostring(child:IsA("GuiObject") and child.AbsolutePosition or "N/A") .. ", Visible=" .. tostring(child:IsA("GuiObject") and child.Visible or "N/A"))
 					if child.Name == "playlistTopBar" then
 						for _, sub in ipairs(child:GetChildren()) do
-							print("[Vexro Emotes]   Sub-child: Name=" .. sub.Name .. ", Class=" .. sub.ClassName .. ", Size=" .. tostring(sub:IsA("GuiObject") and sub.Size or "N/A") .. ", AbsSize=" .. tostring(sub:IsA("GuiObject") and sub.AbsoluteSize or "N/A") .. ", AbsPos=" .. tostring(sub:IsA("GuiObject") and sub.AbsolutePosition or "N/A") .. ", Visible=" .. tostring(sub:IsA("GuiObject") and sub.Visible or "N/A"))
+							print("[HX Emotes]   Sub-child: Name=" .. sub.Name .. ", Class=" .. sub.ClassName .. ", Size=" .. tostring(sub:IsA("GuiObject") and sub.Size or "N/A") .. ", AbsSize=" .. tostring(sub:IsA("GuiObject") and sub.AbsoluteSize or "N/A") .. ", AbsPos=" .. tostring(sub:IsA("GuiObject") and sub.AbsolutePosition or "N/A") .. ", Visible=" .. tostring(sub:IsA("GuiObject") and sub.Visible or "N/A"))
 						end
 					end
 				end
 			else
-				print("[Vexro Emotes] Delayed check: playlistsPanel is NIL")
+				print("[HX Emotes] Delayed check: playlistsPanel is NIL")
 			end
 			print("[Hierarchy] --- START CONTENT HIERARCHY ---")
 			if content then
@@ -5744,7 +5382,9 @@ local miniIcon = Instance.new("ImageButton")
 miniIcon.Size = UDim2.new(0, iconS, 0, iconS)
 miniIcon.Position = UDim2.new(0, 20, 0.5, -iconS/2)
 miniIcon.BackgroundColor3 = currentTheme.secondary
-miniIcon.Image = "rbxassetid://88874992610290"
+miniIcon.Image = "rbxassetid://72742584610344"
+miniIcon.ImageColor3 = Color3.fromRGB(255,255,255)
+miniIcon.ScaleType = Enum.ScaleType.Fit
 miniIcon.Visible = false
 miniIcon.ZIndex = 1000
 miniIcon.Parent = gui
@@ -5836,13 +5476,6 @@ local function _CleanupScript()
 	pcall(function() VexroAcrylic.Stop() end)
 	-- Oynanan emote'u durdur
 	pcall(function() StopEmote(false) end)
-	-- Sunucuya disconnect bildir
-	pcall(function()
-		ApiRequest("POST", "/session/disconnect", {
-			userId = tostring(player.UserId),
-			token  = getOrCreateToken(),
-		})
-	end)
 	_genv().VexroEmotesCleanup = nil
 	_genv().lastVexroEmote = nil
 	_genv().autoReloadEnabled_Vexro = nil
@@ -6154,7 +5787,7 @@ local hudTrackerConn = nil
 local _hudHideToken  = 0
 
 HUD = Instance.new("Frame")
-HUD.Name                   = "VexroHUD"
+HUD.Name                   = "HXEmotesHUD"
 HUD.Size                   = isMobile and UDim2.new(0, 320, 0, 100) or UDim2.new(0, 500, 0, 104)
 HUD.Position               = UDim2.new(0.5, 0, 1, -120)
 HUD.AnchorPoint            = Vector2.new(0.5, 1)
@@ -6244,7 +5877,7 @@ hudCreator = Instance.new("TextLabel")
 hudCreator.Size                   = UDim2.new(1, -130, 0, 15)
 hudCreator.Position               = UDim2.new(0, 44, 0, 30)
 hudCreator.BackgroundTransparency = 1
-hudCreator.Text                   = "UNIVERSAL EMOTES"
+hudCreator.Text                   = "HX Emotes"
 hudCreator.TextColor3             = Color3.fromRGB(122, 122, 122)
 hudCreator.Font                   = Enum.Font.Gotham
 hudCreator.TextSize               = isMobile and 10 or 11
@@ -6364,7 +5997,7 @@ for si, spd in ipairs(HUD_SPEEDS) do
 end
 
 infoPanel = Instance.new("Frame")
-infoPanel.Name                   = "VexroInfoPanel"
+infoPanel.Name                   = "HXEmotesInfoPanel"
 infoPanel.Size                   = UDim2.new(0, 270, 0, 260)
 infoPanel.Position               = UDim2.new(0, -290, 1, -285)
 infoPanel.BackgroundColor3       = Color3.fromRGB(11, 11, 11)
@@ -6623,7 +6256,7 @@ local function _applyMetaToInfoPanel(meta)
 	else
 		infoDateLbl.Text = "—"
 	end
-	hudCreator.Text = (meta.creatorName and meta.creatorName ~= "") and meta.creatorName or "UNIVERSAL EMOTES"
+	hudCreator.Text = (meta.creatorName and meta.creatorName ~= "") and meta.creatorName or "HX Emotes"
 end
 
 local function _fetchAndCacheMeta(numId, targetId)
@@ -6688,7 +6321,7 @@ local function OpenInfoPanel(emoteId, emoteName)
 		infoPriceLbl.TextColor3 = Color3.fromRGB(162, 162, 162)
 		infoFavLbl.Text     = "…"
 		infoDateLbl.Text    = "…"
-		hudCreator.Text     = "UNIVERSAL EMOTES"
+		hudCreator.Text     = "HX Emotes"
 		if numId and numId > 0 then
 			task.spawn(_fetchAndCacheMeta, numId, numId)
 		end
@@ -6856,7 +6489,7 @@ ShowEmoteHUD = function(emoteId, emoteName)
 
 	RefreshHUDFavBtn()
 	hudName.Text    = emoteName or "Emote"
-	hudCreator.Text = "UNIVERSAL EMOTES"
+	hudCreator.Text = "HX Emotes"
 
 	_isPaused = false
 	RefreshHudPauseBtn()
