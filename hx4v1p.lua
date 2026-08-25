@@ -41,6 +41,11 @@ return {
         
     ["7708255764"] = { --pana Robert rbx
         vip = true,
-        expires = "permanent"                
+        expires = "permanent" 
+    }, 
+        
+    ["8805364041"] = { -- dc id 1540175917886734416 (sorteo)
+        vip = true,
+        expires = "permanent"          
     }
 }
