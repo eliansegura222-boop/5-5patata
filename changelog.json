@@ -1,5 +1,5 @@
 {
-  "enabled": true,
+  "enabled": false,
   "durationDays": 1,
   "durationHours": 0,
   "maxShowsPerUser": 1,
