@@ -580,6 +580,8 @@ local function HXStyleChamfer(obj, opts)
     local glowT = opts.glowTransparency
     local cornerCoreT = opts.cornerCoreTransparency
     local cornerGlowT = opts.cornerGlowTransparency
+    local cornerCoreThickness = opts.cornerCoreThickness
+    local cornerGlowThickness = opts.cornerGlowThickness
     local color = opts.color
 
     local function isCorner(name)
@@ -594,9 +596,15 @@ local function HXStyleChamfer(obj, opts)
             if name:sub(1,4) == "Core" then
                 local t = corner and cornerCoreT or coreT
                 if t ~= nil then seg.BackgroundTransparency = t end
+                if corner and cornerCoreThickness then
+                    seg.Size = UDim2.new(seg.Size.X.Scale, seg.Size.X.Offset, seg.Size.Y.Scale, cornerCoreThickness)
+                end
             elseif name:sub(1,4) == "Glow" then
                 local t = corner and cornerGlowT or glowT
                 if t ~= nil then seg.BackgroundTransparency = t end
+                if corner and cornerGlowThickness then
+                    seg.Size = UDim2.new(seg.Size.X.Scale, seg.Size.X.Offset, seg.Size.Y.Scale, cornerGlowThickness)
+                end
             end
         end
     end
@@ -2278,21 +2286,74 @@ local function CreateTabBtn(icon,tabName,yPos)
 
     local iconHolder
     if tabName == "recent" then
-        -- Use a clean, bright clock/recents glyph directly. No backing plate/panel.
-        -- This avoids dark pixels baked into some uploaded image assets.
-        iconHolder = Instance.new("TextLabel")
+        -- Vector clock icon: no uploaded image, no unicode glyph and no backing panel.
+        -- This renders consistently even on executors with incomplete fonts/assets.
+        iconHolder = Instance.new("Frame")
+        iconHolder.Name = "RecentClockIcon"
+        iconHolder:SetAttribute("HXClockIcon", true)
         iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
         iconHolder.Position = UDim2.new(0,isMobile and 7 or 10,0.5,0)
         iconHolder.AnchorPoint = Vector2.new(0,0.5)
         iconHolder.BackgroundTransparency = 1
-        iconHolder.Text = "◷"
-        iconHolder.TextColor3 = Color3.fromRGB(255,255,255)
-        iconHolder.TextTransparency = 0
-        iconHolder.Font = Enum.Font.GothamBold
-        iconHolder.TextSize = navIconSize
-        iconHolder.TextScaled = false
+        iconHolder.BorderSizePixel = 0
         iconHolder.ZIndex = 13
         iconHolder.Parent = btn
+
+        local ringSize = math.floor(navIconSize * 0.78)
+        local ring = Instance.new("Frame")
+        ring.Name = "ClockRing"
+        ring.Size = UDim2.fromOffset(ringSize, ringSize)
+        ring.Position = UDim2.fromScale(0.5,0.5)
+        ring.AnchorPoint = Vector2.new(0.5,0.5)
+        ring.BackgroundTransparency = 1
+        ring.BorderSizePixel = 0
+        ring.ZIndex = 14
+        ring.Parent = iconHolder
+        local ringCorner = Instance.new("UICorner")
+        ringCorner.CornerRadius = UDim.new(1,0)
+        ringCorner.Parent = ring
+        local ringStroke = Instance.new("UIStroke")
+        ringStroke.Name = "ClockStroke"
+        ringStroke.Color = Color3.fromRGB(255,255,255)
+        ringStroke.Thickness = isMobile and 1.8 or 2.2
+        ringStroke.Transparency = 0
+        ringStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        ringStroke.Parent = ring
+
+        local hourHand = Instance.new("Frame")
+        hourHand.Name = "ClockHourHand"
+        hourHand.Size = UDim2.new(0,isMobile and 2 or 3,0,math.floor(ringSize*0.23))
+        hourHand.Position = UDim2.fromScale(0.5,0.5)
+        hourHand.AnchorPoint = Vector2.new(0.5,1)
+        hourHand.Rotation = -48
+        hourHand.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        hourHand.BorderSizePixel = 0
+        hourHand.ZIndex = 15
+        hourHand.Parent = iconHolder
+        Instance.new("UICorner",hourHand).CornerRadius = UDim.new(1,0)
+
+        local minuteHand = Instance.new("Frame")
+        minuteHand.Name = "ClockMinuteHand"
+        minuteHand.Size = UDim2.new(0,isMobile and 2 or 3,0,math.floor(ringSize*0.31))
+        minuteHand.Position = UDim2.fromScale(0.5,0.5)
+        minuteHand.AnchorPoint = Vector2.new(0.5,1)
+        minuteHand.Rotation = 18
+        minuteHand.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        minuteHand.BorderSizePixel = 0
+        minuteHand.ZIndex = 15
+        minuteHand.Parent = iconHolder
+        Instance.new("UICorner",minuteHand).CornerRadius = UDim.new(1,0)
+
+        local centerDot = Instance.new("Frame")
+        centerDot.Name = "ClockCenter"
+        centerDot.Size = UDim2.fromOffset(isMobile and 4 or 5,isMobile and 4 or 5)
+        centerDot.Position = UDim2.fromScale(0.5,0.5)
+        centerDot.AnchorPoint = Vector2.new(0.5,0.5)
+        centerDot.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        centerDot.BorderSizePixel = 0
+        centerDot.ZIndex = 16
+        centerDot.Parent = iconHolder
+        Instance.new("UICorner",centerDot).CornerRadius = UDim.new(1,0)
     else
         iconHolder = Instance.new("ImageLabel")
         iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
@@ -2331,7 +2392,9 @@ local function CreateTabBtn(icon,tabName,yPos)
         if currentTab ~= tabName then
             TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(18,18,18),BackgroundTransparency=1}):Play()
             TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(225,225,225)}):Play()
-            if iconHolder:IsA("TextLabel") then
+            if iconHolder:GetAttribute("HXClockIcon") then
+                -- Clock stays crisp white; no panel or image tinting needed.
+            elseif iconHolder:IsA("TextLabel") then
                 TweenService:Create(iconHolder,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255),TextTransparency=0}):Play()
             else
                 TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255),ImageTransparency=0}):Play()
@@ -2343,7 +2406,9 @@ local function CreateTabBtn(icon,tabName,yPos)
         if currentTab ~= tabName then
             TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1}):Play()
             TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(170,170,170)}):Play()
-            if iconHolder:IsA("TextLabel") then
+            if iconHolder:GetAttribute("HXClockIcon") then
+                -- Keep Recent clock fully visible even while inactive.
+            elseif iconHolder:IsA("TextLabel") then
                 TweenService:Create(iconHolder,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255),TextTransparency=0}):Play()
             else
                 TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(190,190,190),ImageTransparency=0.12}):Play()
@@ -4847,6 +4912,7 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
         HXStyleChamfer(selectedCardContainer,{
             coreTransparency=0.62, glowTransparency=0.98,
             cornerCoreTransparency=0.58, cornerGlowTransparency=0.96,
+            cornerCoreThickness=1.05, cornerGlowThickness=2.8,
             color=Color3.fromRGB(190,190,190)
         })
     end
@@ -4863,7 +4929,8 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
         -- Selected emote: brighter cut corners, while straight edges stay restrained.
         HXStyleChamfer(newContainer,{
             coreTransparency=0.18, glowTransparency=0.80,
-            cornerCoreTransparency=0.00, cornerGlowTransparency=0.24,
+            cornerCoreTransparency=0.00, cornerGlowTransparency=0.01,
+            cornerCoreThickness=2.0, cornerGlowThickness=6.6,
             color=Color3.fromRGB(255,255,255)
         })
     end
@@ -5537,9 +5604,9 @@ local function MakeCard(emote, ci, animate)
         TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Thickness=1}):Play()
         TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(58,58,58)}):Play()
         if selectedEmote == emote then
-            HXStyleChamfer(cardContainer,{coreTransparency=0.18,glowTransparency=0.80,cornerCoreTransparency=0.00,cornerGlowTransparency=0.24,color=Color3.fromRGB(255,255,255)})
+            HXStyleChamfer(cardContainer,{coreTransparency=0.18,glowTransparency=0.80,cornerCoreTransparency=0.00,cornerGlowTransparency=0.01,cornerCoreThickness=2.0,cornerGlowThickness=6.6,color=Color3.fromRGB(255,255,255)})
         else
-            HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,color=Color3.fromRGB(190,190,190)})
+            HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,cornerCoreThickness=1.05,cornerGlowThickness=2.8,color=Color3.fromRGB(190,190,190)})
         end
     end)
 
@@ -5547,15 +5614,15 @@ local function MakeCard(emote, ci, animate)
         UpdateSelectedEmoteUI(emote, containerStroke, cardContainer)
         TweenService:Create(containerStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
         TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24),BackgroundTransparency=0.34}):Play()
-        HXStyleChamfer(cardContainer,{coreTransparency=0.10,glowTransparency=0.70,cornerCoreTransparency=0.00,cornerGlowTransparency=0.16,color=Color3.fromRGB(255,255,255)})
+        HXStyleChamfer(cardContainer,{coreTransparency=0.10,glowTransparency=0.70,cornerCoreTransparency=0.00,cornerGlowTransparency=0.00,cornerCoreThickness=2.4,cornerGlowThickness=8.0,color=Color3.fromRGB(255,255,255)})
         task.delay(0.24,function()
             if cardContainer.Parent then
                 TweenService:Create(containerStroke,TweenInfo.new(0.16),{Thickness=1}):Play()
                 TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8),BackgroundTransparency=(selectedEmote == emote) and 0.40 or 0.62}):Play()
                 if selectedEmote == emote then
-                    HXStyleChamfer(cardContainer,{coreTransparency=0.18,glowTransparency=0.80,cornerCoreTransparency=0.00,cornerGlowTransparency=0.24,color=Color3.fromRGB(255,255,255)})
+                    HXStyleChamfer(cardContainer,{coreTransparency=0.18,glowTransparency=0.80,cornerCoreTransparency=0.00,cornerGlowTransparency=0.01,cornerCoreThickness=2.0,cornerGlowThickness=6.6,color=Color3.fromRGB(255,255,255)})
                 else
-                    HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,color=Color3.fromRGB(190,190,190)})
+                    HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,cornerCoreThickness=1.05,cornerGlowThickness=2.8,color=Color3.fromRGB(190,190,190)})
                 end
             end
         end)
