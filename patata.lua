@@ -2266,42 +2266,45 @@ local function CreateTabBtn(icon,tabName,yPos)
     stroke.Parent = btn
     HXApplyChamfer(btn, {transparent=true, cut=isMobile and 6 or 8})
 
-    local iconHolder = Instance.new("ImageLabel")
     -- Slightly emphasize Favorites/Recent, while keeping Tools a little more compact.
     local navIconSize = isMobile and 19 or 22
     if tabName == "favorites" then
         navIconSize = isMobile and 24 or 28
     elseif tabName == "recent" then
-        navIconSize = isMobile and 29 or 34
+        navIconSize = isMobile and 31 or 37
     elseif tabName == "tools" then
         navIconSize = isMobile and 17 or 19
     end
-    iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
-    iconHolder.Position = UDim2.new(0,isMobile and 8 or 12,0.5,0)
-    iconHolder.AnchorPoint = Vector2.new(0,0.5)
-    iconHolder.BackgroundTransparency = 1
-    iconHolder.Image = ResolveAssetImage(icon)
-    iconHolder.ImageColor3 = Color3.fromRGB(255,255,255)
-    iconHolder.ImageTransparency = 0
-    iconHolder.ScaleType = Enum.ScaleType.Fit
-    iconHolder.ZIndex = 12
-    iconHolder.Parent = btn
 
-    -- RECENT used to look too dark. Give it a very subtle light plate so the
-    -- icon stays readable even when its source artwork has dark pixels.
+    local iconHolder
     if tabName == "recent" then
-        local recentPlate = Instance.new("Frame")
-        recentPlate.Name = "RecentIconPlate"
-        recentPlate.Size = UDim2.fromOffset(navIconSize + (isMobile and 6 or 8), navIconSize + (isMobile and 6 or 8))
-        recentPlate.Position = UDim2.new(0, isMobile and 5 or 8, 0.5, 0)
-        recentPlate.AnchorPoint = Vector2.new(0,0.5)
-        recentPlate.BackgroundColor3 = Color3.fromRGB(255,255,255)
-        recentPlate.BackgroundTransparency = 0.91
-        recentPlate.BorderSizePixel = 0
-        recentPlate.ZIndex = 11
-        recentPlate:SetAttribute("HXNoAutoCorner", true)
-        recentPlate.Parent = btn
+        -- Use a clean, bright clock/recents glyph directly. No backing plate/panel.
+        -- This avoids dark pixels baked into some uploaded image assets.
+        iconHolder = Instance.new("TextLabel")
+        iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
+        iconHolder.Position = UDim2.new(0,isMobile and 7 or 10,0.5,0)
+        iconHolder.AnchorPoint = Vector2.new(0,0.5)
+        iconHolder.BackgroundTransparency = 1
+        iconHolder.Text = "◷"
+        iconHolder.TextColor3 = Color3.fromRGB(255,255,255)
+        iconHolder.TextTransparency = 0
+        iconHolder.Font = Enum.Font.GothamBold
+        iconHolder.TextSize = navIconSize
+        iconHolder.TextScaled = false
         iconHolder.ZIndex = 13
+        iconHolder.Parent = btn
+    else
+        iconHolder = Instance.new("ImageLabel")
+        iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
+        iconHolder.Position = UDim2.new(0,isMobile and 8 or 12,0.5,0)
+        iconHolder.AnchorPoint = Vector2.new(0,0.5)
+        iconHolder.BackgroundTransparency = 1
+        iconHolder.Image = ResolveAssetImage(icon)
+        iconHolder.ImageColor3 = Color3.fromRGB(255,255,255)
+        iconHolder.ImageTransparency = 0
+        iconHolder.ScaleType = Enum.ScaleType.Fit
+        iconHolder.ZIndex = 12
+        iconHolder.Parent = btn
     end
 
     local label = Instance.new("TextLabel")
@@ -2328,7 +2331,11 @@ local function CreateTabBtn(icon,tabName,yPos)
         if currentTab ~= tabName then
             TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(18,18,18),BackgroundTransparency=1}):Play()
             TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(225,225,225)}):Play()
-            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255),ImageTransparency=0}):Play()
+            if iconHolder:IsA("TextLabel") then
+                TweenService:Create(iconHolder,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255),TextTransparency=0}):Play()
+            else
+                TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255),ImageTransparency=0}):Play()
+            end
             HXStyleChamfer(btn,{coreTransparency=0.38,glowTransparency=0.94,color=Color3.fromRGB(220,220,220)})
         end
     end)
@@ -2336,9 +2343,11 @@ local function CreateTabBtn(icon,tabName,yPos)
         if currentTab ~= tabName then
             TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1}):Play()
             TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(170,170,170)}):Play()
-            local iconT = tabName == "recent" and 0 or 0.12
-            local iconC = tabName == "recent" and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190)
-            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=iconC,ImageTransparency=iconT}):Play()
+            if iconHolder:IsA("TextLabel") then
+                TweenService:Create(iconHolder,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255),TextTransparency=0}):Play()
+            else
+                TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(190,190,190),ImageTransparency=0.12}):Play()
+            end
             HXStyleChamfer(btn,{coreTransparency=0.72,glowTransparency=1,color=Color3.fromRGB(180,180,180)})
         end
     end)
@@ -2642,7 +2651,7 @@ local function MakeWindowControl(name, kind, rightOffset)
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     pcall(function() stroke.LineJoinMode = Enum.LineJoinMode.Round end)
     stroke.Parent = b
-    HXApplyChamfer(b, {transparent=true, cut=isMobile and 5 or 6, thickness=0.9, glowThickness=1, coreTransparency=0.46, glowTransparency=1})
+    HXApplyChamfer(b, {transparent=true, cut=isMobile and 5 or 6, thickness=1.0, glowThickness=1, coreTransparency=0.24, glowTransparency=1, color=Color3.fromRGB(220,220,220)})
 
     if kind == "minus" then
         local line = Instance.new("Frame")
@@ -2690,14 +2699,14 @@ local function MakeWindowControl(name, kind, rightOffset)
             BackgroundColor3 = Color3.fromRGB(34,34,34),
             BackgroundTransparency = 1
         }):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 1.0, Transparency = 0.40}):Play()
+        HXStyleChamfer(b,{coreTransparency=0.10,glowTransparency=1,color=Color3.fromRGB(245,245,245)})
     end)
     b.MouseLeave:Connect(function()
         TweenService:Create(b, TweenInfo.new(0.12), {
             BackgroundColor3 = Color3.fromRGB(15,15,15),
             BackgroundTransparency = 1
         }):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 0.9, Transparency = 0.58}):Play()
+        HXStyleChamfer(b,{coreTransparency=0.24,glowTransparency=1,color=Color3.fromRGB(220,220,220)})
     end)
 
     return b
@@ -4850,11 +4859,11 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
         TweenService:Create(newStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
     end
     if newContainer and newContainer.Parent then
-        TweenService:Create(newContainer,TweenInfo.new(0.14),{BackgroundColor3=currentTheme.tertiary,BackgroundTransparency=0.44}):Play()
+        TweenService:Create(newContainer,TweenInfo.new(0.14),{BackgroundColor3=currentTheme.tertiary,BackgroundTransparency=0.40}):Play()
         -- Selected emote: brighter cut corners, while straight edges stay restrained.
         HXStyleChamfer(newContainer,{
-            coreTransparency=0.28, glowTransparency=0.88,
-            cornerCoreTransparency=0.02, cornerGlowTransparency=0.54,
+            coreTransparency=0.18, glowTransparency=0.80,
+            cornerCoreTransparency=0.00, cornerGlowTransparency=0.24,
             color=Color3.fromRGB(255,255,255)
         })
     end
@@ -5528,7 +5537,7 @@ local function MakeCard(emote, ci, animate)
         TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Thickness=1}):Play()
         TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(58,58,58)}):Play()
         if selectedEmote == emote then
-            HXStyleChamfer(cardContainer,{coreTransparency=0.28,glowTransparency=0.88,cornerCoreTransparency=0.02,cornerGlowTransparency=0.54,color=Color3.fromRGB(255,255,255)})
+            HXStyleChamfer(cardContainer,{coreTransparency=0.18,glowTransparency=0.80,cornerCoreTransparency=0.00,cornerGlowTransparency=0.24,color=Color3.fromRGB(255,255,255)})
         else
             HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,color=Color3.fromRGB(190,190,190)})
         end
@@ -5537,14 +5546,14 @@ local function MakeCard(emote, ci, animate)
     visual.MouseButton1Click:Connect(function()
         UpdateSelectedEmoteUI(emote, containerStroke, cardContainer)
         TweenService:Create(containerStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
-        TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24),BackgroundTransparency=0.38}):Play()
-        HXStyleChamfer(cardContainer,{coreTransparency=0.20,glowTransparency=0.82,cornerCoreTransparency=0,cornerGlowTransparency=0.48,color=Color3.fromRGB(255,255,255)})
+        TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24),BackgroundTransparency=0.34}):Play()
+        HXStyleChamfer(cardContainer,{coreTransparency=0.10,glowTransparency=0.70,cornerCoreTransparency=0.00,cornerGlowTransparency=0.16,color=Color3.fromRGB(255,255,255)})
         task.delay(0.24,function()
             if cardContainer.Parent then
                 TweenService:Create(containerStroke,TweenInfo.new(0.16),{Thickness=1}):Play()
-                TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8),BackgroundTransparency=(selectedEmote == emote) and 0.44 or 0.62}):Play()
+                TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8),BackgroundTransparency=(selectedEmote == emote) and 0.40 or 0.62}):Play()
                 if selectedEmote == emote then
-                    HXStyleChamfer(cardContainer,{coreTransparency=0.28,glowTransparency=0.88,cornerCoreTransparency=0.02,cornerGlowTransparency=0.54,color=Color3.fromRGB(255,255,255)})
+                    HXStyleChamfer(cardContainer,{coreTransparency=0.18,glowTransparency=0.80,cornerCoreTransparency=0.00,cornerGlowTransparency=0.24,color=Color3.fromRGB(255,255,255)})
                 else
                     HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,color=Color3.fromRGB(190,190,190)})
                 end
@@ -5684,7 +5693,8 @@ UpdateTabStyles = function()
                 end
                 TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=iconColor,ImageTransparency=iconTransparency}):Play()
             elseif data.img:IsA("TextLabel") then
-                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190)}):Play()
+                local textIconColor = (name == "recent") and Color3.fromRGB(255,255,255) or (active and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190))
+                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=textIconColor,TextTransparency=0}):Play()
             end
         end
         if data.label then
