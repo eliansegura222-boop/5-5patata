@@ -1483,7 +1483,7 @@ task.wait(0.3)
 local function LoadEmotes()
 	debugLog("LoadEmotes starting")
 	local success, result = pcall(function()
-		local response = game:HttpGet(("https://" .. string.char(118,101,120,114,111) .. "scripts.com.tr/emotes.json?t=") .. tick())
+		local response = game:HttpGet("https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/emotes.json?t=" .. tick())
 		return HttpService:JSONDecode(response)
 	end)
 	debugLog("LoadEmotes JSON loaded. success=" .. tostring(success) .. " resultType=" .. type(result))
@@ -1526,7 +1526,7 @@ end
 AnimationPacks = {}
 local function LoadAnimations()
 	local success, result = pcall(function()
-		local response = game:HttpGet(("https://" .. string.char(118,101,120,114,111) .. "scripts.com.tr/animations.json?t=") .. tick())
+		local response = game:HttpGet("https://raw.githubusercontent.com/eliansegura222-boop/5-5patata/refs/heads/main/animations.json?t=" .. tick())
 		return HttpService:JSONDecode(response)
 	end)
 
@@ -2001,6 +2001,9 @@ local TARGET_MOBILE_CARD = 86
 local function GetDefaultSize()
     local vp = workspace.CurrentCamera.ViewportSize
     local scale = math.clamp(tonumber(Settings.panelScale) or 1, 0.75, 1.35)
+    -- Mobile baseline increased by 20%: the new 100% matches the old 120% size.
+    -- The percentage control still works normally from this larger mobile baseline.
+    local effectiveScale = isMobile and (scale * 1.20) or scale
     local w, h
     if isMobile then
         w = math.clamp(math.floor(vp.X * 0.76), 260, 430)
@@ -2009,8 +2012,8 @@ local function GetDefaultSize()
         w = math.clamp(math.floor(vp.X * 0.46), 540, 640)
         h = math.clamp(math.floor(vp.Y * 0.50), 340, 400)
     end
-    w = math.clamp(math.floor(w * scale), isMobile and 235 or 430, math.floor(vp.X * 0.96))
-    h = math.clamp(math.floor(h * scale), isMobile and 245 or 300, math.floor(vp.Y * 0.92))
+    w = math.clamp(math.floor(w * effectiveScale), isMobile and 235 or 430, math.floor(vp.X * 0.96))
+    h = math.clamp(math.floor(h * effectiveScale), isMobile and 245 or 300, math.floor(vp.Y * 0.92))
     return UDim2.new(0,w,0,h)
 end
 
