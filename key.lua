@@ -1,4 +1,4 @@
 return {
     enabled = true,
-    key = "ikaH"
+    key = "hx160"
 }
