@@ -528,6 +528,7 @@ local function HXApplyChamfer(obj, opts)
     border.BorderSizePixel = 0
     border.Active = false
     border.Selectable = false
+    pcall(function() border.Interactable = false end)
     border.ZIndex = obj.ZIndex + 30
     border:SetAttribute("HXNoAutoCorner", true)
     border.Parent = obj
@@ -544,6 +545,7 @@ local function HXApplyChamfer(obj, opts)
         f.BorderSizePixel = 0
         f.Active = false
         f.Selectable = false
+        pcall(function() f.Interactable = false end)
         f.ZIndex = border.ZIndex + (zadd or 0)
         f:SetAttribute("HXNoAutoCorner", true)
         f.Parent = border
@@ -2423,7 +2425,7 @@ local function CreateTabBtn(icon,tabName,yPos)
             else
                 TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255),ImageTransparency=0}):Play()
             end
-            HXStyleChamfer(btn,{coreTransparency=0.38,glowTransparency=0.94,color=Color3.fromRGB(220,220,220)})
+            HXStyleChamfer(btn,{coreTransparency=0.64,glowTransparency=1,color=Color3.fromRGB(195,195,195)})
         end
     end)
     btn.MouseLeave:Connect(function()
@@ -2437,7 +2439,7 @@ local function CreateTabBtn(icon,tabName,yPos)
             else
                 TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(190,190,190),ImageTransparency=0.12}):Play()
             end
-            HXStyleChamfer(btn,{coreTransparency=0.72,glowTransparency=1,color=Color3.fromRGB(180,180,180)})
+            HXStyleChamfer(btn,{coreTransparency=0.86,glowTransparency=1,color=Color3.fromRGB(150,150,150)})
         end
     end)
 
@@ -2825,7 +2827,7 @@ discordTopBtn.TextSize = isMobile and 8 or 10
 discordTopBtn.AutoButtonColor = false
 discordTopBtn.ZIndex = 11
 discordTopBtn.Parent = titleBar
-HXApplyChamfer(discordTopBtn, {transparent=true, cut=isMobile and 6 or 8, coreTransparency=0.52, glowTransparency=0.97})
+HXApplyChamfer(discordTopBtn, {transparent=true, cut=isMobile and 6 or 8, thickness=1.05, glowThickness=2.8, coreTransparency=0.10, glowTransparency=0.68, color=Color3.fromRGB(255,255,255)})
 
 local universalTopW = isMobile and 58 or 72
 local universalTopGap = isMobile and 18 or 26
@@ -2851,12 +2853,14 @@ discordTopBtn.MouseEnter:Connect(function()
         BackgroundColor3=Color3.fromRGB(70,70,70),
         TextColor3=Color3.fromRGB(255,255,255)
     }):Play()
+    HXStyleChamfer(discordTopBtn,{coreTransparency=0.00,glowTransparency=0.48,color=Color3.fromRGB(255,255,255)})
 end)
 discordTopBtn.MouseLeave:Connect(function()
     TweenService:Create(discordTopBtn,TweenInfo.new(0.12),{
         BackgroundColor3=Color3.fromRGB(54,54,54),
         TextColor3=Color3.fromRGB(245,245,245)
     }):Play()
+    HXStyleChamfer(discordTopBtn,{coreTransparency=0.10,glowTransparency=0.68,color=Color3.fromRGB(255,255,255)})
 end)
 discordTopBtn.MouseButton1Click:Connect(function()
     pcall(function() if setclipboard then setclipboard("https://discord.gg/sewRzHAG5J") end end)
@@ -5763,25 +5767,25 @@ UpdateTabStyles = function()
 
         -- Only the SELECTED category gets the bright neon cut-corner treatment.
         if active then
-            HXStyleChamfer(data.btn,{coreTransparency=0.06,glowTransparency=0.72,color=Color3.fromRGB(250,250,250)})
+            HXStyleChamfer(data.btn,{coreTransparency=0.08,glowTransparency=0.76,color=Color3.fromRGB(250,250,250)})
         else
-            HXStyleChamfer(data.btn,{coreTransparency=0.72,glowTransparency=1,color=Color3.fromRGB(180,180,180)})
+            HXStyleChamfer(data.btn,{coreTransparency=0.86,glowTransparency=1,color=Color3.fromRGB(150,150,150)})
         end
 
         if data.img then
             if data.img:GetAttribute("HXClockIcon") then
-                HXStyleRecentClock(data.img, active and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190), active and 0 or 0.12)
+                HXStyleRecentClock(data.img, active and Color3.fromRGB(255,255,255) or Color3.fromRGB(185,185,185), active and 0 or 0.18)
             elseif data.img:IsA("ImageLabel") or data.img:IsA("ImageButton") then
-                local iconColor = active and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190)
-                local iconTransparency = active and 0 or 0.12
+                local iconColor = active and Color3.fromRGB(255,255,255) or Color3.fromRGB(185,185,185)
+                local iconTransparency = active and 0 or 0.18
                 TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=iconColor,ImageTransparency=iconTransparency}):Play()
             elseif data.img:IsA("TextLabel") then
-                local textIconColor = active and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190)
-                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=textIconColor,TextTransparency=active and 0 or 0.12}):Play()
+                local textIconColor = active and Color3.fromRGB(255,255,255) or Color3.fromRGB(185,185,185)
+                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=textIconColor,TextTransparency=active and 0 or 0.18}):Play()
             end
         end
         if data.label then
-            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(255,255,255) or Color3.fromRGB(170,170,170)}):Play()
+            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(255,255,255) or Color3.fromRGB(175,175,175)}):Play()
         end
     end
 end
