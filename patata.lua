@@ -4802,10 +4802,12 @@ else
     previewImage.Position = UDim2.new(0,10,0,40)
 end
 previewImage.BackgroundColor3 = currentTheme.tertiary
-previewImage.BackgroundTransparency = 0.46
+previewImage.BackgroundTransparency = 0.18
 previewImage.Image = ""
 previewImage.ImageColor3 = Color3.fromRGB(255,255,255)
-previewImage.ScaleType = Enum.ScaleType.Fit
+previewImage.ImageTransparency = 0
+previewImage.ScaleType = Enum.ScaleType.Crop
+previewImage.ClipsDescendants = true
 previewImage.ZIndex = 13
 previewImage.Parent = previewPanel
 Instance.new("UICorner",previewImage).CornerRadius = UDim.new(0,7)
@@ -5002,6 +5004,12 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
     end
 
     if previewImage and previewName and previewMeta then
+        -- Reset the image surface before swapping thumbnails so a previous preview
+        -- can never remain visually underneath the next one on slower executors.
+        previewImage.Image = ""
+        previewImage.ImageRectOffset = Vector2.new(0,0)
+        previewImage.ImageRectSize = Vector2.new(0,0)
+        previewImage.ScaleType = Enum.ScaleType.Crop
         if emote.isAnimationPack then
             local packId = tostring(emote.id):gsub("anim_","")
             previewImage.Image = "rbxthumb://type=BundleThumbnail&id="..packId.."&w=420&h=420"
@@ -5497,26 +5505,41 @@ local function MakeCard(emote, ci, animate)
     visual.Size = UDim2.new(1,-10,0,CARD-10)
     visual.Position = UDim2.new(0,5,0,5+KB_H)
     visual.BackgroundColor3 = currentTheme.tertiary
-    visual.BackgroundTransparency = 0.42
+    visual.BackgroundTransparency = 0.18
     visual.AutoButtonColor = false
-    visual.ScaleType = Enum.ScaleType.Fit
-    visual.ImageColor3 = Color3.fromRGB(255,255,255)
-    visual.ImageTransparency = animate and 1 or 0
+    visual.Image = ""
+    visual.ImageTransparency = 1
+    visual.ClipsDescendants = true
     visual.ZIndex = 3
     visual.Parent = cardContainer
     HXApplyChamfer(visual, {transparent=false, cut=isMobile and 5 or 6, thickness=0.85, glowThickness=1.8, coreTransparency=0.68, glowTransparency=1})
 
+    -- Dedicated art layer: one thumbnail only, clipped to the preview surface.
+    -- Using Crop removes the second/letterboxed background that some Roblox thumbnails show with Fit.
+    local previewArt = Instance.new("ImageLabel")
+    previewArt.Name = "PreviewArt"
+    previewArt.Size = UDim2.fromScale(1,1)
+    previewArt.Position = UDim2.fromScale(0,0)
+    previewArt.BackgroundTransparency = 1
+    previewArt.BorderSizePixel = 0
+    previewArt.ImageColor3 = Color3.fromRGB(255,255,255)
+    previewArt.ImageTransparency = animate and 1 or 0
+    previewArt.ScaleType = Enum.ScaleType.Crop
+    previewArt.ZIndex = 3
+    previewArt.Active = false
+    previewArt.Parent = visual
+
     if emote.isAnimationPack then
         local packId = tostring(emote.id):gsub("anim_", "")
-        visual.Image = "rbxthumb://type=BundleThumbnail&id=" .. packId .. "&w=420&h=420"
+        previewArt.Image = "rbxthumb://type=BundleThumbnail&id=" .. packId .. "&w=420&h=420"
     else
-        visual.Image = "rbxthumb://type=Asset&id=" .. tostring(emote.id) .. "&w=420&h=420"
+        previewArt.Image = "rbxthumb://type=Asset&id=" .. tostring(emote.id) .. "&w=420&h=420"
     end
 
     if animate then
         task.delay(ci*0.012,function()
-            if visual.Parent then
-                TweenService:Create(visual,TweenInfo.new(0.22,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{ImageTransparency=0}):Play()
+            if previewArt.Parent then
+                TweenService:Create(previewArt,TweenInfo.new(0.22,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{ImageTransparency=0}):Play()
             end
         end)
     end
