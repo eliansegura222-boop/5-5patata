@@ -481,7 +481,99 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
 
+-- HX CUT-CORNER / NEON BORDER SYSTEM
+-- Draws a true chamfer-style outline using 8 line segments instead of UICorner.
+local function HXApplyChamfer(obj, opts)
+    if not obj or not obj:IsA("GuiObject") then return end
+    opts = opts or {}
+    local cut = tonumber(opts.cut) or (isMobile and 6 or 8)
+    local color = opts.color or Color3.fromRGB(238,238,238)
+    local coreThickness = tonumber(opts.thickness) or 1.15
+    local glowThickness = tonumber(opts.glowThickness) or 3.4
+    local transparent = opts.transparent == true
+
+    obj:SetAttribute("HXChamfer", true)
+    if transparent then
+        obj:SetAttribute("HXChamferTransparent", true)
+        obj.BackgroundTransparency = 1
+        if not obj:GetAttribute("HXChamferBgGuard") then
+            obj:SetAttribute("HXChamferBgGuard", true)
+            obj:GetPropertyChangedSignal("BackgroundTransparency"):Connect(function()
+                if obj and obj.Parent and obj:GetAttribute("HXChamferTransparent") and obj.BackgroundTransparency ~= 1 then
+                    obj.BackgroundTransparency = 1
+                end
+            end)
+        end
+    end
+
+    for _, child in ipairs(obj:GetChildren()) do
+        if child:IsA("UICorner") then
+            child:Destroy()
+        elseif child:IsA("UIStroke") and not child:GetAttribute("HXKeepStroke") then
+            child.Enabled = false
+        elseif child.Name == "HXChamferBorder" then
+            child:Destroy()
+        end
+    end
+
+    local border = Instance.new("Frame")
+    border.Name = "HXChamferBorder"
+    border.Size = UDim2.fromScale(1,1)
+    border.Position = UDim2.fromScale(0,0)
+    border.BackgroundTransparency = 1
+    border.BorderSizePixel = 0
+    border.Active = false
+    border.Selectable = false
+    border.ZIndex = obj.ZIndex + 30
+    border:SetAttribute("HXNoAutoCorner", true)
+    border.Parent = obj
+
+    local function line(name, size, pos, rotation, thickness, transparency, zadd)
+        local f = Instance.new("Frame")
+        f.Name = name
+        f.Size = size
+        f.Position = pos
+        f.AnchorPoint = Vector2.new(0.5,0.5)
+        f.Rotation = rotation or 0
+        f.BackgroundColor3 = color
+        f.BackgroundTransparency = transparency
+        f.BorderSizePixel = 0
+        f.Active = false
+        f.Selectable = false
+        f.ZIndex = border.ZIndex + (zadd or 0)
+        f:SetAttribute("HXNoAutoCorner", true)
+        f.Parent = border
+        return f
+    end
+
+    local function build(prefix, thickness, transparency, zadd)
+        local diagLen = math.max(2, math.floor(cut * 1.42))
+        -- straight edges
+        line(prefix.."Top",    UDim2.new(1,-cut*2,0,thickness), UDim2.new(0.5,0,0,thickness/2), 0, thickness, transparency, zadd)
+        line(prefix.."Bottom", UDim2.new(1,-cut*2,0,thickness), UDim2.new(0.5,0,1,-thickness/2), 0, thickness, transparency, zadd)
+        line(prefix.."Left",   UDim2.new(0,thickness,1,-cut*2), UDim2.new(0,thickness/2,0.5,0), 0, thickness, transparency, zadd)
+        line(prefix.."Right",  UDim2.new(0,thickness,1,-cut*2), UDim2.new(1,-thickness/2,0.5,0), 0, thickness, transparency, zadd)
+        -- diagonal cut corners
+        line(prefix.."TL", UDim2.new(0,diagLen,0,thickness), UDim2.new(0,cut/2,0,cut/2), -45, thickness, transparency, zadd)
+        line(prefix.."TR", UDim2.new(0,diagLen,0,thickness), UDim2.new(1,-cut/2,0,cut/2), 45, thickness, transparency, zadd)
+        line(prefix.."BL", UDim2.new(0,diagLen,0,thickness), UDim2.new(0,cut/2,1,-cut/2), 45, thickness, transparency, zadd)
+        line(prefix.."BR", UDim2.new(0,diagLen,0,thickness), UDim2.new(1,-cut/2,1,-cut/2), -45, thickness, transparency, zadd)
+    end
+
+    build("Glow", glowThickness, 0.73, 0)
+    build("Core", coreThickness, 0.04, 2)
+    return border
+end
+
 local function HXNormalizeVisual(obj)
+    if obj:IsA("UICorner") and obj.Parent and obj.Parent:GetAttribute("HXChamfer") then
+        obj:Destroy()
+        return
+    end
+    if obj:IsA("UIStroke") and obj.Parent and obj.Parent:GetAttribute("HXChamfer") and not obj:GetAttribute("HXKeepStroke") then
+        obj.Enabled = false
+        return
+    end
     if obj:IsA("GuiObject") then
         obj.BorderSizePixel = 0
     end
@@ -510,7 +602,7 @@ local function HXNormalizeVisual(obj)
             return
         end
         pcall(function() obj.LineJoinMode = Enum.LineJoinMode.Round end)
-        if parent and parent:IsA("GuiObject") and not parent:FindFirstChildOfClass("UICorner") then
+        if parent and parent:IsA("GuiObject") and not parent:GetAttribute("HXChamfer") and not parent:GetAttribute("HXNoAutoCorner") and not parent:FindFirstChildOfClass("UICorner") then
             local c = Instance.new("UICorner")
             c.CornerRadius = UDim.new(0, 10)
             c.Parent = parent
@@ -524,7 +616,7 @@ local function HXNormalizeVisual(obj)
         end
     end
     if obj:IsA("Frame") or obj:IsA("TextButton") or obj:IsA("TextBox") or obj:IsA("ImageButton") then
-        if obj.BackgroundTransparency < 1 and not obj:FindFirstChildOfClass("UICorner") then
+        if obj.BackgroundTransparency < 1 and not obj:GetAttribute("HXChamfer") and not obj:GetAttribute("HXNoAutoCorner") and not obj:FindFirstChildOfClass("UICorner") then
             local c = Instance.new("UICorner")
             c.CornerRadius = UDim.new(0, 10)
             c.Parent = obj
@@ -1607,13 +1699,12 @@ local lastHXAnimationPack = nil
 local _hxViewport = workspace.CurrentCamera.ViewportSize
 local mobileWide = isMobile and _hxViewport.X >= 520 and _hxViewport.Y < 500
 local previewStacked = isMobile and not mobileWide
-local sideBarW = isMobile and ((_hxViewport.X < 420) and 104 or 116) or math.clamp(math.floor(_hxViewport.X * 0.18), 230, 320)
-local tabBtnS = isMobile and ((_hxViewport.Y < 430) and 34 or 42) or 64
+local sideBarW = isMobile and ((_hxViewport.X < 420) and 104 or 112) or 148
+local tabBtnS = isMobile and ((_hxViewport.Y < 430) and 34 or 42) or 40
 local bottomBarH = 0
 local previewPanelW = 0
 local previewPanelH = 0
 local currentCardSize = 0
-local gridOffsetX = 0
 local sortMode = "DEFAULT"
 local Refresh
 local _badEmotes = {}
@@ -1851,37 +1942,22 @@ PlayEmote = function(id, name, silent, syncStartTime)
 end
 
 
-local TARGET_PC_CARD = 270
-local TARGET_MOBILE_CARD = 88
+local TARGET_PC_CARD = 112
+local TARGET_MOBILE_CARD = 86
 
 local function GetDefaultSize()
     local vp = workspace.CurrentCamera.ViewportSize
     local scale = math.clamp(tonumber(Settings.panelScale) or 1, 0.75, 1.35)
-    local maxW = math.max(1, math.floor(vp.X * 0.98))
-    local maxH = math.max(1, math.floor(vp.Y * 0.96))
     local w, h
-
     if isMobile then
-        local baseMaxW = math.max(1, math.floor(vp.X * 0.96))
-        local baseMaxH = math.max(1, math.floor(vp.Y * 0.92))
-        local baseMinW = math.min(286, baseMaxW)
-        local baseMinH = math.min(300, baseMaxH)
-        w = math.clamp(math.floor(vp.X * 0.90), baseMinW, baseMaxW)
-        h = math.clamp(math.floor(vp.Y * 0.84), baseMinH, baseMaxH)
+        w = math.clamp(math.floor(vp.X * 0.76), 260, 430)
+        h = math.clamp(math.floor(vp.Y * 0.72), 280, 380)
     else
-        -- Reference layout: near full-screen technical dashboard, without breaking smaller desktop viewports.
-        local baseMaxW = math.max(1, math.floor(vp.X * 0.97))
-        local baseMaxH = math.max(1, math.floor(vp.Y * 0.95))
-        local baseMinW = math.min(980, math.max(1, math.floor(vp.X * 0.82)), baseMaxW)
-        local baseMinH = math.min(620, math.max(1, math.floor(vp.Y * 0.72)), baseMaxH)
-        w = math.clamp(math.floor(vp.X * 0.94), baseMinW, baseMaxW)
-        h = math.clamp(math.floor(vp.Y * 0.92), baseMinH, baseMaxH)
+        w = math.clamp(math.floor(vp.X * 0.46), 540, 640)
+        h = math.clamp(math.floor(vp.Y * 0.50), 340, 400)
     end
-
-    local minW = math.min(isMobile and 260 or 900, maxW)
-    local minH = math.min(isMobile and 280 or 560, maxH)
-    w = math.clamp(math.floor(w * scale), minW, maxW)
-    h = math.clamp(math.floor(h * scale), minH, maxH)
+    w = math.clamp(math.floor(w * scale), isMobile and 235 or 430, math.floor(vp.X * 0.96))
+    h = math.clamp(math.floor(h * scale), isMobile and 245 or 300, math.floor(vp.Y * 0.92))
     return UDim2.new(0,w,0,h)
 end
 
@@ -1890,23 +1966,23 @@ main.Name = "MainMenu"
 main.Size = UDim2.new(0, 0, 0, 0)
 main.Position = UDim2.fromScale(0.5, 0.5)
 main.AnchorPoint = Vector2.new(0.5, 0.5)
-main.BackgroundColor3 = Color3.fromRGB(2,2,2)
-main.BackgroundTransparency = 0.02
+main.BackgroundColor3 = currentTheme.primary
+main.BackgroundTransparency = 0.10
 main.ClipsDescendants = true
 main.Parent = gui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 24)
 RegisterTheme(main, "BackgroundColor3", "primary")
 
 local ThemeGradients = {
-    Dark = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    Purple = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    Blue = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    Green = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    Red = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    Light = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    MaterialYou = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    FrostedGlass = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
-    DarkGlass = {Color3.fromRGB(9,9,9), Color3.fromRGB(1,1,1), 135},
+    Dark = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    Purple = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    Blue = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    Green = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    Red = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    Light = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    MaterialYou = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    FrostedGlass = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
+    DarkGlass = {Color3.fromRGB(24,24,24), Color3.fromRGB(2,2,2), 135},
 }
 
 local HXAcrylic = {
@@ -1923,7 +1999,7 @@ ApplyTheme = function(name)
 	else
 		HXAcrylic.Stop()
 	end
-	TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 0.02}):Play()
+	TweenService:Create(main, TweenInfo.new(0.3), {BackgroundTransparency = 0.10}):Play()
 	local noiseOverlay = main:FindFirstChild("HXGlassNoise")
 	if isGlass then
 		if not noiseOverlay then
@@ -1951,7 +2027,7 @@ ApplyTheme = function(name)
 		gradFrame.BorderSizePixel = 0
 		gradFrame.ZIndex = 1
 		gradFrame.Parent = main
-		Instance.new("UICorner", gradFrame).CornerRadius = UDim.new(0, 7)
+		Instance.new("UICorner", gradFrame).CornerRadius = UDim.new(0, 24)
 		local grad = Instance.new("UIGradient")
 		grad.Name = "HXMainGrad"
 		grad.Parent = gradFrame
@@ -1969,9 +2045,9 @@ ApplyTheme = function(name)
 end
 
 mainStroke = Instance.new("UIStroke")
-mainStroke.Color = Color3.fromRGB(112,112,112)
-mainStroke.Thickness = 1.15
-mainStroke.Transparency = 0.20
+mainStroke.Color = Color3.fromRGB(255,255,255)
+mainStroke.Thickness = 1.45
+mainStroke.Transparency = 0.03
 mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 pcall(function() mainStroke.LineJoinMode = Enum.LineJoinMode.Round end)
 mainStroke.Parent = main
@@ -1985,7 +2061,7 @@ mainInnerOutline.BorderSizePixel = 0
 mainInnerOutline.ZIndex = 500
 mainInnerOutline.Active = false
 mainInnerOutline.Parent = main
-Instance.new("UICorner", mainInnerOutline).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", mainInnerOutline).CornerRadius = UDim.new(0, 21)
 
 local mainInnerStroke = Instance.new("UIStroke")
 mainInnerStroke.Color = Color3.fromRGB(255,255,255)
@@ -2008,25 +2084,25 @@ bgParticles.BackgroundTransparency = 1
 bgParticles.ClipsDescendants = true
 bgParticles.ZIndex = 1
 bgParticles.Parent = main
-Instance.new("UICorner",bgParticles).CornerRadius = UDim.new(0,7)
+Instance.new("UICorner",bgParticles).CornerRadius = UDim.new(0,20)
 bgParticles.Visible = true
 
 pcall(function()
     local base = Instance.new("Frame")
     base.Size = UDim2.new(1,0,1,0)
-    base.BackgroundColor3 = Color3.fromRGB(2,2,2)
-    base.BackgroundTransparency = 0.00
+    base.BackgroundColor3 = Color3.fromRGB(5,5,5)
+    base.BackgroundTransparency = 0.02
     base.BorderSizePixel = 0
     base.ZIndex = 1
     base.Parent = bgParticles
-    Instance.new("UICorner",base).CornerRadius = UDim.new(0,7)
+    Instance.new("UICorner",base).CornerRadius = UDim.new(0,20)
 
     local grad = Instance.new("UIGradient")
     grad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0,Color3.fromRGB(1,1,1)),
-        ColorSequenceKeypoint.new(0.34,Color3.fromRGB(12,12,12)),
-        ColorSequenceKeypoint.new(0.68,Color3.fromRGB(4,4,4)),
-        ColorSequenceKeypoint.new(1,Color3.fromRGB(18,18,18))
+        ColorSequenceKeypoint.new(0,Color3.fromRGB(3,3,3)),
+        ColorSequenceKeypoint.new(0.34,Color3.fromRGB(42,42,42)),
+        ColorSequenceKeypoint.new(0.68,Color3.fromRGB(16,16,16)),
+        ColorSequenceKeypoint.new(1,Color3.fromRGB(48,48,48))
     })
     grad.Rotation = 125
     grad.Offset = Vector2.new(-0.35,0)
@@ -2063,71 +2139,65 @@ end)
 do
 sidebar = Instance.new("Frame")
 sidebar.Name = "HXSidebar"
-sidebar.Size = UDim2.new(0, sideBarW, 1, 0)
-sidebar.Position = UDim2.new(0, 0, 0, 0)
-sidebar.BackgroundColor3 = Color3.fromRGB(3,3,3)
-sidebar.BackgroundTransparency = 0.08
+sidebar.Size = UDim2.new(0,sideBarW - 2,1,-4)
+sidebar.Position = UDim2.new(0,2,0,2)
+sidebar.BackgroundColor3 = currentTheme.sidebar
+sidebar.BackgroundTransparency = 0.38
 sidebar.BorderSizePixel = 0
 sidebar.ClipsDescendants = true
 sidebar.ZIndex = 8
 sidebar.Parent = main
-Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 7)
+Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 20)
 
 local navDivider = Instance.new("Frame")
-navDivider.Size = UDim2.new(0,1,1,-28)
-navDivider.Position = UDim2.new(1,-1,0,14)
-navDivider.BackgroundColor3 = Color3.fromRGB(54,54,54)
-navDivider.BackgroundTransparency = 0.35
+navDivider.Size = UDim2.new(0,1,1,-16)
+navDivider.Position = UDim2.new(1,-1,0,8)
+navDivider.BackgroundColor3 = Color3.fromRGB(68,68,68)
 navDivider.BorderSizePixel = 0
 navDivider.ZIndex = 9
 navDivider.Parent = sidebar
+navDivider.Visible = false
 
 local brand = Instance.new("Frame")
 brand.Name = "HXBrand"
-brand.Size = UDim2.new(1,-28,0,isMobile and 82 or 190)
-brand.Position = UDim2.new(0,14,0,isMobile and 8 or 14)
-brand.BackgroundTransparency = 1
+brand.Size = UDim2.new(1,-14,0,isMobile and 62 or 82)
+brand.Position = UDim2.new(0,7,0,7)
+brand.BackgroundColor3 = currentTheme.secondary
+brand.BackgroundTransparency = 0.72
 brand.BorderSizePixel = 0
 brand.ZIndex = 10
 brand.Parent = sidebar
+Instance.new("UICorner",brand).CornerRadius = UDim.new(0,8)
+
+local brandStroke = Instance.new("UIStroke")
+brandStroke.Color = Color3.fromRGB(76,76,76)
+brandStroke.Thickness = 1
+brandStroke.Transparency = 1
+brandStroke.Parent = brand
 
 local brandLogo = Instance.new("ImageLabel")
-local brandLogoS = isMobile and 54 or 116
+local brandLogoS = isMobile and 46 or 60
 brandLogo.Size = UDim2.new(0, brandLogoS, 0, brandLogoS)
-brandLogo.Position = UDim2.new(0.5, 0, 0, isMobile and 6 or 14)
-brandLogo.AnchorPoint = Vector2.new(0.5, 0)
+brandLogo.Position = UDim2.new(0.5, 0, 0.5, -2)
+brandLogo.AnchorPoint = Vector2.new(0.5, 0.5)
 brandLogo.BackgroundTransparency = 1
-brandLogo.Image = "rbxassetid://72742584610344"
+brandLogo.Image = "rbxassetid://80552458381492"
 brandLogo.ImageColor3 = Color3.fromRGB(255,255,255)
 brandLogo.ImageTransparency = 0
 brandLogo.ScaleType = Enum.ScaleType.Fit
 brandLogo.ZIndex = 11
 brandLogo.Parent = brand
 
-local brandText = Instance.new("TextLabel")
-brandText.Size = UDim2.new(1,0,0,isMobile and 18 or 24)
-brandText.Position = UDim2.new(0,0,0,isMobile and 60 or 140)
-brandText.BackgroundTransparency = 1
-brandText.Text = "E M O T E S"
-brandText.TextColor3 = Color3.fromRGB(230,230,230)
-brandText.TextStrokeTransparency = 1
-brandText.Font = Enum.Font.GothamBold
-brandText.TextSize = isMobile and 8 or 13
-brandText.TextXAlignment = Enum.TextXAlignment.Center
-brandText.ZIndex = 11
-brandText.Parent = brand
+local brandAccent = Instance.new("Frame")
+brandAccent.Size = UDim2.new(0,isMobile and 20 or 34,0,1)
+brandAccent.Position = UDim2.new(1,-(isMobile and 27 or 42),1,-9)
+brandAccent.BackgroundColor3 = Color3.fromRGB(255,255,255)
+brandAccent.BackgroundTransparency = 1
+brandAccent.BorderSizePixel = 0
+brandAccent.ZIndex = 12
+brandAccent.Parent = brand
 
-local brandRule = Instance.new("Frame")
-brandRule.Size = UDim2.new(0,isMobile and 34 or 58,0,1)
-brandRule.Position = UDim2.new(0.5,0,1,-8)
-brandRule.AnchorPoint = Vector2.new(0.5,1)
-brandRule.BackgroundColor3 = Color3.fromRGB(92,92,92)
-brandRule.BackgroundTransparency = 0.45
-brandRule.BorderSizePixel = 0
-brandRule.ZIndex = 11
-brandRule.Parent = brand
-
-tabStartY = isMobile and ((_hxViewport.Y < 430) and 70 or 84) or 216
+tabStartY = isMobile and ((_hxViewport.Y < 430) and 62 or 72) or 88
 tabBtns = {}
 tabLabels = {
     emotes = "EMOTES",
@@ -2144,45 +2214,49 @@ tabLabels = {
 local function CreateTabBtn(icon,tabName,yPos)
     local btn = Instance.new("TextButton")
     btn.Name = "Nav_"..tabName
-    btn.Size = UDim2.new(1,-28,0,tabBtnS)
-    btn.Position = UDim2.new(0,14,0,yPos)
-    btn.BackgroundColor3 = Color3.fromRGB(8,8,8)
+    btn.Size = UDim2.new(1,-14,0,tabBtnS)
+    btn.Position = UDim2.new(0,7,0,yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(0,0,0)
     btn.BackgroundTransparency = 1
-    btn.BorderSizePixel = 0
     btn.Text = ""
     btn.AutoButtonColor = false
     btn.ZIndex = 10
     btn.Parent = sidebar
-    Instance.new("UICorner",btn).CornerRadius = UDim.new(0,isMobile and 7 or 5)
-
     local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(120,120,120)
+    stroke.Color = Color3.fromRGB(255,255,255)
     stroke.Thickness = 1
     stroke.Transparency = 1
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = btn
+    HXApplyChamfer(btn, {transparent=true, cut=isMobile and 6 or 8})
 
     local iconHolder = Instance.new("ImageLabel")
-    local navIconSize = isMobile and 20 or 28
+    -- Every category icon uses the exact same visual box so the sidebar stays balanced.
+    local navIconSize = isMobile and 19 or 22
     iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
-    iconHolder.Position = UDim2.new(0,isMobile and 9 or 18,0.5,0)
+    iconHolder.Position = UDim2.new(0,isMobile and 8 or 12,0.5,0)
     iconHolder.AnchorPoint = Vector2.new(0,0.5)
     iconHolder.BackgroundTransparency = 1
     iconHolder.Image = ResolveAssetImage(icon)
-    iconHolder.ImageColor3 = Color3.fromRGB(185,185,185)
+    iconHolder.ImageColor3 = Color3.fromRGB(255,255,255)
     iconHolder.ScaleType = Enum.ScaleType.Fit
     iconHolder.ZIndex = 12
     iconHolder.Parent = btn
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,-(isMobile and 42 or 66),1,0)
-    label.Position = UDim2.new(0,isMobile and 38 or 58,0,0)
+    label.Size = UDim2.new(1,-(isMobile and 38 or 50),1,-4)
+    label.Position = UDim2.new(0,isMobile and 35 or 46,0,2)
     label.BackgroundTransparency = 1
     label.Text = tabLabels[tabName] or tabName:upper()
-    label.TextColor3 = Color3.fromRGB(178,178,178)
-    label.TextStrokeTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255,255,255)
     label.Font = Enum.Font.GothamBold
-    label.TextSize = isMobile and 9 or 14
+    label.TextSize = isMobile and ((_hxViewport.Y < 430) and 9 or 10) or 10
+    label.TextScaled = isMobile
+    if isMobile then
+        local _navTextLimit = Instance.new("UITextSizeConstraint")
+        _navTextLimit.MinTextSize = 8
+        _navTextLimit.MaxTextSize = 10
+        _navTextLimit.Parent = label
+    end
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.TextTruncate = Enum.TextTruncate.AtEnd
     label.ZIndex = 12
@@ -2190,18 +2264,18 @@ local function CreateTabBtn(icon,tabName,yPos)
 
     btn.MouseEnter:Connect(function()
         if currentTab ~= tabName then
-            TweenService:Create(btn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(14,14,14),BackgroundTransparency=0.25}):Play()
-            TweenService:Create(stroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(120,120,120),Transparency=0.45}):Play()
-            TweenService:Create(label,TweenInfo.new(0.14),{TextColor3=Color3.fromRGB(230,230,230)}):Play()
-            TweenService:Create(iconHolder,TweenInfo.new(0.14),{ImageColor3=Color3.fromRGB(230,230,230)}):Play()
+            TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(18,18,18),BackgroundTransparency=1}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.15),{Color=Color3.fromRGB(255,255,255),Transparency=0.10}):Play()
+            TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255)}):Play()
         end
     end)
     btn.MouseLeave:Connect(function()
         if currentTab ~= tabName then
-            TweenService:Create(btn,TweenInfo.new(0.14),{BackgroundTransparency=1}):Play()
-            TweenService:Create(stroke,TweenInfo.new(0.14),{Transparency=1}):Play()
-            TweenService:Create(label,TweenInfo.new(0.14),{TextColor3=Color3.fromRGB(178,178,178)}):Play()
-            TweenService:Create(iconHolder,TweenInfo.new(0.14),{ImageColor3=Color3.fromRGB(185,185,185)}):Play()
+            TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.15),{Color=Color3.fromRGB(255,255,255),Transparency=0.42}):Play()
+            TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255)}):Play()
         end
     end)
 
@@ -2209,7 +2283,7 @@ local function CreateTabBtn(icon,tabName,yPos)
     return btn
 end
 
-local navGap = isMobile and 4 or 8
+local navGap = isMobile and ((_hxViewport.Y < 430) and 3 or 5) or 5
 CreateTabBtn(Icons.Emote,"emotes",tabStartY)
 CreateTabBtn("rbxassetid://3576686446","ugc",tabStartY+(tabBtnS+navGap))
 CreateTabBtn("rbxassetid://75528584354229","animations",tabStartY+(tabBtnS+navGap)*2)
@@ -2219,76 +2293,49 @@ CreateTabBtn(Icons.Recent,"recent",tabStartY+(tabBtnS+navGap)*5)
 
 local profile = Instance.new("Frame")
 profile.Name = "UserProfile"
-profile.Size = UDim2.new(1,-30,0,isMobile and 48 or 86)
-profile.Position = UDim2.new(0,15,1,-(isMobile and 57 or 101))
-profile.BackgroundColor3 = Color3.fromRGB(8,8,8)
-profile.BackgroundTransparency = 0.10
+profile.Size = UDim2.new(1,-18,0,isMobile and 40 or 48)
+profile.Position = UDim2.new(0,9,1,-(isMobile and 47 or 55))
+profile.BackgroundColor3 = currentTheme.secondary
+profile.BackgroundTransparency = 0.48
 profile.BorderSizePixel = 0
 profile.ZIndex = 10
 profile.Parent = sidebar
-Instance.new("UICorner",profile).CornerRadius = UDim.new(0,isMobile and 7 or 6)
+Instance.new("UICorner",profile).CornerRadius = UDim.new(0,8)
 local profileStroke = Instance.new("UIStroke")
-profileStroke.Color = Color3.fromRGB(105,105,105)
+profileStroke.Color = Color3.fromRGB(58,58,58)
 profileStroke.Thickness = 1
-profileStroke.Transparency = 0.32
+profileStroke.Transparency = 0.2
 profileStroke.Parent = profile
 
 local avatar = Instance.new("ImageLabel")
-avatar.Size = UDim2.new(0,isMobile and 30 or 54,0,isMobile and 30 or 54)
-avatar.Position = UDim2.new(0,isMobile and 8 or 12,0.5,0)
+avatar.Size = UDim2.new(0,isMobile and 26 or 32,0,isMobile and 26 or 32)
+avatar.Position = UDim2.new(0,isMobile and 7 or 8,0.5,0)
 avatar.AnchorPoint = Vector2.new(0,0.5)
-avatar.BackgroundColor3 = Color3.fromRGB(14,14,14)
-avatar.BackgroundTransparency = 0
+avatar.BackgroundColor3 = currentTheme.secondary
+avatar.BackgroundTransparency = 0.55
 avatar.Image = "rbxthumb://type=AvatarHeadShot&id="..tostring(player.UserId).."&w=150&h=150"
 avatar.ScaleType = Enum.ScaleType.Crop
 avatar.ZIndex = 11
 avatar.Parent = profile
 Instance.new("UICorner",avatar).CornerRadius = UDim.new(1,0)
 local avatarStroke = Instance.new("UIStroke")
-avatarStroke.Color = Color3.fromRGB(235,235,235)
+avatarStroke.Color = Color3.fromRGB(225,225,225)
 avatarStroke.Thickness = 1
-avatarStroke.Transparency = 0.08
+avatarStroke.Transparency = 0.28
 avatarStroke.Parent = avatar
 
 local userName = Instance.new("TextLabel")
-userName.Size = UDim2.new(1,-(isMobile and 50 or 98),0,isMobile and 18 or 26)
-userName.Position = UDim2.new(0,isMobile and 44 or 78,0,isMobile and 7 or 18)
+userName.Size = UDim2.new(1,-(isMobile and 39 or 49),1,0)
+userName.Position = UDim2.new(0,isMobile and 38 or 46,0,0)
 userName.BackgroundTransparency = 1
 userName.Text = player.DisplayName or player.Name
-userName.TextColor3 = Color3.fromRGB(245,245,245)
-userName.TextStrokeTransparency = 1
+userName.TextColor3 = Color3.fromRGB(238,238,238)
 userName.Font = Enum.Font.GothamBold
-userName.TextSize = isMobile and 8 or 14
+userName.TextSize = isMobile and 7 or 9
 userName.TextXAlignment = Enum.TextXAlignment.Left
 userName.TextTruncate = Enum.TextTruncate.AtEnd
 userName.ZIndex = 11
 userName.Parent = profile
-
-local premiumText = Instance.new("TextLabel")
-premiumText.Size = UDim2.new(1,-(isMobile and 50 or 98),0,isMobile and 14 or 20)
-premiumText.Position = UDim2.new(0,isMobile and 44 or 78,0,isMobile and 24 or 43)
-premiumText.BackgroundTransparency = 1
-local _isPremium = false
-pcall(function() _isPremium = player.MembershipType == Enum.MembershipType.Premium end)
-premiumText.Text = _isPremium and "Premium User" or (isES and "Usuario" or "User")
-premiumText.TextColor3 = Color3.fromRGB(112,112,112)
-premiumText.TextStrokeTransparency = 1
-premiumText.Font = Enum.Font.Gotham
-premiumText.TextSize = isMobile and 7 or 11
-premiumText.TextXAlignment = Enum.TextXAlignment.Left
-premiumText.ZIndex = 11
-premiumText.Parent = profile
-
-local crown = Instance.new("ImageLabel")
-crown.Size = UDim2.fromOffset(isMobile and 16 or 24,isMobile and 16 or 24)
-crown.Position = UDim2.new(1,-(isMobile and 23 or 34),0.5,0)
-crown.AnchorPoint = Vector2.new(0,0.5)
-crown.BackgroundTransparency = 1
-crown.Image = ResolveAssetImage(Icons.Crown)
-crown.ImageColor3 = Color3.fromRGB(220,220,220)
-crown.ScaleType = Enum.ScaleType.Fit
-crown.ZIndex = 12
-crown.Parent = profile
 
 local _tabIndicator = nil
 local function _UpdateIndicatorGrad() end
@@ -2303,7 +2350,7 @@ content.ZIndex = 2
 content.ClipsDescendants = true
 content.Parent = main
 
-local titleH = isMobile and 38 or 62
+local titleH = isMobile and 34 or 36
 titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, titleH)
 titleBar.BackgroundTransparency = 1
@@ -2311,196 +2358,315 @@ titleBar.ZIndex = 5
 titleBar.Parent = content
 
 local headerSurface = Instance.new("Frame")
-headerSurface.Size = UDim2.new(1, -24, 0, titleH - 10)
-headerSurface.Position = UDim2.new(0, 12, 0, 5)
-headerSurface.BackgroundColor3 = Color3.fromRGB(4,4,4)
-headerSurface.BackgroundTransparency = 1
-headerSurface.BorderSizePixel = 0
+headerSurface.Size = UDim2.new(1, -16, 0, titleH - 4)
+headerSurface.Position = UDim2.new(0, 8, 0, 2)
+headerSurface.BackgroundColor3 = currentTheme.secondary
+headerSurface.BackgroundTransparency = 0.36
 headerSurface.ZIndex = 4
 headerSurface.Parent = titleBar
-Instance.new("UICorner", headerSurface).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", headerSurface).CornerRadius = UDim.new(0, 11)
+RegisterTheme(headerSurface, "BackgroundColor3", "secondary")
+
 local headerStroke = Instance.new("UIStroke")
-headerStroke.Color = Color3.fromRGB(62,62,62)
+headerStroke.Color = currentTheme.stroke
 headerStroke.Thickness = 1
 headerStroke.Transparency = 1
 headerStroke.Parent = headerSurface
+RegisterTheme(headerStroke, "Color", "stroke")
 
 titleOverlay = headerSurface
 
--- Kept for UpdateTabData compatibility; the reference header intentionally hides section titles.
+local titleIconSz = isMobile and 28 or 32
 local titleIcon = Instance.new("ImageLabel")
-titleIcon.Size = UDim2.fromOffset(1,1)
+titleIcon.Size = UDim2.new(0, titleIconSz, 0, titleIconSz)
+titleIcon.Position = UDim2.new(0, 18, 0.5, 0)
+titleIcon.AnchorPoint = Vector2.new(0, 0.5)
 titleIcon.BackgroundTransparency = 1
 titleIcon.Image = ResolveAssetImage(Icons.Emote)
-titleIcon.Visible = false
+titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
+titleIcon.ZIndex = 6
 titleIcon.Parent = titleBar
+titleIcon.Visible = false
+RegisterTheme(titleIcon, "ImageColor3", "text")
 
 title = Instance.new("TextLabel")
-title.Size = UDim2.fromOffset(1,1)
+title.Size = UDim2.new(1, isMobile and -88 or -110, 0, 24)
+title.Position = UDim2.new(0, 18 + titleIconSz + 9, 0, isMobile and 8 or 7)
 title.BackgroundTransparency = 1
 title.Text = L.emotes
-title.TextStrokeTransparency = 1
-title.Visible = false
+title.TextColor3 = currentTheme.text
+title.Font = Enum.Font.GothamBold
+title.TextSize = isMobile and 14 or 16
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.ZIndex = 6
 title.Parent = titleBar
+title.Visible = false
+RegisterTheme(title, "TextColor3", "text")
 
 local titleSubtitle = Instance.new("TextLabel")
-titleSubtitle.Size = UDim2.fromOffset(1,1)
+titleSubtitle.Size = UDim2.new(1, isMobile and -88 or -110, 0, 16)
+titleSubtitle.Position = UDim2.new(0, 18 + titleIconSz + 9, 0, isMobile and 27 or 29)
 titleSubtitle.BackgroundTransparency = 1
-titleSubtitle.Text = ""
-titleSubtitle.TextStrokeTransparency = 1
-titleSubtitle.Visible = false
+titleSubtitle.Text = isES and "Biblioteca de animaciones" or "Animation library"
+titleSubtitle.TextColor3 = currentTheme.textDim
+titleSubtitle.Font = Enum.Font.Gotham
+titleSubtitle.TextSize = isMobile and 9 or 10
+titleSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+titleSubtitle.ZIndex = 6
 titleSubtitle.Parent = titleBar
+titleSubtitle.Visible = false
+title.Visible = false
+RegisterTheme(titleSubtitle, "TextColor3", "textDim")
+
 
 local _textGrads = {}
-local function _ApplyTextGrad(grad) end
-local function _AddTextGrad(textLabel) return nil end
+local function _ApplyTextGrad(grad)
+    grad.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, currentTheme.text),
+        ColorSequenceKeypoint.new(1, currentTheme.text)
+    }
+end
+local function _AddTextGrad(textLabel)
+    return nil
+end
 _updateTitleGrad = function() end
 
-local btnS = isMobile and 28 or 38
+local btnS = isMobile and 30 or 32
+
 local function MakeBtn(icon, px, colorKey, customSize, customCenterY)
-    local s = customSize or btnS
-    local centerY = customCenterY or (titleH / 2)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(0, s, 0, s)
-    b.Position = UDim2.new(1, px, 0, centerY - s/2)
-    b.BackgroundColor3 = Color3.fromRGB(12,12,12)
-    b.BackgroundTransparency = 0.18
-    b.Text = ""
-    b.ZIndex = 10
-    b.Parent = titleBar
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
-    local isImg = type(icon) == "string" and (string.find(icon, "rbxassetid://") or string.find(icon, "http") or string.find(icon, "rbxthumb://"))
-    if isImg then
-        local img = Instance.new("ImageLabel")
-        img.Size = UDim2.new(0.66,0,0.66,0)
-        img.Position = UDim2.fromScale(0.5,0.5)
-        img.AnchorPoint = Vector2.new(0.5,0.5)
-        img.BackgroundTransparency = 1
-        img.Image = ResolveAssetImage(icon)
-        img.ImageColor3 = Color3.fromRGB(240,240,240)
-        img.ZIndex = 11
-        img.Parent = b
-    end
-    return b
+	local s = customSize or btnS
+	local centerY = customCenterY or (titleH / 2)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(0, s, 0, s)
+	b.Position = UDim2.new(1, px, 0, centerY - s/2)
+	b.BackgroundColor3 = currentTheme.tertiary
+	b.BackgroundTransparency = 1
+	b.Text = ""
+	b.ZIndex = 10
+	b.Parent = titleBar
+	HXApplyChamfer(b, {transparent=true, cut=math.max(5, math.floor(s * 0.24))})
+
+	local useWhite = true
+
+	local isImg = type(icon) == "string" and (string.find(icon, "rbxassetid://") or string.find(icon, "http") or string.find(icon, "rbxthumb://"))
+	if isImg then
+		local img = Instance.new("ImageLabel")
+		local imgSize = math.max(15, math.floor(s * 0.72))
+		img.Size = UDim2.new(0, imgSize, 0, imgSize)
+		img.Position = UDim2.new(0.5, 0, 0.5, 0)
+		img.AnchorPoint = Vector2.new(0.5, 0.5)
+		img.BackgroundTransparency = 1
+		img.Parent = b
+		img.Image = ResolveAssetImage(icon)
+		img.ImageColor3 = useWhite and Color3.new(1, 1, 1) or currentTheme.text
+		img.ZIndex = 110
+		if not useWhite then
+			RegisterTheme(img, "ImageColor3", "text")
+		end
+	else
+		if icon == "STOP_SHAPE" then
+			b.Text = ""
+			local sq = Instance.new("ImageLabel")
+			sq.Size = UDim2.new(0.75, 0, 0.75, 0)
+			sq.Position = UDim2.new(0.5, 0, 0.5, 0)
+			sq.AnchorPoint = Vector2.new(0.5, 0.5)
+			sq.BackgroundTransparency = 1
+			sq.Image = ResolveAssetImage("rbxassetid://113416463749658")
+			sq.ImageColor3 = Color3.new(1, 1, 1)
+			sq.ScaleType = Enum.ScaleType.Fit
+			sq.ZIndex = 110
+			sq.Parent = b
+		elseif icon == "CLOSE_SHAPE" then
+			b.Text = ""
+			local line1 = Instance.new("Frame")
+			line1.BorderSizePixel = 0
+			line1.Size = UDim2.new(0.40, 0, 0, math.floor(2 * math.max(1, ICON_SCALE)))
+			line1.Position = UDim2.new(0.5, 0, 0.5, 0)
+			line1.AnchorPoint = Vector2.new(0.5, 0.5)
+			line1.Rotation = 45
+			line1.BackgroundColor3 = useWhite and Color3.new(1, 1, 1) or currentTheme.text
+			line1.ZIndex = 110
+			line1.Parent = b
+			Instance.new("UICorner", line1).CornerRadius = UDim.new(0, 2)
+
+			local line2 = line1:Clone()
+			line2.Rotation = -45
+			line2.Parent = b
+
+			if not useWhite then
+				RegisterTheme(line1, "BackgroundColor3", "text")
+				RegisterTheme(line2, "BackgroundColor3", "text")
+			end
+		elseif icon == Icons.Minus or icon == "-" then
+			b.Text = ""
+			local line = Instance.new("Frame")
+			line.BorderSizePixel = 0
+			line.Size = UDim2.new(0.40, 0, 0, math.floor(2 * math.max(1, ICON_SCALE)))
+			line.Position = UDim2.new(0.5, 0, 0.5, 0)
+			line.AnchorPoint = Vector2.new(0.5, 0.5)
+			line.BackgroundColor3 = useWhite and Color3.new(1, 1, 1) or currentTheme.text
+			line.ZIndex = 110
+			line.Parent = b
+			Instance.new("UICorner", line).CornerRadius = UDim.new(0, 2)
+			if not useWhite then
+				RegisterTheme(line, "BackgroundColor3", "text")
+			end
+		elseif icon == Icons.Sort then
+			b.Text = icon
+			b.TextSize = math.floor((isMobile and 32 or 46) * FONT_SCALE)
+		else
+			b.Text = icon
+			b.TextSize = math.floor((isMobile and 12 or 16) * FONT_SCALE)
+		end
+		b.TextColor3 = useWhite and Color3.new(1, 1, 1) or currentTheme.text
+		b.Font = Enum.Font.GothamBlack
+		if not useWhite then
+			RegisterTheme(b, "TextColor3", "text")
+		end
+	end
+
+	b.MouseEnter:Connect(function()
+		local s = customSize or btnS
+		TweenService:Create(b, TweenInfo.new(0.1), {
+			Size = UDim2.new(0, s + 4, 0, s + 4),
+			Position = UDim2.new(1, px - 2, 0, centerY - (s + 4)/2)
+		}):Play()
+	end)
+	b.MouseLeave:Connect(function()
+		local s = customSize or btnS
+		TweenService:Create(b, TweenInfo.new(0.1), {
+			Size = UDim2.new(0, s, 0, s),
+			Position = UDim2.new(1, px, 0, centerY - s/2)
+		}):Play()
+	end)
+	return b
 end
 
--- Existing utility buttons stay alive for their current callbacks/systems, but the reference header does not show them.
-local utilS = isMobile and 20 or 22
-local utilY = titleH / 2
+local utilS = isMobile and 22 or 24
+local utilY = titleH - (isMobile and 16 or 17)
+local topY = isMobile and 17 or 18
 local copyEmoteBtn = MakeBtn("rbxassetid://77508802666652", -(utilS*4 + 16), "tertiary", utilS, utilY)
-local stopBtn = MakeBtn("rbxassetid://113416463749658", -(utilS*3 + 12), "tertiary", utilS, utilY)
+local stopBtn = MakeBtn("STOP_SHAPE", -(utilS*3 + 12), "tertiary", utilS, utilY)
 local randBtn = MakeBtn(Icons.Sort, -(utilS*2 + 8), "tertiary", utilS, utilY)
 local notifBtn = MakeBtn("rbxassetid://102189770974908", -(utilS + 4), "tertiary", utilS, utilY)
 copyEmoteBtn.Visible = false
 stopBtn.Visible = false
 randBtn.Visible = false
 notifBtn.Visible = false
-
-local controlS = isMobile and 28 or 42
-local controlGap = isMobile and 5 or 10
-local controlRight = isMobile and 8 or 14
+local controlS = isMobile and 24 or 26
+local controlGap = isMobile and 6 or 7
+local controlRight = isMobile and 10 or 12
 local controlY = titleH / 2
 
 local function MakeWindowControl(name, kind, rightOffset)
     local b = Instance.new("TextButton")
     b.Name = name
     b.Size = UDim2.new(0, controlS, 0, controlS)
-    b.Position = UDim2.new(1, -rightOffset, 0, controlY)
-    b.AnchorPoint = Vector2.new(1, 0.5)
-    b.BackgroundColor3 = Color3.fromRGB(10,10,10)
-    b.BackgroundTransparency = 0.06
+    b.Position = UDim2.new(1, -rightOffset, 0, controlY - controlS/2)
+    b.AnchorPoint = Vector2.new(1, 0)
+    b.BackgroundColor3 = Color3.fromRGB(15,15,15)
+    b.BackgroundTransparency = 1
     b.BorderSizePixel = 0
     b.Text = ""
     b.AutoButtonColor = false
     b.ZIndex = 12
     b.Parent = titleBar
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 5)
     local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(102,102,102)
-    stroke.Thickness = 1
-    stroke.Transparency = 0.35
+    stroke.Color = Color3.fromRGB(255,255,255)
+    stroke.Thickness = 1.35
+    stroke.Transparency = 0
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    pcall(function() stroke.LineJoinMode = Enum.LineJoinMode.Round end)
     stroke.Parent = b
+    HXApplyChamfer(b, {transparent=true, cut=isMobile and 5 or 6})
 
     if kind == "minus" then
         local line = Instance.new("Frame")
-        line.Size = UDim2.new(0, math.floor(controlS * 0.36), 0, 2)
+        line.Size = UDim2.new(0, math.floor(controlS * 0.42), 0, 2)
         line.Position = UDim2.fromScale(0.5, 0.5)
         line.AnchorPoint = Vector2.new(0.5, 0.5)
-        line.BackgroundColor3 = Color3.fromRGB(238,238,238)
+        line.BackgroundColor3 = Color3.fromRGB(255,255,255)
         line.BorderSizePixel = 0
         line.ZIndex = 13
         line.Parent = b
-    elseif kind == "maximize" then
+        Instance.new("UICorner", line).CornerRadius = UDim.new(1,0)
+    elseif kind == "square" then
         local sq = Instance.new("Frame")
-        sq.Size = UDim2.new(0, math.floor(controlS * 0.34), 0, math.floor(controlS * 0.34))
-        sq.Position = UDim2.fromScale(0.5,0.5)
-        sq.AnchorPoint = Vector2.new(0.5,0.5)
+        sq.Size = UDim2.new(0, math.floor(controlS * 0.42), 0, math.floor(controlS * 0.42))
+        sq.Position = UDim2.fromScale(0.5, 0.5)
+        sq.AnchorPoint = Vector2.new(0.5, 0.5)
         sq.BackgroundTransparency = 1
         sq.BorderSizePixel = 0
         sq.ZIndex = 13
+        sq:SetAttribute("HXNoAutoCorner", true)
         sq.Parent = b
-        local ss = Instance.new("UIStroke")
-        ss.Color = Color3.fromRGB(225,225,225)
-        ss.Thickness = 1.2
-        ss.Transparency = 0.12
-        ss.Parent = sq
-        Instance.new("UICorner",sq).CornerRadius = UDim.new(0,2)
+        local sqStroke = Instance.new("UIStroke")
+        sqStroke.Color = Color3.fromRGB(255,255,255)
+        sqStroke.Thickness = 1.35
+        sqStroke.Transparency = 0
+        sqStroke:SetAttribute("HXKeepStroke", true)
+        sqStroke.Parent = sq
     else
         for _, rotation in ipairs({45, -45}) do
             local line = Instance.new("Frame")
-            line.Size = UDim2.new(0, math.floor(controlS * 0.40), 0, 2)
+            line.Size = UDim2.new(0, math.floor(controlS * 0.46), 0, 2)
             line.Position = UDim2.fromScale(0.5, 0.5)
             line.AnchorPoint = Vector2.new(0.5, 0.5)
             line.Rotation = rotation
-            line.BackgroundColor3 = Color3.fromRGB(238,238,238)
+            line.BackgroundColor3 = Color3.fromRGB(255,255,255)
             line.BorderSizePixel = 0
             line.ZIndex = 13
+            line:SetAttribute("HXNoAutoCorner", true)
             line.Parent = b
         end
     end
 
     b.MouseEnter:Connect(function()
-        TweenService:Create(b,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24)}):Play()
-        TweenService:Create(stroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(225,225,225),Transparency=0.08}):Play()
+        TweenService:Create(b, TweenInfo.new(0.12), {
+            BackgroundColor3 = Color3.fromRGB(34,34,34),
+            BackgroundTransparency = 1
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 1.65}):Play()
     end)
     b.MouseLeave:Connect(function()
-        TweenService:Create(b,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(10,10,10)}):Play()
-        TweenService:Create(stroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(102,102,102),Transparency=0.35}):Play()
+        TweenService:Create(b, TweenInfo.new(0.12), {
+            BackgroundColor3 = Color3.fromRGB(15,15,15),
+            BackgroundTransparency = 1
+        }):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 1.35}):Play()
     end)
+
     return b
 end
 
 local closeBtn = MakeWindowControl("CloseButton", "close", controlRight)
-local maxBtn = MakeWindowControl("MaximizeButton", "maximize", controlRight + controlS + controlGap)
+local maxBtn = MakeWindowControl("MaximizeButton", "square", controlRight + controlS + controlGap)
 local minBtn = MakeWindowControl("MinimizeButton", "minus", controlRight + (controlS + controlGap) * 2)
 
-local discordW = isMobile and 82 or 132
-local discordRight = controlRight + (controlS * 3) + (controlGap * 2) + (isMobile and 10 or 20)
+local discordW = isMobile and 76 or 92
+local discordRight = controlRight + (controlS * 3) + (controlGap * 2) + (isMobile and 8 or 10)
+
 local discordTopBtn = Instance.new("TextButton")
 discordTopBtn.Name = "DiscordCopyButton"
 discordTopBtn.Size = UDim2.new(0, discordW, 0, controlS)
-discordTopBtn.Position = UDim2.new(1, -discordRight, 0, controlY)
-discordTopBtn.AnchorPoint = Vector2.new(1, 0.5)
-discordTopBtn.BackgroundColor3 = Color3.fromRGB(12,12,12)
-discordTopBtn.BackgroundTransparency = 0.02
+discordTopBtn.Position = UDim2.new(1, -discordRight, 0, controlY - controlS/2)
+discordTopBtn.AnchorPoint = Vector2.new(1, 0)
+discordTopBtn.BackgroundColor3 = Color3.fromRGB(54,54,54)
+discordTopBtn.BackgroundTransparency = 1
 discordTopBtn.BorderSizePixel = 0
 discordTopBtn.Text = "DISCORD"
 discordTopBtn.TextColor3 = Color3.fromRGB(245,245,245)
+discordTopBtn.TextTransparency = 0
 discordTopBtn.TextStrokeTransparency = 1
 discordTopBtn.Font = Enum.Font.GothamBold
-discordTopBtn.TextSize = isMobile and 8 or 14
+discordTopBtn.TextSize = isMobile and 8 or 10
 discordTopBtn.AutoButtonColor = false
 discordTopBtn.ZIndex = 11
 discordTopBtn.Parent = titleBar
-Instance.new("UICorner", discordTopBtn).CornerRadius = UDim.new(0, 5)
-local discordStroke = Instance.new("UIStroke")
-discordStroke.Color = Color3.fromRGB(238,238,238)
-discordStroke.Thickness = 1.15
-discordStroke.Transparency = 0.16
-discordStroke.Parent = discordTopBtn
+HXApplyChamfer(discordTopBtn, {transparent=true, cut=isMobile and 6 or 8})
 
-local universalTopW = isMobile and 58 or 92
-local universalTopGap = isMobile and 8 or 26
+local universalTopW = isMobile and 58 or 72
+local universalTopGap = isMobile and 18 or 26
 local universalTop = Instance.new("TextLabel")
 universalTop.Name = "UniversalHeaderLabel"
 universalTop.Size = UDim2.new(0, universalTopW, 0, controlS)
@@ -2508,21 +2674,27 @@ universalTop.Position = UDim2.new(1, -(discordRight + discordW + universalTopGap
 universalTop.AnchorPoint = Vector2.new(1, 0.5)
 universalTop.BackgroundTransparency = 1
 universalTop.Text = "UNIVERSAL"
-universalTop.TextColor3 = Color3.fromRGB(190,190,190)
+universalTop.TextColor3 = Color3.fromRGB(235,235,235)
+universalTop.TextTransparency = 0
 universalTop.TextStrokeTransparency = 1
 universalTop.Font = Enum.Font.GothamBold
-universalTop.TextSize = isMobile and 7 or 13
+universalTop.TextSize = isMobile and 8 or 10
 universalTop.TextXAlignment = Enum.TextXAlignment.Center
+universalTop.TextYAlignment = Enum.TextYAlignment.Center
 universalTop.ZIndex = 11
 universalTop.Parent = titleBar
 
 discordTopBtn.MouseEnter:Connect(function()
-    TweenService:Create(discordTopBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24)}):Play()
-    TweenService:Create(discordStroke,TweenInfo.new(0.12),{Transparency=0,Thickness=1.45}):Play()
+    TweenService:Create(discordTopBtn,TweenInfo.new(0.12),{
+        BackgroundColor3=Color3.fromRGB(70,70,70),
+        TextColor3=Color3.fromRGB(255,255,255)
+    }):Play()
 end)
 discordTopBtn.MouseLeave:Connect(function()
-    TweenService:Create(discordTopBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(12,12,12)}):Play()
-    TweenService:Create(discordStroke,TweenInfo.new(0.12),{Transparency=0.16,Thickness=1.15}):Play()
+    TweenService:Create(discordTopBtn,TweenInfo.new(0.12),{
+        BackgroundColor3=Color3.fromRGB(54,54,54),
+        TextColor3=Color3.fromRGB(245,245,245)
+    }):Play()
 end)
 discordTopBtn.MouseButton1Click:Connect(function()
     pcall(function() if setclipboard then setclipboard("https://discord.gg/sewRzHAG5J") end end)
@@ -2560,9 +2732,6 @@ local function _SetPauseState(paused)
 	if _hxBottomPauseBtn and _hxBottomPauseBtn.Parent then
 		_hxBottomPauseBtn.Text = paused and (isES and "REANUDAR" or "RESUME") or (isES and "PAUSAR" or "PAUSE")
 	end
-	if _hxBottomPauseIconBtn and _hxBottomPauseIconBtn.Parent then
-		_hxBottomPauseIconBtn.Text = paused and ">" or "Ⅱ"
-	end
 	if _onPauseStateChanged then _onPauseStateChanged(paused) end
 end
 
@@ -2590,97 +2759,45 @@ randBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-local searchH = isMobile and 36 or 68
+local searchH = isMobile and ((_hxViewport.Y < 500) and 30 or 32) or 38
 search = Instance.new("TextBox")
 search.Name = "EmoteSearch"
-search.Size = UDim2.new(1,-44,0,searchH)
-search.Position = UDim2.new(0,22,0,titleH+8)
-search.BackgroundColor3 = Color3.fromRGB(5,5,5)
-search.BackgroundTransparency = 0.05
+search.Size = UDim2.new(1,-24,0,searchH)
+search.Position = UDim2.new(0,12,0,titleH+4)
+search.BackgroundColor3 = currentTheme.secondary
+search.BackgroundTransparency = 1
 search.PlaceholderText = isES and "Buscar emote..." or "Search emote..."
-search.PlaceholderColor3 = Color3.fromRGB(116,116,116)
+search.PlaceholderColor3 = Color3.fromRGB(255,255,255)
 search.Text = ""
-search.TextColor3 = Color3.fromRGB(242,242,242)
+search.TextColor3 = Color3.fromRGB(255,255,255)
 search.TextStrokeTransparency = 1
-search.TextSize = isMobile and 11 or 16
+search.TextSize = isMobile and 11 or 13
 search.Font = Enum.Font.Gotham
-search.TextXAlignment = Enum.TextXAlignment.Left
 search.ZIndex = 5
 search.ClearTextOnFocus = false
 search.Parent = content
-Instance.new("UICorner",search).CornerRadius = UDim.new(0,6)
 local searchPadding = Instance.new("UIPadding")
-searchPadding.PaddingLeft = UDim.new(0,isMobile and 38 or 64)
-searchPadding.PaddingRight = UDim.new(0,isMobile and 44 or 74)
+searchPadding.PaddingLeft = UDim.new(0,35)
+searchPadding.PaddingRight = UDim.new(0,8)
 searchPadding.Parent = search
 local searchStroke = Instance.new("UIStroke")
-searchStroke.Color = Color3.fromRGB(185,185,185)
-searchStroke.Thickness = 1
-searchStroke.Transparency = 0.28
+searchStroke.Color = Color3.fromRGB(235,235,235)
+searchStroke.Thickness = 1.35
+searchStroke.Transparency = 0.05
 searchStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 searchStroke.Parent = search
+HXApplyChamfer(search, {transparent=true, cut=isMobile and 7 or 9, thickness=1.2, glowThickness=3.8})
 
 local magnifier = Instance.new("ImageLabel")
-magnifier.Size = UDim2.new(0,isMobile and 20 or 30,0,isMobile and 20 or 30)
-magnifier.Position = UDim2.new(0,isMobile and 10 or 22,0.5,0)
+magnifier.Size = UDim2.new(0,isMobile and 18 or 21,0,isMobile and 18 or 21)
+magnifier.Position = UDim2.new(0,8,0.5,0)
 magnifier.AnchorPoint = Vector2.new(0,0.5)
 magnifier.BackgroundTransparency = 1
 magnifier.Image = ResolveAssetImage(Icons.Search)
-magnifier.ImageColor3 = Color3.fromRGB(245,245,245)
+magnifier.ImageColor3 = Color3.fromRGB(255,255,255)
 magnifier.ScaleType = Enum.ScaleType.Fit
 magnifier.ZIndex = 6
 magnifier.Parent = search
-
-local filterBtn = Instance.new("ImageButton")
-filterBtn.Name = "SearchFilterButton"
-filterBtn.Size = UDim2.fromOffset(isMobile and 28 or 44,isMobile and 28 or 44)
-filterBtn.Position = UDim2.new(1,-(isMobile and 6 or 12),0.5,0)
-filterBtn.AnchorPoint = Vector2.new(1,0.5)
-filterBtn.BackgroundColor3 = Color3.fromRGB(12,12,12)
-filterBtn.BackgroundTransparency = 0.08
-filterBtn.BorderSizePixel = 0
-filterBtn.Image = ""
-filterBtn.ImageColor3 = Color3.fromRGB(225,225,225)
-filterBtn.ScaleType = Enum.ScaleType.Fit
-filterBtn.AutoButtonColor = false
-filterBtn.ZIndex = 8
-filterBtn.Parent = search
-Instance.new("UICorner",filterBtn).CornerRadius = UDim.new(0,5)
-local filterStroke = Instance.new("UIStroke")
-filterStroke.Color = Color3.fromRGB(70,70,70)
-filterStroke.Transparency = 0.32
-filterStroke.Thickness = 1
-filterStroke.Parent = filterBtn
-
--- Three-line sliders icon, built from monochrome GUI primitives so it stays crisp at any scale.
-local sliderIcon = Instance.new("Frame")
-sliderIcon.Name = "SliderGlyph"
-sliderIcon.Size = UDim2.new(0.58,0,0.52,0)
-sliderIcon.Position = UDim2.fromScale(0.5,0.5)
-sliderIcon.AnchorPoint = Vector2.new(0.5,0.5)
-sliderIcon.BackgroundTransparency = 1
-sliderIcon.ZIndex = 9
-sliderIcon.Parent = filterBtn
-for i,knobX in ipairs({0.68,0.36,0.72}) do
-    local y = ({0.18,0.50,0.82})[i]
-    local line = Instance.new("Frame")
-    line.Size = UDim2.new(1,0,0,isMobile and 1 or 2)
-    line.Position = UDim2.new(0,0,y,0)
-    line.AnchorPoint = Vector2.new(0,0.5)
-    line.BackgroundColor3 = Color3.fromRGB(225,225,225)
-    line.BorderSizePixel = 0
-    line.ZIndex = 10
-    line.Parent = sliderIcon
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(isMobile and 4 or 6,isMobile and 4 or 6)
-    knob.Position = UDim2.new(knobX,0,y,0)
-    knob.AnchorPoint = Vector2.new(0.5,0.5)
-    knob.BackgroundColor3 = Color3.fromRGB(225,225,225)
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 11
-    knob.Parent = sliderIcon
-    Instance.new("UICorner",knob).CornerRadius = UDim.new(1,0)
-end
 
 local function ApplyCurrentSort(list)
     -- DEFAULT is by far the common path: return the already-built list instead of copying it again.
@@ -2716,24 +2833,6 @@ local function BuildFilteredForSearch(query, source)
     end
     return ApplyCurrentSort(out)
 end
-
-filterBtn.MouseEnter:Connect(function()
-    TweenService:Create(filterBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(25,25,25)}):Play()
-    TweenService:Create(filterStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(220,220,220),Transparency=0.08}):Play()
-end)
-filterBtn.MouseLeave:Connect(function()
-    TweenService:Create(filterBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(12,12,12)}):Play()
-    TweenService:Create(filterStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(70,70,70),Transparency=0.32}):Play()
-end)
-filterBtn.MouseButton1Click:Connect(function()
-    sortMode = (sortMode == "DEFAULT" and "A-Z") or (sortMode == "A-Z" and "Z-A") or "DEFAULT"
-    local q = tostring(search.Text or "")
-    if currentTab ~= "ugc" then
-        filtered = BuildFilteredForSearch(q, currentData)
-        page = 1
-        if Refresh then Refresh(false,true) end
-    end
-end)
 
 trendingDropdown = Instance.new("Frame")
 trendingDropdown.Name = "HXTrendingDropdown"
@@ -2849,12 +2948,12 @@ end
 
 search.Focused:Connect(function()
     TweenService:Create(search, TweenInfo.new(0.14), {
-        BackgroundTransparency = 0.02,
-        BackgroundColor3 = Color3.fromRGB(8,8,8)
+        BackgroundTransparency = 0.10,
+        BackgroundColor3 = Color3.fromRGB(18,18,18)
     }):Play()
     TweenService:Create(searchStroke, TweenInfo.new(0.14), {
-        Thickness = 1.25,
-        Transparency = 0.08
+        Thickness = 1.8,
+        Transparency = 0
     }):Play()
 	if not canShowTrendingDropdown() then return end
 	if not search.Visible then return end
@@ -2864,12 +2963,12 @@ end)
 
 search.FocusLost:Connect(function(enterPressed)
     TweenService:Create(search, TweenInfo.new(0.14), {
-        BackgroundTransparency = 0.05,
-        BackgroundColor3 = Color3.fromRGB(5,5,5)
+        BackgroundTransparency = 0.24,
+        BackgroundColor3 = currentTheme.secondary
     }):Play()
     TweenService:Create(searchStroke, TweenInfo.new(0.14), {
-        Thickness = 1,
-        Transparency = 0.28
+        Thickness = 1.35,
+        Transparency = 0.05
     }):Play()
 	task.delay(0.18, function()
 		if trendingDropdown and not search:IsFocused() then
@@ -2878,176 +2977,137 @@ search.FocusLost:Connect(function(enterPressed)
 	end)
 end)
 
-local pageH = isMobile and 34 or 76
+local pageH = isMobile and ((_hxViewport.Y < 500) and 26 or 30) or 36
 pageBar = Instance.new("Frame")
-pageBar.Size = UDim2.new(1,-44,0,pageH)
-pageBar.Position = UDim2.new(0,22,1,-(pageH+16))
-pageBar.BackgroundColor3 = Color3.fromRGB(5,5,5)
-pageBar.BackgroundTransparency = 0.04
-pageBar.BorderSizePixel = 0
+pageBar.Size = UDim2.new(1,-24,0,pageH)
+pageBar.Position = UDim2.new(0, 12, 1, -(pageH + 10))
+pageBar.BackgroundColor3 = currentTheme.secondary
+pageBar.BackgroundTransparency = 0.28
 pageBar.ZIndex = 5
 pageBar.Parent = content
-Instance.new("UICorner", pageBar).CornerRadius = UDim.new(0,6)
-local pageBarStroke = Instance.new("UIStroke")
-pageBarStroke.Color = Color3.fromRGB(112,112,112)
-pageBarStroke.Thickness = 1
-pageBarStroke.Transparency = 0.30
-pageBarStroke.Parent = pageBar
+Instance.new("UICorner", pageBar).CornerRadius = UDim.new(0, 11)
+RegisterTheme(pageBar, "BackgroundColor3", "secondary")
 
-local pageBtnW = isMobile and 38 or 54
-local pageInset = isMobile and 4 or 14
+local pageBtnW = isMobile and 45 or 60
 
-local function MakePageArrow(isNext, xPos)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.fromOffset(pageBtnW, pageH-(isMobile and 8 or 22))
-    btn.Position = UDim2.new(0,xPos,0.5,0)
-    btn.AnchorPoint = Vector2.new(0,0.5)
-    btn.BackgroundColor3 = Color3.fromRGB(12,12,12)
-    btn.BackgroundTransparency = 0.04
-    btn.BorderSizePixel = 0
-    btn.Text = ""
-    btn.AutoButtonColor = false
-    btn.ZIndex = 6
-    btn.Parent = pageBar
-    Instance.new("UICorner",btn).CornerRadius = UDim.new(0,5)
-    local st = Instance.new("UIStroke")
-    st.Color = Color3.fromRGB(88,88,88)
-    st.Transparency = 0.32
-    st.Thickness = 1
-    st.Parent = btn
-    local icon = Instance.new("Frame")
-    icon.Name = "ChevronIcon"
-    icon.Size = UDim2.fromScale(1,1)
-    icon.BackgroundTransparency = 1
-    icon.ZIndex = 7
-    icon.Parent = btn
-    for _,rot in ipairs(isNext and {45,-45} or {-45,45}) do
-        local ln = Instance.new("Frame")
-        ln.Size = UDim2.fromOffset(isMobile and 11 or 15,2)
-        ln.AnchorPoint = Vector2.new(0.5,0.5)
-        ln.Position = UDim2.new(0.5,isNext and 2 or -2,0.5,rot == (isNext and 45 or -45) and -4 or 4)
-        ln.Rotation = rot
-        ln.BackgroundColor3 = Color3.fromRGB(225,225,225)
-        ln.BorderSizePixel = 0
-        ln.ZIndex = 8
-        ln.Parent = icon
-    end
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(25,25,25)}):Play()
-        TweenService:Create(st,TweenInfo.new(0.12),{Color=Color3.fromRGB(220,220,220),Transparency=0.08}):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(12,12,12)}):Play()
-        TweenService:Create(st,TweenInfo.new(0.12),{Color=Color3.fromRGB(88,88,88),Transparency=0.32}):Play()
-    end)
-    return btn
+prevBtn = Instance.new("TextButton")
+prevBtn.Size = UDim2.new(0, pageBtnW, 1, -4)
+prevBtn.Position = UDim2.new(0, 2, 0, 2)
+prevBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+prevBtn.BackgroundTransparency = 1
+prevBtn.Text = ""
+prevBtn.AutoButtonColor = false
+prevBtn.ZIndex = 6
+prevBtn.Parent = pageBar
+local prevStroke = Instance.new("UIStroke")
+prevStroke.Color = Color3.fromRGB(0,0,0)
+prevStroke.Thickness = 1
+prevStroke.Transparency = 0.38
+prevStroke.Parent = prevBtn
+HXApplyChamfer(prevBtn, {transparent=true, cut=isMobile and 5 or 7})
+
+local function CreateChevron(parent, isNext)
+	local container = Instance.new("Frame")
+	container.Name = "ChevronIcon"
+	container.Size = UDim2.new(1, 0, 1, 0)
+	container.BackgroundTransparency = 1
+	container.ZIndex = 7
+	container.Parent = parent
+
+	local effScale = math.min(ICON_SCALE, 1.4)
+	local len = math.floor(14 * effScale)
+	local thick = math.floor(1.6 * math.max(1, effScale))
+	local offset = math.floor(len * 0.353)
+
+	local tipX = isNext and offset or -offset
+	local dx = isNext and -offset or offset
+
+	local topL = Instance.new("Frame")
+	topL.BorderSizePixel = 0
+	topL.Size = UDim2.new(0, len, 0, thick)
+	topL.AnchorPoint = Vector2.new(0.5, 0.5)
+	topL.Position = UDim2.new(0.5, tipX + dx, 0.5, -offset)
+	topL.Rotation = isNext and 45 or -45
+	topL.BackgroundColor3 = Color3.new(1, 1, 1)
+	topL.ZIndex = 7
+	topL.Parent = container
+	Instance.new("UICorner", topL).CornerRadius = UDim.new(0, 2)
+
+	local botL = Instance.new("Frame")
+	botL.BorderSizePixel = 0
+	botL.Size = UDim2.new(0, len, 0, thick)
+	botL.AnchorPoint = Vector2.new(0.5, 0.5)
+	botL.Position = UDim2.new(0.5, tipX + dx, 0.5, offset)
+	botL.Rotation = isNext and -45 or 45
+	botL.BackgroundColor3 = Color3.new(1, 1, 1)
+	botL.ZIndex = 7
+	botL.Parent = container
+	Instance.new("UICorner", botL).CornerRadius = UDim.new(0, 2)
 end
 
-prevBtn = MakePageArrow(false,pageInset)
+local nextBtn = prevBtn:Clone()
+nextBtn.Position = UDim2.new(1, -(pageBtnW + 2), 0, 2)
+nextBtn.Parent = pageBar
+HXApplyChamfer(nextBtn, {transparent=true, cut=isMobile and 5 or 7})
 
-local currentBox = Instance.new("Frame")
-currentBox.Size = UDim2.fromOffset(isMobile and 42 or 64,pageH-(isMobile and 8 or 22))
-currentBox.Position = UDim2.new(0,pageInset+pageBtnW+(isMobile and 5 or 10),0.5,0)
-currentBox.AnchorPoint = Vector2.new(0,0.5)
-currentBox.BackgroundColor3 = Color3.fromRGB(12,12,12)
-currentBox.BorderSizePixel = 0
-currentBox.ZIndex = 6
-currentBox.Parent = pageBar
-Instance.new("UICorner",currentBox).CornerRadius = UDim.new(0,5)
-local currentStroke = Instance.new("UIStroke")
-currentStroke.Color = Color3.fromRGB(220,220,220)
-currentStroke.Thickness = 1.1
-currentStroke.Transparency = 0.16
-currentStroke.Parent = currentBox
+CreateChevron(prevBtn, false)
+CreateChevron(nextBtn, true)
+
+local function StylePageButtonHover(btn)
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(232,232,232),BackgroundTransparency=1}):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(255,255,255),BackgroundTransparency=1}):Play()
+    end)
+end
+StylePageButtonHover(prevBtn)
+StylePageButtonHover(nextBtn)
 
 pageNum = Instance.new("TextLabel")
-pageNum.Size = UDim2.fromScale(1,1)
+pageNum.Size = UDim2.new(0.5, -(pageBtnW + 12), 1, 0)
+pageNum.Position = UDim2.new(0, pageBtnW + 8, 0, 0)
 pageNum.BackgroundTransparency = 1
-pageNum.Text = "1"
-pageNum.TextColor3 = Color3.fromRGB(245,245,245)
-pageNum.TextStrokeTransparency = 1
+pageNum.Text = "1/1"
+pageNum.TextColor3 = currentTheme.textDim
 pageNum.Font = Enum.Font.GothamBold
-pageNum.TextSize = isMobile and 12 or 22
-pageNum.ZIndex = 7
-pageNum.Parent = currentBox
+pageNum.TextScaled = true
+pageNum.ZIndex = 6
+pageNum.Parent = pageBar
+RegisterTheme(pageNum, "TextColor3", "textDim")
 
-local pageTotalLbl = Instance.new("TextLabel")
-pageTotalLbl.Size = UDim2.fromOffset(isMobile and 46 or 72,pageH-(isMobile and 8 or 22))
-pageTotalLbl.Position = UDim2.new(0,pageInset+pageBtnW+(isMobile and 52 or 82),0.5,0)
-pageTotalLbl.AnchorPoint = Vector2.new(0,0.5)
-pageTotalLbl.BackgroundTransparency = 1
-pageTotalLbl.Text = "/ 1"
-pageTotalLbl.TextColor3 = Color3.fromRGB(135,135,135)
-pageTotalLbl.TextStrokeTransparency = 1
-pageTotalLbl.Font = Enum.Font.GothamBold
-pageTotalLbl.TextSize = isMobile and 10 or 18
-pageTotalLbl.ZIndex = 7
-pageTotalLbl.Parent = pageBar
-
-nextBtn = MakePageArrow(true,pageInset+pageBtnW+(isMobile and 96 or 160))
-
-local pauseIconW = isMobile and 42 or 64
-_hxBottomPauseIconBtn = Instance.new("TextButton")
-_hxBottomPauseIconBtn.Name = "BottomPauseIconButton"
-_hxBottomPauseIconBtn.Size = UDim2.fromOffset(pauseIconW,pageH-(isMobile and 8 or 22))
-_hxBottomPauseIconBtn.Position = UDim2.new(1,-pageInset,0.5,0)
-_hxBottomPauseIconBtn.AnchorPoint = Vector2.new(1,0.5)
-_hxBottomPauseIconBtn.BackgroundColor3 = Color3.fromRGB(12,12,12)
-_hxBottomPauseIconBtn.BorderSizePixel = 0
-_hxBottomPauseIconBtn.Text = "Ⅱ"
-_hxBottomPauseIconBtn.TextColor3 = Color3.fromRGB(245,245,245)
-_hxBottomPauseIconBtn.TextStrokeTransparency = 1
-_hxBottomPauseIconBtn.Font = Enum.Font.GothamBold
-_hxBottomPauseIconBtn.TextSize = isMobile and 14 or 26
-_hxBottomPauseIconBtn.AutoButtonColor = false
-_hxBottomPauseIconBtn.ZIndex = 6
-_hxBottomPauseIconBtn.Parent = pageBar
-Instance.new("UICorner",_hxBottomPauseIconBtn).CornerRadius = UDim.new(0,5)
-local pauseIconStroke = Instance.new("UIStroke")
-pauseIconStroke.Color = Color3.fromRGB(105,105,105)
-pauseIconStroke.Transparency = 0.28
-pauseIconStroke.Thickness = 1
-pauseIconStroke.Parent = _hxBottomPauseIconBtn
-
-local pauseW = isMobile and 150 or 286
 _hxBottomPauseBtn = Instance.new("TextButton")
 _hxBottomPauseBtn.Name = "BottomPauseButton"
-_hxBottomPauseBtn.Size = UDim2.new(0,pauseW,0,pageH-(isMobile and 8 or 22))
-_hxBottomPauseBtn.Position = UDim2.new(1,-(pageInset+pauseIconW+(isMobile and 6 or 12)),0.5,0)
-_hxBottomPauseBtn.AnchorPoint = Vector2.new(1,0.5)
-_hxBottomPauseBtn.BackgroundColor3 = Color3.fromRGB(14,14,14)
-_hxBottomPauseBtn.BackgroundTransparency = 0.02
+_hxBottomPauseBtn.Size = UDim2.new(0.5, -(pageBtnW + 12), 1, -4)
+_hxBottomPauseBtn.Position = UDim2.new(0.5, 4, 0, 2)
+_hxBottomPauseBtn.BackgroundColor3 = Color3.fromRGB(54,54,54)
+_hxBottomPauseBtn.BackgroundTransparency = 1
 _hxBottomPauseBtn.BorderSizePixel = 0
 _hxBottomPauseBtn.Text = isES and "PAUSAR" or "PAUSE"
-_hxBottomPauseBtn.TextColor3 = Color3.fromRGB(205,205,205)
+_hxBottomPauseBtn.TextColor3 = Color3.fromRGB(245,245,245)
 _hxBottomPauseBtn.TextStrokeTransparency = 1
 _hxBottomPauseBtn.Font = Enum.Font.GothamBold
-_hxBottomPauseBtn.TextSize = isMobile and 9 or 16
+_hxBottomPauseBtn.TextSize = isMobile and 9 or 11
 _hxBottomPauseBtn.AutoButtonColor = false
 _hxBottomPauseBtn.ZIndex = 6
 _hxBottomPauseBtn.Parent = pageBar
-Instance.new("UICorner", _hxBottomPauseBtn).CornerRadius = UDim.new(0,5)
-local pauseStroke = Instance.new("UIStroke")
-pauseStroke.Color = Color3.fromRGB(92,92,92)
-pauseStroke.Transparency = 0.28
-pauseStroke.Thickness = 1
-pauseStroke.Parent = _hxBottomPauseBtn
+HXApplyChamfer(_hxBottomPauseBtn, {transparent=true, cut=isMobile and 5 or 7})
 
-local function HXToggleBottomPause()
-    if currentAnimTrack and _isPaused then
-        pcall(function() currentAnimTrack:AdjustSpeed(HXEffectiveSpeed()) end)
-        _SetPauseState(false)
-    elseif currentAnimTrack and currentAnimTrack.IsPlaying then
-        pcall(function() currentAnimTrack:AdjustSpeed(0) end)
-        _SetPauseState(true)
-    end
-end
-_hxBottomPauseBtn.MouseButton1Click:Connect(HXToggleBottomPause)
-_hxBottomPauseIconBtn.MouseButton1Click:Connect(HXToggleBottomPause)
-for _,b in ipairs({_hxBottomPauseBtn,_hxBottomPauseIconBtn}) do
-    b.MouseEnter:Connect(function() TweenService:Create(b,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(27,27,27)}):Play() end)
-    b.MouseLeave:Connect(function() TweenService:Create(b,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(14,14,14)}):Play() end)
-end
+_hxBottomPauseBtn.MouseEnter:Connect(function()
+	TweenService:Create(_hxBottomPauseBtn, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(70,70,70)}):Play()
+end)
+_hxBottomPauseBtn.MouseLeave:Connect(function()
+	TweenService:Create(_hxBottomPauseBtn, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(54,54,54)}):Play()
+end)
+_hxBottomPauseBtn.MouseButton1Click:Connect(function()
+	if currentAnimTrack and _isPaused then
+		pcall(function() currentAnimTrack:AdjustSpeed(HXEffectiveSpeed()) end)
+		_SetPauseState(false)
+	elseif currentAnimTrack and currentAnimTrack.IsPlaying then
+		pcall(function() currentAnimTrack:AdjustSpeed(0) end)
+		_SetPauseState(true)
+	end
+end)
 
 MockPlaylists = Playlists
 
@@ -4660,15 +4720,12 @@ actionSelectedLbl.Parent = bottomBar
 
 UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
     if selectedCardStroke and selectedCardStroke ~= newStroke and selectedCardStroke.Parent then
-        selectedCardStroke.Color = Color3.fromRGB(74,74,74)
+        selectedCardStroke.Color = Color3.fromRGB(58,58,58)
         selectedCardStroke.Thickness = 1
-        selectedCardStroke.Transparency = 0.24
     end
     if selectedCardContainer and selectedCardContainer ~= newContainer and selectedCardContainer.Parent then
-        selectedCardContainer.BackgroundColor3 = Color3.fromRGB(7,7,7)
-        selectedCardContainer.BackgroundTransparency = 0.08
-        local oldGlow = selectedCardContainer:FindFirstChild("HXSelectionGlow")
-        if oldGlow then TweenService:Create(oldGlow,TweenInfo.new(0.12),{Transparency=1}):Play() end
+        selectedCardContainer.BackgroundColor3 = currentTheme.secondary
+        selectedCardContainer.BackgroundTransparency = 0.34
     end
 
     selectedEmote = emote
@@ -4676,12 +4733,10 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
     selectedCardContainer = newContainer or selectedCardContainer
 
     if newStroke and newStroke.Parent then
-        TweenService:Create(newStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(255,255,255),Thickness=2.2,Transparency=0}):Play()
+        TweenService:Create(newStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
     end
     if newContainer and newContainer.Parent then
-        TweenService:Create(newContainer,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(12,12,12),BackgroundTransparency=0.02}):Play()
-        local newGlow = newContainer:FindFirstChild("HXSelectionGlow")
-        if newGlow then TweenService:Create(newGlow,TweenInfo.new(0.14),{Transparency=0.70}):Play() end
+        TweenService:Create(newContainer,TweenInfo.new(0.14),{BackgroundColor3=currentTheme.tertiary,BackgroundTransparency=0.38}):Play()
     end
 
     if not emote then
@@ -4742,13 +4797,13 @@ if previewPanel then
     previewStats = nil
 end
 
-local scrollY = (titleH + searchH + (isMobile and 16 or 26))
+local scrollY = (titleH + searchH + 14)
 scroll = Instance.new("ScrollingFrame")
 scroll.ClipsDescendants = true
-scroll.Size = UDim2.new(1,-44,1,-(scrollY+pageH+(isMobile and 18 or 28)))
-scroll.Position = UDim2.new(0,22,0,scrollY)
+scroll.Size = UDim2.new(1,-16,1,-(scrollY+pageH+14))
+scroll.Position = UDim2.new(0,8,0,scrollY)
 scroll.BackgroundTransparency = 1
-scroll.ScrollBarThickness = isMobile and 2 or 2
+scroll.ScrollBarThickness = isMobile and 2 or 3
 scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scroll.ScrollBarImageColor3 = currentTheme.stroke
@@ -4758,28 +4813,29 @@ RegisterTheme(scroll, "ScrollBarImageColor3", "stroke")
 
 
 local function CalcLayout()
-    local PAD = isMobile and 8 or 26
+    local PAD = isMobile and 7 or 8
     local w = math.max(scroll.AbsoluteSize.X, 1)
-    if isMobile then
-        cols = math.clamp(math.floor((w + PAD) / (TARGET_MOBILE_CARD + PAD)), 2, mobileWide and 4 or 3)
-        currentCardSize = math.max(66, math.min(112, (w - PAD * (cols - 1)) / cols))
-    else
-        -- Reference composition uses four large cards per row.
-        cols = 4
-        currentCardSize = math.max(210, math.min(286, (w - PAD * (cols - 1)) / cols))
+    local target = isMobile and TARGET_MOBILE_CARD or TARGET_PC_CARD
+    local minCols = isMobile and 2 or 3
+    local maxCols = isMobile and 5 or 7
+    cols = math.clamp(math.floor((w + PAD) / (target + PAD)), minCols, maxCols)
+    if currentTab == "animations" and w < (isMobile and 360 or 620) then
+        cols = math.max(minCols, cols - 1)
     end
-    local used = cols * currentCardSize + PAD * (cols - 1)
-    gridOffsetX = math.max(0, (w - used) * 0.5)
-
-    local infoH = isMobile and 42 or 58
-    local kbH = ((not isMobile) or _isPlaylistMode) and (isMobile and 22 or 30) or 0
+    currentCardSize = math.max(isMobile and 54 or 68, (w - PAD * (cols - 1)) / cols)
+    local infoH = isMobile and 46 or 40
+    local kbH = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
+    local cardTotalH = currentCardSize + infoH + kbH
+    -- Keep a second row populated instead of limiting the page to a single top row.
+    local rowsVisible = math.max(2, math.floor(scroll.AbsoluteSize.Y / (cardTotalH + PAD)))
     if currentTab == "ugc" and _ugcPageMode then
+        -- AFEM marketplace pages are already bounded (21 items). Show the whole
+        -- server page in the scrolling grid and let the arrows request server pages.
         perPage = math.max(1, #filtered)
         pages = 1
         page = 1
     else
-        -- Exactly two rows per page on PC, matching the reference panel.
-        perPage = math.max(cols, cols * 2)
+        perPage = math.max(cols * 2, cols * rowsVisible)
         pages = math.max(1, math.ceil(#filtered / perPage))
         page = math.clamp(page,1,pages)
     end
@@ -4787,23 +4843,21 @@ end
 
 local function UpdatePageUI()
     if currentTab == "ugc" and _ugcPageMode then
-        pageNum.Text = tostring(_ugcCurrentPage)
-        pageTotalLbl.Text = _ugcHasNext and "/ …" or ("/ " .. tostring(_ugcCurrentPage))
+        pageNum.Text = _ugcHasNext and (tostring(_ugcCurrentPage) .. "/…") or (tostring(_ugcCurrentPage) .. "/" .. tostring(_ugcCurrentPage))
         prevBtn.Visible = _ugcHasPrevious
         nextBtn.Visible = _ugcHasNext
     else
-        pageNum.Text = tostring(page)
-        pageTotalLbl.Text = "/ " .. tostring(pages)
+        pageNum.Text = page .. "/" .. pages
         local show = pages > 1
         prevBtn.Visible = show
         nextBtn.Visible = show
     end
 
 	if prevBtn:FindFirstChild("ChevronIcon") then
-		for _, c in ipairs(prevBtn.ChevronIcon:GetChildren()) do c.BackgroundColor3 = Color3.fromRGB(225,225,225) end
+		for _, c in ipairs(prevBtn.ChevronIcon:GetChildren()) do c.BackgroundColor3 = Color3.new(1, 1, 1) end
 	end
 	if nextBtn:FindFirstChild("ChevronIcon") then
-		for _, c in ipairs(nextBtn.ChevronIcon:GetChildren()) do c.BackgroundColor3 = Color3.fromRGB(225,225,225) end
+		for _, c in ipairs(nextBtn.ChevronIcon:GetChildren()) do c.BackgroundColor3 = Color3.new(1, 1, 1) end
 	end
 
 	pageBar.Visible = scroll.Visible
@@ -5149,75 +5203,38 @@ end
 
 local function MakeCard(emote, ci, animate)
     local CARD = currentCardSize
-    local PAD = isMobile and 8 or 26
-    local INFO_H = isMobile and 42 or 58
-    local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 22 or 30) or 0
+    local PAD = isMobile and 7 or 8
+    local INFO_H = isMobile and 46 or 40
+    local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
     local TOTAL_H = CARD + INFO_H + KB_H
 
     local cardContainer = Instance.new("Frame")
     cardContainer.Name = "EmoteCard"
     cardContainer.Size = UDim2.new(0,CARD,0,TOTAL_H)
-    cardContainer.BackgroundColor3 = Color3.fromRGB(7,7,7)
-    cardContainer.BackgroundTransparency = 0.08
+    cardContainer.BackgroundColor3 = currentTheme.secondary
+    cardContainer.BackgroundTransparency = 0.42
     cardContainer.BorderSizePixel = 0
     cardContainer.ZIndex = 2
     cardContainer.Parent = scroll
-    Instance.new("UICorner",cardContainer).CornerRadius = UDim.new(0,isMobile and 5 or 4)
-
     local containerStroke = Instance.new("UIStroke")
-    containerStroke.Color = Color3.fromRGB(74,74,74)
+    containerStroke.Color = Color3.fromRGB(58,58,58)
     containerStroke.Thickness = 1
-    containerStroke.Transparency = 0.24
-    containerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    containerStroke.Transparency = 1
     containerStroke.Parent = cardContainer
-
-    local selectionGlow = Instance.new("UIStroke")
-    selectionGlow.Name = "HXSelectionGlow"
-    selectionGlow.Color = Color3.fromRGB(255,255,255)
-    selectionGlow.Thickness = isMobile and 2.5 or 4.2
-    selectionGlow.Transparency = 1
-    selectionGlow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    selectionGlow.Parent = cardContainer
-
-    local initiallySelected = selectedEmote and tostring(selectedEmote.id) == tostring(emote.id)
-    if initiallySelected then
-        containerStroke.Color = Color3.fromRGB(255,255,255)
-        containerStroke.Thickness = 2.2
-        containerStroke.Transparency = 0
-        selectionGlow.Transparency = 0.70
-        selectedCardStroke = containerStroke
-        selectedCardContainer = cardContainer
-    end
-
-    -- Small technical corner accents reproduce the cut-panel language of the reference.
-    local accentLen = isMobile and 7 or 12
-    for _,dat in ipairs({
-        {0,0, 1,0},{0,0, 0,1},{1,0,-1,0},{1,0,0,1},
-        {0,1, 1,0},{0,1, 0,-1},{1,1,-1,0},{1,1,0,-1}
-    }) do
-        local ln = Instance.new("Frame")
-        local horizontal = dat[3] ~= 0
-        ln.Size = horizontal and UDim2.fromOffset(accentLen,1) or UDim2.fromOffset(1,accentLen)
-        ln.AnchorPoint = Vector2.new(dat[1],dat[2])
-        ln.Position = UDim2.new(dat[1], dat[1]==1 and -2 or 2, dat[2], dat[2]==1 and -2 or 2)
-        ln.BackgroundColor3 = Color3.fromRGB(135,135,135)
-        ln.BackgroundTransparency = 0.42
-        ln.BorderSizePixel = 0
-        ln.ZIndex = 8
-        ln.Parent = cardContainer
-    end
+    HXApplyChamfer(cardContainer, {transparent=false, cut=isMobile and 6 or 8, thickness=1.05, glowThickness=3.0})
 
     local col = ci % cols
     local row = math.floor(ci / cols)
-    local targetX = gridOffsetX + col * (CARD + PAD)
+    local targetX = col * (CARD + PAD)
     local targetY = PAD + row * (TOTAL_H + PAD)
-    cardContainer.Position = UDim2.new(0,targetX,0,animate and targetY+12 or targetY)
+    cardContainer.Position = UDim2.new(0,targetX,0,animate and targetY+14 or targetY)
     if animate then
         cardContainer.BackgroundTransparency = 1
         task.delay(ci*0.012,function()
             if cardContainer.Parent then
                 TweenService:Create(cardContainer,TweenInfo.new(0.20,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{
-                    Position=UDim2.new(0,targetX,0,targetY), BackgroundTransparency=0.08
+                    Position=UDim2.new(0,targetX,0,targetY),
+                    BackgroundTransparency=0
                 }):Play()
             end
         end)
@@ -5225,17 +5242,17 @@ local function MakeCard(emote, ci, animate)
 
     local visual = Instance.new("ImageButton")
     visual.Name = "EmotePreview"
-    visual.Size = UDim2.new(1,-(isMobile and 10 or 16),0,CARD-(isMobile and 14 or 20))
-    visual.Position = UDim2.new(0,isMobile and 5 or 8,0,KB_H+(isMobile and 4 or 7))
-    visual.BackgroundColor3 = Color3.fromRGB(9,9,9)
-    visual.BackgroundTransparency = 0.04
+    visual.Size = UDim2.new(1,-10,0,CARD-10)
+    visual.Position = UDim2.new(0,5,0,5+KB_H)
+    visual.BackgroundColor3 = currentTheme.tertiary
+    visual.BackgroundTransparency = 0.42
     visual.AutoButtonColor = false
     visual.ScaleType = Enum.ScaleType.Fit
     visual.ImageColor3 = Color3.fromRGB(255,255,255)
     visual.ImageTransparency = animate and 1 or 0
     visual.ZIndex = 3
     visual.Parent = cardContainer
-    Instance.new("UICorner",visual).CornerRadius = UDim.new(0,3)
+    HXApplyChamfer(visual, {transparent=false, cut=isMobile and 5 or 6, thickness=0.9, glowThickness=2.6})
 
     if emote.isAnimationPack then
         local packId = tostring(emote.id):gsub("anim_", "")
@@ -5243,40 +5260,64 @@ local function MakeCard(emote, ci, animate)
     else
         visual.Image = "rbxthumb://type=Asset&id=" .. tostring(emote.id) .. "&w=420&h=420"
     end
+
     if animate then
         task.delay(ci*0.012,function()
-            if visual.Parent then TweenService:Create(visual,TweenInfo.new(0.22),{ImageTransparency=0}):Play() end
+            if visual.Parent then
+                TweenService:Create(visual,TweenInfo.new(0.22,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{ImageTransparency=0}):Play()
+            end
         end)
     end
 
     local visualStroke = Instance.new("UIStroke")
-    visualStroke.Color = Color3.fromRGB(44,44,44)
+    visualStroke.Color = Color3.fromRGB(48,48,48)
     visualStroke.Thickness = 1
-    visualStroke.Transparency = 0.32
     visualStroke.Parent = visual
 
-    local shade = Instance.new("Frame")
-    shade.Size = UDim2.new(1,0,0,math.max(34,math.floor(CARD*0.22)))
-    shade.Position = UDim2.new(0,0,1,-math.max(34,math.floor(CARD*0.22)))
-    shade.BackgroundColor3 = Color3.fromRGB(3,3,3)
-    shade.BackgroundTransparency = 0.18
-    shade.BorderSizePixel = 0
-    shade.ZIndex = 4
-    shade.Parent = visual
+    local previewShade = Instance.new("Frame")
+    previewShade.Size = UDim2.new(1,0,0,math.max(28,math.floor(CARD*0.30)))
+    previewShade.Position = UDim2.new(0,0,1,-math.max(28,math.floor(CARD*0.30)))
+    previewShade.BackgroundColor3 = currentTheme.primary
+    previewShade.BackgroundTransparency = 0.24
+    previewShade.BorderSizePixel = 0
+    previewShade.ZIndex = 4
+    previewShade.Parent = visual
+    Instance.new("UICorner",previewShade).CornerRadius = UDim.new(0,5)
     local shadeGrad = Instance.new("UIGradient")
     shadeGrad.Rotation = 90
     shadeGrad.Transparency = NumberSequence.new{
-        NumberSequenceKeypoint.new(0,1), NumberSequenceKeypoint.new(1,0.02)
+        NumberSequenceKeypoint.new(0,1),
+        NumberSequenceKeypoint.new(1,0.08)
     }
-    shadeGrad.Parent = shade
+    shadeGrad.Parent = previewShade
+
+    local previewTag = Instance.new("TextLabel")
+    previewTag.Size = UDim2.new(0,isMobile and 42 or 48,0,16)
+    previewTag.Position = UDim2.new(0,7,0,7)
+    previewTag.BackgroundColor3 = currentTheme.secondary
+    previewTag.BackgroundTransparency = 0.30
+    previewTag.BackgroundTransparency = 0.12
+    previewTag.Text = ""
+    previewTag.Visible = false
+    previewTag.TextColor3 = Color3.fromRGB(225,225,225)
+    previewTag.Font = Enum.Font.GothamBlack
+    previewTag.TextSize = isMobile and 7 or 8
+    previewTag.ZIndex = 6
+    previewTag.Parent = visual
+    Instance.new("UICorner",previewTag).CornerRadius = UDim.new(0,4)
+    local tagStroke = Instance.new("UIStroke")
+    tagStroke.Color = Color3.fromRGB(78,78,78)
+    tagStroke.Thickness = 1
+    tagStroke.Transparency = 0.25
+    tagStroke.Parent = previewTag
 
     local isFav = IsFavorite(emote.id)
     local favBtn = Instance.new("ImageButton")
-    favBtn.Size = UDim2.fromOffset(isMobile and 18 or 24,isMobile and 18 or 24)
-    favBtn.Position = UDim2.new(1,-(isMobile and 23 or 32),0,KB_H+(isMobile and 6 or 10))
+    favBtn.Size = UDim2.new(0,isMobile and 20 or 22,0,isMobile and 20 or 22)
+    favBtn.Position = UDim2.new(1,-(isMobile and 29 or 33),0,7+KB_H)
     favBtn.BackgroundTransparency = 1
     favBtn.Image = ResolveAssetImage(isFav and Icons.FavoriteFull or Icons.FavoriteEmpty)
-    favBtn.ImageColor3 = Color3.fromRGB(195,195,195)
+    favBtn.ImageColor3 = Color3.fromRGB(255,255,255)
     favBtn.ScaleType = Enum.ScaleType.Fit
     favBtn.AutoButtonColor = false
     favBtn.ZIndex = 9
@@ -5284,29 +5325,27 @@ local function MakeCard(emote, ci, animate)
     favBtn.Visible = not emote.isAnimationPack
 
     local nameLbl = Instance.new("TextLabel")
-    nameLbl.Size = UDim2.new(1,-(isMobile and 12 or 20),0,isMobile and 19 or 28)
-    nameLbl.Position = UDim2.new(0,isMobile and 6 or 10,1,-INFO_H+(isMobile and 2 or 5))
+    nameLbl.Size = UDim2.new(1,-12,0,isMobile and 24 or 22)
+    nameLbl.Position = UDim2.new(0,7,1,-INFO_H+3)
     nameLbl.BackgroundTransparency = 1
     local displayName = LocalizeEmoteName(emote.name)
-    nameLbl.Text = string.upper(#displayName>26 and displayName:sub(1,25).."…" or displayName)
-    nameLbl.TextColor3 = Color3.fromRGB(238,238,238)
-    nameLbl.TextStrokeTransparency = 1
-    nameLbl.Font = Enum.Font.GothamBold
-    nameLbl.TextSize = isMobile and 9 or 15
+    nameLbl.Text = string.upper(#displayName>20 and displayName:sub(1,19).."…" or displayName)
+    nameLbl.TextColor3 = Color3.fromRGB(245,245,245)
+    nameLbl.Font = Enum.Font.GothamBlack
+    nameLbl.TextSize = isMobile and 10 or 10
     nameLbl.TextXAlignment = Enum.TextXAlignment.Left
     nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
     nameLbl.ZIndex = 5
     nameLbl.Parent = cardContainer
 
     local metaLbl = Instance.new("TextLabel")
-    metaLbl.Size = UDim2.new(1,-(isMobile and 12 or 20),0,isMobile and 12 or 18)
-    metaLbl.Position = UDim2.new(0,isMobile and 6 or 10,1,-(isMobile and 14 or 21))
+    metaLbl.Size = UDim2.new(1,-12,0,14)
+    metaLbl.Position = UDim2.new(0,7,1,-17)
     metaLbl.BackgroundTransparency = 1
-    metaLbl.Text = emote.isAnimationPack and L.animationPack or "ROBLOX"
-    metaLbl.TextColor3 = Color3.fromRGB(102,102,102)
-    metaLbl.TextStrokeTransparency = 1
-    metaLbl.Font = Enum.Font.Gotham
-    metaLbl.TextSize = isMobile and 7 or 11
+    metaLbl.Text = emote.isAnimationPack and L.animationPack or (emote.isUGC and "ROBLOX" or L.emoteType)
+    metaLbl.TextColor3 = Color3.fromRGB(100,100,100)
+    metaLbl.Font = Enum.Font.GothamMedium
+    metaLbl.TextSize = isMobile and 7 or 8
     metaLbl.TextXAlignment = Enum.TextXAlignment.Left
     metaLbl.TextTruncate = Enum.TextTruncate.AtEnd
     metaLbl.ZIndex = 5
@@ -5315,39 +5354,29 @@ local function MakeCard(emote, ci, animate)
     local kbHasBinding = GetKeybind(emote.id) ~= nil
     if (not isMobile) or _isPlaylistMode then
         local kbBtn = Instance.new("TextButton")
-        local kbW = math.floor(CARD * (isMobile and 0.48 or 0.46))
-        kbBtn.Size = UDim2.fromOffset(kbW,KB_H-(isMobile and 5 or 7))
-        kbBtn.Position = UDim2.new(0.5,-kbW/2,0,isMobile and 2 or 3)
-        kbBtn.BackgroundColor3 = Color3.fromRGB(10,10,10)
-        kbBtn.BackgroundTransparency = 0.02
-        kbBtn.Text = _isPlaylistMode and (_selectedEmotesForPlaylist[tostring(emote.id)] and (isES and "LISTO" or "DONE") or L.selectEmote) or ((GetKeybind(emote.id) and GetKeybind(emote.id).key) and tostring(GetKeybind(emote.id).key) or (isES and "ASIGNAR" or "ASSIGN"))
-        kbBtn.TextColor3 = Color3.fromRGB(205,205,205)
-        kbBtn.TextStrokeTransparency = 1
+        kbBtn.Size = UDim2.new(1,-10,0,KB_H-4)
+        kbBtn.Position = UDim2.new(0,5,0,3)
+        kbBtn.BackgroundColor3 = _isPlaylistMode and Color3.fromRGB(16,16,16) or Color3.fromRGB(12,12,12)
+        kbBtn.BackgroundTransparency = 1
+        kbBtn.Text = _isPlaylistMode and (_selectedEmotesForPlaylist[tostring(emote.id)] and (isES and "LISTO" or "DONE") or L.selectEmote) or ((GetKeybind(emote.id) and GetKeybind(emote.id).key) and tostring(GetKeybind(emote.id).key) or (isES and "ASIGNAR" or "BIND"))
+        kbBtn.TextColor3 = _isPlaylistMode and Color3.fromRGB(225,225,225) or Color3.fromRGB(165,165,165)
         kbBtn.Font = Enum.Font.GothamBold
-        kbBtn.TextSize = isMobile and 7 or 12
+        kbBtn.TextSize = isMobile and 8 or 9
         kbBtn.AutoButtonColor = false
-        kbBtn.ZIndex = 10
+        kbBtn.ZIndex = 6
         kbBtn.Parent = cardContainer
-        Instance.new("UICorner",kbBtn).CornerRadius = UDim.new(0,3)
         local kst = Instance.new("UIStroke")
-        kst.Color = Color3.fromRGB(74,74,74)
-        kst.Transparency = 0.24
+        kst.Color = Color3.fromRGB(52,52,52)
         kst.Thickness = 1
         kst.Parent = kbBtn
-        kbBtn.MouseEnter:Connect(function()
-            TweenService:Create(kbBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(22,22,22)}):Play()
-            TweenService:Create(kst,TweenInfo.new(0.12),{Color=Color3.fromRGB(205,205,205),Transparency=0.08}):Play()
-        end)
-        kbBtn.MouseLeave:Connect(function()
-            TweenService:Create(kbBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(10,10,10)}):Play()
-            TweenService:Create(kst,TweenInfo.new(0.12),{Color=Color3.fromRGB(74,74,74),Transparency=0.24}):Play()
-        end)
+        HXApplyChamfer(kbBtn, {transparent=true, cut=isMobile and 4 or 5, thickness=0.9, glowThickness=2.4})
         kbBtn.MouseButton1Click:Connect(function()
             if _isPlaylistMode then
                 local k = tostring(emote.id)
                 _selectedEmotesForPlaylist[k] = not _selectedEmotesForPlaylist[k]
                 kbBtn.Text = _selectedEmotesForPlaylist[k] and (isES and "LISTO" or "DONE") or L.selectEmote
-                kbBtn.BackgroundColor3 = _selectedEmotesForPlaylist[k] and Color3.fromRGB(28,28,28) or Color3.fromRGB(10,10,10)
+                kbBtn.BackgroundColor3 = _selectedEmotesForPlaylist[k] and Color3.fromRGB(36,36,36) or Color3.fromRGB(16,16,16)
+                kbBtn.TextColor3 = Color3.fromRGB(235,235,235)
                 return
             end
             ShowKeybindDialog(emote.id, emote, kbHasBinding)
@@ -5355,39 +5384,41 @@ local function MakeCard(emote, ci, animate)
     end
 
     favBtn.MouseEnter:Connect(function()
-        TweenService:Create(favBtn,TweenInfo.new(0.12),{ImageColor3=Color3.fromRGB(255,255,255)}):Play()
+        TweenService:Create(favBtn,TweenInfo.new(0.14),{ImageTransparency=0.12}):Play()
     end)
     favBtn.MouseLeave:Connect(function()
-        TweenService:Create(favBtn,TweenInfo.new(0.12),{ImageColor3=Color3.fromRGB(195,195,195)}):Play()
+        TweenService:Create(favBtn,TweenInfo.new(0.14),{ImageTransparency=0}):Play()
     end)
     favBtn.MouseButton1Click:Connect(function()
         isFav = ToggleFavorite(emote.id)
         favBtn.Image = ResolveAssetImage(isFav and Icons.FavoriteFull or Icons.FavoriteEmpty)
-        favBtn.ImageColor3 = Color3.fromRGB(230,230,230)
+        favBtn.ImageColor3 = Color3.fromRGB(255,255,255)
         if currentTab == "favorites" and not isFav then
             task.delay(0.12,function() if currentTab=="favorites" then UpdateTabData() end end)
         end
     end)
 
     visual.MouseEnter:Connect(function()
-        TweenService:Create(visual,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(17,17,17)}):Play()
-        TweenService:Create(visualStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(155,155,155),Transparency=0.10}):Play()
-        if selectedEmote ~= emote then
-            TweenService:Create(containerStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(145,145,145),Transparency=0.10}):Play()
-        end
+        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(22,22,22),Position=UDim2.new(0,5,0,3+KB_H)}):Play()
+        TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(245,245,245),Thickness=1.35}):Play()
+        TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(180,180,180)}):Play()
     end)
     visual.MouseLeave:Connect(function()
-        TweenService:Create(visual,TweenInfo.new(0.14),{BackgroundColor3=Color3.fromRGB(9,9,9)}):Play()
-        TweenService:Create(visualStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(44,44,44),Transparency=0.32}):Play()
-        TweenService:Create(containerStroke,TweenInfo.new(0.14),{
-            Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(74,74,74),
-            Thickness=(selectedEmote == emote) and 2.2 or 1,
-            Transparency=(selectedEmote == emote) and 0 or 0.24
-        }):Play()
+        TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(13,13,13),Position=UDim2.new(0,5,0,5+KB_H)}):Play()
+        TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Thickness=1}):Play()
+        TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(58,58,58)}):Play()
     end)
 
     visual.MouseButton1Click:Connect(function()
         UpdateSelectedEmoteUI(emote, containerStroke, cardContainer)
+        TweenService:Create(containerStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
+        TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24),BackgroundTransparency=0.32}):Play()
+        task.delay(0.24,function()
+            if cardContainer.Parent then
+                TweenService:Create(containerStroke,TweenInfo.new(0.16),{Thickness=1}):Play()
+                TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8)}):Play()
+            end
+        end)
         if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner=nil end
         if emote.isUGC then
             local cardToken = tostring(emote.id)
@@ -5405,6 +5436,7 @@ local function MakeCard(emote, ci, animate)
     return cardContainer
 end
 
+
 local function UpdateCards(animate, fastMode)
 	ClearCards()
 
@@ -5421,9 +5453,9 @@ local function UpdateCards(animate, fastMode)
 	end
 
 	local CARD = currentCardSize
-	local PAD = isMobile and 8 or 26
-	local INFO_H = isMobile and 42 or 58
-	local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 22 or 30) or 0
+	local PAD = isMobile and 7 or 8
+	local INFO_H = isMobile and 46 or 40
+	local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
 	local CARD_TOTAL_H = CARD + INFO_H + KB_H
 
 	local rows = math.ceil(ci / math.max(cols, 1))
@@ -5493,21 +5525,26 @@ UpdateTabStyles = function()
     for name,data in pairs(tabBtns) do
         local active = currentTab == name
         TweenService:Create(data.btn,TweenInfo.new(0.17,Enum.EasingStyle.Quad),{
-            BackgroundColor3 = active and Color3.fromRGB(16,16,16) or Color3.fromRGB(8,8,8),
-            BackgroundTransparency = active and 0.08 or 1
+            BackgroundColor3 = active and Color3.fromRGB(30,30,30) or Color3.fromRGB(0,0,0),
+            BackgroundTransparency = 1
         }):Play()
         if data.stroke then
             TweenService:Create(data.stroke,TweenInfo.new(0.17),{
-                Color = active and Color3.fromRGB(225,225,225) or Color3.fromRGB(110,110,110),
-                Transparency = active and 0.12 or 1,
-                Thickness = active and 1.35 or 1
+                Color = Color3.fromRGB(255,255,255),
+                Transparency = 1,
+                Thickness = active and 2.25 or 1
             }):Play()
         end
         if data.img then
-            TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=active and Color3.fromRGB(245,245,245) or Color3.fromRGB(170,170,170)}):Play()
+            local c = Color3.fromRGB(255,255,255)
+            if data.img:IsA("ImageLabel") or data.img:IsA("ImageButton") then
+                TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=c}):Play()
+            elseif data.img:IsA("TextLabel") then
+                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=c}):Play()
+            end
         end
         if data.label then
-            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(245,245,245) or Color3.fromRGB(170,170,170)}):Play()
+            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=Color3.fromRGB(255,255,255)}):Play()
         end
     end
 end
@@ -6386,14 +6423,14 @@ UpdateTabData = function()
 		title.Text = L.emotes
 		titleIcon.Image = ResolveAssetImage(Icons.Emote)
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 	elseif currentTab == "ugc" then
 		currentData = UGCEmotes
 		filtered = UGCEmotes
 		title.Text = "ROBLOX"
 		titleIcon.Image = ResolveAssetImage("rbxassetid://3576686446")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
         -- AFEM-style marketplace fetch: default updated UGC page on tab open.
         task.defer(function()
             if currentTab == "ugc" and LoadUGCCatalog then LoadUGCCatalog("") end
@@ -6410,7 +6447,7 @@ UpdateTabData = function()
 		title.Text = L.favorites
 		titleIcon.Image = ResolveAssetImage(Icons.FavoriteFull)
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 
 	elseif currentTab == "recent" then
 		currentData = {}
@@ -6424,7 +6461,7 @@ UpdateTabData = function()
 		title.Text = L.recent
 		titleIcon.Image = ResolveAssetImage(Icons.Recent)
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 	elseif currentTab == "playlists" then
 		if _currentPlaylistId then
 			currentData = {}
@@ -6443,17 +6480,17 @@ UpdateTabData = function()
 		title.Text = L.playlistsTab
 		titleIcon.Image = ResolveAssetImage("rbxassetid://108973165274475")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 	elseif currentTab == "keybinds" then
 		title.Text = L.keybinds
 		titleIcon.Image = ResolveAssetImage("rbxassetid://122679509852670")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 	elseif currentTab == "tools" then
 		title.Text = "TOOLS"
 		titleIcon.Image = ResolveAssetImage("rbxassetid://9405931578")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 	elseif currentTab == "info" then
 		title.Text = "INFO"
 		titleIcon.Image = ""
@@ -6464,7 +6501,7 @@ UpdateTabData = function()
 		title.Text = isES and "Animaciones" or "Animations"
 		titleIcon.Image = ResolveAssetImage("rbxassetid://75528584354229")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = true
+		titleIcon.Visible = false
 	end
 
 	local tabIconSz = isMobile and 24 or 27
@@ -6645,11 +6682,13 @@ miniIconGrad.Rotation = 45
 miniIconGrad.Parent = miniIconStroke
 
 
+local _hxChamferConn = nil
+
 do
 local savedPos, savedSize = nil, nil
+local isMaximized = false
+local maximizeRestorePos, maximizeRestoreSize = nil, nil
 local iconDragging, iconDragStart, iconStartPos = false, nil, nil
-local hxMaximized = false
-local hxRestoreSize, hxRestorePos = nil, nil
 
 miniIcon.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -6683,7 +6722,7 @@ UserInputService.InputEnded:Connect(function(input)
 				main.Position = targetPos
 
 				TweenService:Create(main, TweenInfo.new(0.35, Enum.EasingStyle.Back), {Size = targetSize, BackgroundTransparency = 0}):Play()
-				TweenService:Create(mainStroke, TweenInfo.new(0.20), {Transparency = 0.18}):Play()
+				TweenService:Create(mainStroke, TweenInfo.new(0.20), {Transparency = 0.08}):Play()
 
 				task.delay(0.4, function()
 					main.ClipsDescendants = true
@@ -6696,23 +6735,28 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 maxBtn.MouseButton1Click:Connect(function()
-    local vp = workspace.CurrentCamera.ViewportSize
-    if not hxMaximized then
-        hxRestoreSize = main.Size
-        hxRestorePos = main.Position
-        hxMaximized = true
-        main.Position = UDim2.fromScale(0.5,0.5)
-        TweenService:Create(main,TweenInfo.new(0.24,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{
-            Size=UDim2.new(0,math.floor(vp.X*0.98),0,math.floor(vp.Y*0.96))
+    if not main or not main.Parent or not main.Visible then return end
+    main.ClipsDescendants = true
+    if not isMaximized then
+        maximizeRestorePos = main.Position
+        maximizeRestoreSize = main.Size
+        isMaximized = true
+        local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
+        local target = UDim2.new(0, math.max(280, math.floor(vp.X * 0.90)), 0, math.max(260, math.floor(vp.Y * 0.90)))
+        TweenService:Create(main, TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Size = target,
+            Position = UDim2.fromScale(0.5,0.5)
         }):Play()
     else
-        hxMaximized = false
-        main.Position = hxRestorePos or UDim2.fromScale(0.5,0.5)
-        TweenService:Create(main,TweenInfo.new(0.24,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{
-            Size=hxRestoreSize or GetDefaultSize()
+        isMaximized = false
+        TweenService:Create(main, TweenInfo.new(0.26, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Size = maximizeRestoreSize or GetDefaultSize(),
+            Position = maximizeRestorePos or UDim2.fromScale(0.5,0.5)
         }):Play()
     end
-    task.delay(0.27,function() if scroll and scroll.Parent then Refresh(false,true) end end)
+    task.delay(0.28, function()
+        if main and main.Parent and currentTab ~= "settings" then Refresh(false, true) end
+    end)
 end)
 
 minBtn.MouseButton1Click:Connect(function()
@@ -6731,6 +6775,7 @@ end)
 
 local function _CleanupScript()
 	pcall(function() _heartbeatConn:Disconnect() end)
+	pcall(function() if _hxChamferConn then _hxChamferConn:Disconnect() end end)
 	pcall(function() _charAddedConn:Disconnect() end)
 	pcall(function() if _keybindInputConn then _keybindInputConn:Disconnect() end end)
 	pcall(function() DisableCopyEmotePrompts() end)
@@ -6863,7 +6908,7 @@ end)
 main.Rotation = 0
 local openSize = GetDefaultSize()
 TweenService:Create(main, TweenInfo.new(0.45, Enum.EasingStyle.Back), {Size = openSize, BackgroundTransparency = 0}):Play()
-TweenService:Create(mainStroke, TweenInfo.new(0.20), {Transparency = 0.18}):Play()
+TweenService:Create(mainStroke, TweenInfo.new(0.20), {Transparency = 0.08}):Play()
 
 task.wait(0.5)
 
@@ -6871,6 +6916,39 @@ main.ClipsDescendants = true
 ApplyTheme(Settings.theme)
 UpdateTabStyles()
 UpdateTabData()
+local function HXAutoChamferControl(obj)
+    if not obj or not obj.Parent or not main or not obj:IsDescendantOf(main) then return end
+    if obj:GetAttribute("HXChamfer") then return end
+    local n = tostring(obj.Name or "")
+    if n:find("Overlay") or n == "GrabArea" then return end
+
+    if obj:IsA("TextBox") then
+        HXApplyChamfer(obj, {transparent=true, cut=isMobile and 6 or 8})
+        return
+    end
+
+    if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+        if obj.BackgroundTransparency >= 0.95 then return end
+        local a = obj.AbsoluteSize
+        local m = main.AbsoluteSize
+        if m.X > 0 and m.Y > 0 and a.X > m.X * 0.72 and a.Y > m.Y * 0.45 then return end
+        HXApplyChamfer(obj, {transparent=true, cut=isMobile and 5 or 7})
+    elseif obj:IsA("Frame") and obj.Name == "EmoteCard" then
+        HXApplyChamfer(obj, {transparent=false, cut=isMobile and 6 or 8})
+    end
+end
+
+for _, _hxObj in ipairs(main:GetDescendants()) do
+    pcall(HXAutoChamferControl, _hxObj)
+end
+
+_hxChamferConn = gui.DescendantAdded:Connect(function(obj)
+    task.defer(function()
+        task.wait()
+        if obj and obj.Parent then pcall(HXAutoChamferControl, obj) end
+    end)
+end)
+
 
 local _keybindInputConn = nil
 if not isMobile then
@@ -8326,7 +8404,7 @@ do
     _toolPanel.ZIndex=3
     _toolPanel.Parent=content
     toolsContentPanel=_toolPanel
-    Instance.new("UICorner",_toolPanel).CornerRadius=UDim.new(0,6)
+    Instance.new("UICorner",_toolPanel).CornerRadius=UDim.new(0,12)
     local pst=Instance.new("UIStroke",_toolPanel); pst.Color=Color3.fromRGB(255,255,255); pst.Transparency=0.42; pst.Thickness=1
 
     local tabs=Instance.new("Frame",_toolPanel)
