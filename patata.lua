@@ -19,7 +19,6 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local TextService = game:GetService("TextService")
 local AvatarEditorService = game:GetService("AvatarEditorService")
-local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui", 10)
@@ -1086,8 +1085,121 @@ local Icons = {
 local char = player.Character or player.CharacterAdded:Wait()
 local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 10)
 
--- R6 is never blocked. HX Emotes will first try Roblox playback and then
--- automatically retarget R15-style keyframes to the six R6 joints when needed.
+local function HXRunR6WarningGate()
+    if not hum or hum.RigType ~= Enum.HumanoidRigType.R6 then
+        return true
+    end
+
+    local r6Screen = Instance.new("Frame")
+    r6Screen.Name = "R6WarningGate"
+    r6Screen.Size = UDim2.fromScale(1,1)
+    r6Screen.BackgroundColor3 = currentTheme.primary
+    r6Screen.BackgroundTransparency = 0.16
+    r6Screen.BorderSizePixel = 0
+    r6Screen.ZIndex = 22000
+    r6Screen.Parent = gui
+    HXCreateStarfield(r6Screen, 22001, isMobile and 88 or 150, 2, 98, 3, 97)
+
+    local box = Instance.new("Frame")
+    box.Name = "R6WarningPanel"
+    box.Size = UDim2.new(0,0,0,0)
+    box.Position = UDim2.fromScale(0.5,0.5)
+    box.AnchorPoint = Vector2.new(0.5,0.5)
+    box.BackgroundColor3 = currentTheme.secondary
+    box.BackgroundTransparency = 0.08
+    box.BorderSizePixel = 0
+    box.ClipsDescendants = false
+    box.ZIndex = 22002
+    box.Parent = r6Screen
+    HXApplyChamfer(box, {transparent=false, cut=isMobile and 9 or 12, thickness=1.2, glowThickness=3.6})
+
+    local logoR6 = Instance.new("ImageLabel")
+    logoR6.Size = UDim2.new(0,22,0,22)
+    logoR6.Position = UDim2.new(1,-38,0,16)
+    logoR6.BackgroundTransparency = 1
+    logoR6.Image = "rbxassetid://72742584610344"
+    logoR6.ImageColor3 = Color3.fromRGB(255,255,255)
+    logoR6.ScaleType = Enum.ScaleType.Fit
+    logoR6.ZIndex = 22004
+    logoR6.Parent = box
+
+    local titleR6 = Instance.new("TextLabel")
+    titleR6.Size = UDim2.new(1,-60,0,26)
+    titleR6.Position = UDim2.new(0,16,0,14)
+    titleR6.BackgroundTransparency = 1
+    titleR6.Text = isES and "COMPATIBILIDAD R6" or "R6 COMPATIBILITY"
+    titleR6.TextColor3 = Color3.fromRGB(255,255,255)
+    titleR6.Font = Enum.Font.Gotham
+    titleR6.TextSize = isMobile and 13 or 15
+    titleR6.TextXAlignment = Enum.TextXAlignment.Left
+    titleR6.ZIndex = 22004
+    titleR6.Parent = box
+
+    local messageR6 = Instance.new("TextLabel")
+    messageR6.Size = UDim2.new(1,-32,0,isMobile and 80 or 76)
+    messageR6.Position = UDim2.new(0,16,0,48)
+    messageR6.BackgroundTransparency = 1
+    messageR6.Text = isES
+        and "Este juego usa R6, por lo cual la mayoría de los emotes, o incluso todos, pueden dejar de funcionar correctamente. ¿Deseas continuar aun así?"
+        or "This game uses R6, so most emotes, or even all of them, may not work correctly. Do you still want to continue?"
+    messageR6.TextColor3 = Color3.fromRGB(185,185,185)
+    messageR6.Font = Enum.Font.Gotham
+    messageR6.TextSize = isMobile and 10 or 11
+    messageR6.TextWrapped = true
+    messageR6.TextXAlignment = Enum.TextXAlignment.Left
+    messageR6.TextYAlignment = Enum.TextYAlignment.Top
+    messageR6.ZIndex = 22004
+    messageR6.Parent = box
+
+    local continueBtn = Instance.new("TextButton")
+    continueBtn.Size = UDim2.new(0.42,0,0,32)
+    continueBtn.Position = UDim2.new(0.06,0,1,-48)
+    continueBtn.BackgroundTransparency = 1
+    continueBtn.BorderSizePixel = 0
+    continueBtn.Text = isES and "CONTINUAR" or "CONTINUE"
+    continueBtn.TextColor3 = Color3.fromRGB(245,245,245)
+    continueBtn.Font = Enum.Font.Gotham
+    continueBtn.TextSize = isMobile and 10 or 11
+    continueBtn.AutoButtonColor = false
+    continueBtn.ZIndex = 22004
+    continueBtn.Parent = box
+    HXApplyChamfer(continueBtn, {transparent=true, cut=isMobile and 5 or 7, thickness=1.15, glowThickness=3.5})
+
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Size = UDim2.new(0.42,0,0,32)
+    cancelBtn.Position = UDim2.new(0.52,0,1,-48)
+    cancelBtn.BackgroundTransparency = 1
+    cancelBtn.BorderSizePixel = 0
+    cancelBtn.Text = isES and "CANCELAR" or "CANCEL"
+    cancelBtn.TextColor3 = Color3.fromRGB(205,205,205)
+    cancelBtn.Font = Enum.Font.Gotham
+    cancelBtn.TextSize = isMobile and 10 or 11
+    cancelBtn.AutoButtonColor = false
+    cancelBtn.ZIndex = 22004
+    cancelBtn.Parent = box
+    HXApplyChamfer(cancelBtn, {transparent=true, cut=isMobile and 5 or 7, thickness=1.0, glowThickness=2.8})
+
+    local choice = nil
+    continueBtn.MouseButton1Click:Connect(function() choice = true end)
+    cancelBtn.MouseButton1Click:Connect(function() choice = false end)
+
+    local target = isMobile and UDim2.new(0,302,0,206) or UDim2.new(0,392,0,202)
+    TweenService:Create(box, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = target}):Play()
+
+    repeat task.wait(0.05) until choice ~= nil
+
+    TweenService:Create(box, TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Size = UDim2.new(0,0,0,0), BackgroundTransparency = 1}):Play()
+    TweenService:Create(r6Screen, TweenInfo.new(0.18), {BackgroundTransparency = 1}):Play()
+    task.wait(0.20)
+    if r6Screen.Parent then r6Screen:Destroy() end
+    return choice
+end
+
+if not HXRunR6WarningGate() then
+    if gui and gui.Parent then gui:Destroy() end
+    return
+end
+
 local Emotes = {}
 
 local Auras = {
@@ -1675,9 +1787,6 @@ local function GetAnimator()
 end
 
 local function StopAllTracks()
-	if currentAnimTrack and currentAnimTrack._hxR6Adapter then
-		pcall(function() currentAnimTrack:Stop(0.08) end)
-	end
 	local animator = GetAnimator()
 	if animator then
 		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
@@ -1695,9 +1804,6 @@ local function ApplySpeedToAllTracks()
 		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
 			pcall(function() track:AdjustSpeed(HXEffectiveSpeed()) end)
 		end
-	end
-	if currentAnimTrack and currentAnimTrack._hxR6Adapter then
-		pcall(function() currentAnimTrack:AdjustSpeed(HXEffectiveSpeed()) end)
 	end
 end
 
@@ -1754,219 +1860,6 @@ end)
 
 local _animCache = {}
 
--- Lightweight R15 -> R6 retargeter. It is only used when Roblox's native
--- AnimationTrack does not visibly drive any R6 Motor6D.
-local function HXGetR6Motors(character)
-    if not character then return {} end
-    local torso = character:FindFirstChild("Torso")
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not torso or not root then return {} end
-    return {
-        RootJoint = root:FindFirstChild("RootJoint") or torso:FindFirstChild("RootJoint"),
-        Neck = torso:FindFirstChild("Neck"),
-        LeftShoulder = torso:FindFirstChild("Left Shoulder") or torso:FindFirstChild("LeftShoulder"),
-        RightShoulder = torso:FindFirstChild("Right Shoulder") or torso:FindFirstChild("RightShoulder"),
-        LeftHip = torso:FindFirstChild("Left Hip") or torso:FindFirstChild("LeftHip"),
-        RightHip = torso:FindFirstChild("Right Hip") or torso:FindFirstChild("RightHip"),
-    }
-end
-
-local function HXSnapshotR6Motors(character)
-    local motors = HXGetR6Motors(character)
-    local snap = {}
-    for name, motor in pairs(motors) do
-        if motor then snap[name] = motor.Transform end
-    end
-    return motors, snap
-end
-
-local function HXCFrameDelta(a, b)
-    local rel = a:ToObjectSpace(b)
-    local pos = rel.Position.Magnitude
-    local angle = 0
-    pcall(function()
-        local _, a2 = rel:ToAxisAngle()
-        angle = math.abs(a2 or 0)
-    end)
-    return pos + angle
-end
-
-local function HXNativeMovedR6(motors, snap)
-    for name, motor in pairs(motors or {}) do
-        if motor and snap[name] and HXCFrameDelta(snap[name], motor.Transform) > 0.0025 then
-            return true
-        end
-    end
-    return false
-end
-
-local function HXCollectPoseMap(keyframe)
-    local poseMap = {}
-    for _, obj in ipairs(keyframe:GetDescendants()) do
-        if obj:IsA("Pose") then
-            poseMap[obj.Name] = obj.CFrame
-        end
-    end
-    return poseMap
-end
-
-local function HXMulPose(map, names)
-    local out = CFrame.new()
-    local used = false
-    for _, name in ipairs(names) do
-        local cf = map[name]
-        if cf then
-            out = out * cf
-            used = true
-        end
-    end
-    return used and out or CFrame.new()
-end
-
-local function HXMapR15PoseToR6(map)
-    return {
-        RootJoint = map.Torso or HXMulPose(map, {"LowerTorso", "UpperTorso"}),
-        Neck = map.Head or CFrame.new(),
-        LeftShoulder = map["Left Arm"] or HXMulPose(map, {"LeftUpperArm", "LeftLowerArm", "LeftHand"}),
-        RightShoulder = map["Right Arm"] or HXMulPose(map, {"RightUpperArm", "RightLowerArm", "RightHand"}),
-        LeftHip = map["Left Leg"] or HXMulPose(map, {"LeftUpperLeg", "LeftLowerLeg", "LeftFoot"}),
-        RightHip = map["Right Leg"] or HXMulPose(map, {"RightUpperLeg", "RightLowerLeg", "RightFoot"}),
-    }
-end
-
-local function HXBuildR6Frames(animationId)
-    local sequence
-    local ok = pcall(function()
-        sequence = KeyframeSequenceProvider:GetKeyframeSequenceAsync("rbxassetid://" .. tostring(animationId))
-    end)
-    if not ok or not sequence then
-        pcall(function()
-            local objects = game:GetObjects("rbxassetid://" .. tostring(animationId))
-            for _, obj in ipairs(objects or {}) do
-                if obj:IsA("KeyframeSequence") then sequence = obj break end
-                local nested = obj:FindFirstChildWhichIsA("KeyframeSequence", true)
-                if nested then sequence = nested break end
-            end
-        end)
-    end
-    if not sequence then return nil end
-
-    local frames = {}
-    local sourceR15, sourceR6 = false, false
-    local keyframes = sequence:GetKeyframes()
-    table.sort(keyframes, function(a, b) return a.Time < b.Time end)
-    for _, kf in ipairs(keyframes) do
-        local map = HXCollectPoseMap(kf)
-        if map.UpperTorso or map.LowerTorso or map.LeftUpperArm or map.RightUpperArm or map.LeftUpperLeg or map.RightUpperLeg then sourceR15 = true end
-        if map.Torso or map["Left Arm"] or map["Right Arm"] or map["Left Leg"] or map["Right Leg"] then sourceR6 = true end
-        frames[#frames + 1] = {t = tonumber(kf.Time) or 0, pose = HXMapR15PoseToR6(map)}
-    end
-    pcall(function() sequence:Destroy() end)
-    if #frames < 2 then return nil end
-    return frames, math.max(0.05, frames[#frames].t), {sourceR15 = sourceR15, sourceR6 = sourceR6}
-end
-
-local function HXCreateR6RetargetTrack(animationId, syncStartTime)
-    local character = player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.RigType ~= Enum.HumanoidRigType.R6 then return nil end
-
-    local frames, length, sourceInfo = HXBuildR6Frames(animationId)
-    if not frames then return nil end
-    local motors = HXGetR6Motors(character)
-    if not next(motors) then return nil end
-
-    local stoppedBindable = Instance.new("BindableEvent")
-    local track = {
-        _hxR6Adapter = true,
-        _sourceR15 = sourceInfo and sourceInfo.sourceR15 or false,
-        _sourceR6 = sourceInfo and sourceInfo.sourceR6 or false,
-        _frames = frames,
-        _motors = motors,
-        _conn = nil,
-        _speed = HXEffectiveSpeed(),
-        _weight = math.clamp(tonumber(Settings.animationWeight) or 1, 0.2, 1),
-        _stoppedBindable = stoppedBindable,
-        Stopped = stoppedBindable.Event,
-        IsPlaying = false,
-        Length = length,
-        TimePosition = 0,
-        Looped = Settings.loopEmote,
-    }
-
-    function track:_resetMotors()
-        for _, motor in pairs(self._motors) do
-            if motor and motor.Parent then
-                pcall(function() motor.Transform = CFrame.new() end)
-            end
-        end
-    end
-
-    function track:_sample(t)
-        local fs = self._frames
-        local a, b = fs[1], fs[#fs]
-        for i = 1, #fs - 1 do
-            if t >= fs[i].t and t <= fs[i + 1].t then
-                a, b = fs[i], fs[i + 1]
-                break
-            end
-        end
-        local span = math.max(0.0001, b.t - a.t)
-        local alpha = math.clamp((t - a.t) / span, 0, 1)
-        for name, motor in pairs(self._motors) do
-            if motor and motor.Parent then
-                local c0 = (a.pose and a.pose[name]) or CFrame.new()
-                local c1 = (b.pose and b.pose[name]) or c0
-                local target = c0:Lerp(c1, alpha)
-                target = CFrame.new():Lerp(target, self._weight)
-                pcall(function() motor.Transform = target end)
-            end
-        end
-    end
-
-    function track:Play(_fade)
-        if self.IsPlaying then return end
-        self.IsPlaying = true
-        if syncStartTime then
-            local offset = workspace:GetServerTimeNow() - tonumber(syncStartTime)
-            if offset > 0 and self.Length > 0 then
-                self.TimePosition = (offset * math.abs(self._speed)) % self.Length
-            end
-        end
-        self._conn = RunService.Heartbeat:Connect(function(dt)
-            if not self.IsPlaying then return end
-            if self._speed ~= 0 then
-                self.TimePosition = self.TimePosition + dt * self._speed
-                if self.Looped then
-                    if self.Length > 0 then self.TimePosition = self.TimePosition % self.Length end
-                elseif self.TimePosition >= self.Length or self.TimePosition < 0 then
-                    self:Stop(0)
-                    return
-                end
-            end
-            self:_sample(math.clamp(self.TimePosition, 0, self.Length))
-        end)
-    end
-
-    function track:Stop(_fade)
-        if not self.IsPlaying and not self._conn then return end
-        self.IsPlaying = false
-        if self._conn then pcall(function() self._conn:Disconnect() end); self._conn = nil end
-        self:_resetMotors()
-        pcall(function() self._stoppedBindable:Fire() end)
-    end
-
-    function track:AdjustSpeed(speed)
-        self._speed = tonumber(speed) or 0
-    end
-
-    function track:AdjustWeight(weight, _fade)
-        self._weight = math.clamp(tonumber(weight) or 1, 0, 1)
-    end
-
-    return track
-end
-
 PlayEmote = function(id, name, silent, syncStartTime)
 	local animator = GetAnimator()
 	if not animator then return end
@@ -2002,12 +1895,6 @@ PlayEmote = function(id, name, silent, syncStartTime)
 
 		if _genv().lastHXEmote and _genv().lastHXEmote.id == id then
 			local success, err = pcall(function()
-				local character = player.Character
-				local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-				local isR6 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R6
-				local r6Motors, r6Snapshot = nil, nil
-				if isR6 then r6Motors, r6Snapshot = HXSnapshotR6Motors(character) end
-
 				local track = animator:LoadAnimation(anim)
 				track.Priority = Enum.AnimationPriority.Action4
 				track.Looped = Settings.loopEmote
@@ -2039,30 +1926,6 @@ PlayEmote = function(id, name, silent, syncStartTime)
 				currentAnimTrack = track
 				AddToRecent(id)
 
-				if isR6 then
-					task.delay(0.22, function()
-						if currentAnimTrack ~= track or not (_genv().lastHXEmote and tostring(_genv().lastHXEmote.id) == tostring(id)) then return end
-						local nativeWorks = false
-						pcall(function() nativeWorks = HXNativeMovedR6(r6Motors, r6Snapshot) end)
-						task.spawn(function()
-							local adapted = HXCreateR6RetargetTrack(id, syncStartTime)
-							if not adapted then return end
-							if nativeWorks and not adapted._sourceR15 then
-								pcall(function() adapted:Stop(0) end)
-								return
-							end
-							if currentAnimTrack ~= track or not (_genv().lastHXEmote and tostring(_genv().lastHXEmote.id) == tostring(id)) then
-								pcall(function() adapted:Stop(0) end)
-								return
-							end
-							pcall(function() track:Stop(0.06) end)
-							currentAnimTrack = adapted
-							adapted.Looped = Settings.loopEmote
-							adapted:Play(0.06)
-							HXApplyTrackTuning(adapted)
-						end)
-					end)
-				end
 			end)
 
 			if success then
@@ -2109,6 +1972,7 @@ local function HXPrepareAuraPart(part)
     part.CanTouch = false
     part.CanQuery = false
     part.Massless = true
+    pcall(function() part.LocalTransparencyModifier = 0 end)
 end
 
 local function HXEnableAuraVisuals(root)
@@ -2197,6 +2061,119 @@ local function HXMountLooseAuraEffects(source, folder, hrp)
     return mounted
 end
 
+
+local function HXFindCharacterAttachment(character, attachmentName, ignoreRoot)
+    if not character or not attachmentName or attachmentName == "" then return nil end
+    for _, d in ipairs(character:GetDescendants()) do
+        if d:IsA("Attachment") and d.Name == attachmentName then
+            if not ignoreRoot or not d:IsDescendantOf(ignoreRoot) then
+                return d
+            end
+        end
+    end
+    return nil
+end
+
+local function HXGetAccessoryHandle(accessory)
+    if not accessory then return nil end
+    local handle = accessory:FindFirstChild("Handle")
+    if handle and handle:IsA("BasePart") then return handle end
+    return accessory:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function HXForceAccessoryWeld(accessory, character, humanoid)
+    if not accessory or not character then return false end
+    local handle = HXGetAccessoryHandle(accessory)
+    if not handle then return false end
+
+    HXPrepareAuraPart(handle)
+    accessory.Name = "HX_Aura_" .. tostring(accessory.Name)
+    accessory:SetAttribute("HXAuraAccessory", true)
+
+    -- AddAccessory is still attempted first because Roblox can create the exact weld.
+    if humanoid then
+        pcall(function() humanoid:AddAccessory(accessory) end)
+        pcall(function() humanoid:BuildRigFromAttachments() end)
+    end
+    if accessory.Parent ~= character then
+        accessory.Parent = character
+    end
+
+    -- If Roblox already produced an accessory weld, keep it.
+    local existing = handle:FindFirstChild("AccessoryWeld")
+    if existing and (existing:IsA("Weld") or existing:IsA("WeldConstraint")) then
+        local attached = true
+        pcall(function()
+            if existing.Part1 == nil then attached = false end
+        end)
+        if attached then
+            pcall(function() game:GetService("ContentProvider"):PreloadAsync({accessory}) end)
+            return true
+        end
+    end
+
+    -- Client-side AddAccessory can leave the accessory parented but unattached.
+    -- Build the exact attachment weld manually.
+    local handleAttachment = nil
+    for _, d in ipairs(handle:GetChildren()) do
+        if d:IsA("Attachment") then
+            local match = HXFindCharacterAttachment(character, d.Name, accessory)
+            if match and match.Parent and match.Parent:IsA("BasePart") then
+                handleAttachment = d
+                local weld = Instance.new("Weld")
+                weld.Name = "AccessoryWeld"
+                weld.Part0 = handle
+                weld.Part1 = match.Parent
+                weld.C0 = d.CFrame
+                weld.C1 = match.CFrame
+                weld.Parent = handle
+                pcall(function()
+                    handle.CFrame = match.WorldCFrame * d.CFrame:Inverse()
+                end)
+                pcall(function() game:GetService("ContentProvider"):PreloadAsync({accessory}) end)
+                return true
+            end
+        end
+    end
+
+    -- Last resort for back-aura accessories whose attachment is absent in a custom rig.
+    local target = character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+        or character:FindFirstChild("HumanoidRootPart")
+    if target and target:IsA("BasePart") then
+        local weld = Instance.new("Weld")
+        weld.Name = "AccessoryWeld"
+        weld.Part0 = handle
+        weld.Part1 = target
+        local attachmentPoint = CFrame.new()
+        pcall(function() attachmentPoint = accessory.AttachmentPoint end)
+        weld.C0 = attachmentPoint
+        weld.C1 = CFrame.new()
+        weld.Parent = handle
+        pcall(function()
+            handle.CFrame = target.CFrame * attachmentPoint:Inverse()
+        end)
+        pcall(function() game:GetService("ContentProvider"):PreloadAsync({accessory}) end)
+        return true
+    end
+
+    return false
+end
+
+local function HXCollectNestedAccessories(source)
+    local out = {}
+    if source:IsA("Accessory") then
+        out[#out + 1] = source
+        return out
+    end
+    for _, d in ipairs(source:GetDescendants()) do
+        if d:IsA("Accessory") then
+            out[#out + 1] = d
+        end
+    end
+    return out
+end
+
 local function HXMountAuraObject(source, folder, hrp, character)
     if not source then return false end
     if source:IsA("Script") or source:IsA("LocalScript") or source:IsA("ModuleScript") then
@@ -2204,16 +2181,29 @@ local function HXMountAuraObject(source, folder, hrp, character)
         return false
     end
 
-    if source:IsA("Accessory") then
-        HXEnableAuraVisuals(source)
-        source.Name = "HX_Aura_" .. tostring(source.Name)
-        source:SetAttribute("HXAuraAccessory", true)
-        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            local ok = pcall(function() humanoid:AddAccessory(source) end)
-            if ok and source.Parent == character then return true end
+    HXEnableAuraVisuals(source)
+
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local nestedAccessories = HXCollectNestedAccessories(source)
+    if #nestedAccessories > 0 then
+        local mountedAccessory = false
+        for _, accessory in ipairs(nestedAccessories) do
+            -- Pull nested accessories out of wrapper Models before attaching them.
+            if accessory.Parent ~= character then
+                accessory.Parent = character
+            end
+            local okAttach = false
+            pcall(function()
+                okAttach = HXForceAccessoryWeld(accessory, character, humanoid)
+            end)
+            mountedAccessory = mountedAccessory or okAttach
         end
-        -- Some executors/games block AddAccessory. Fall through to the visual weld fallback.
+
+        -- Dispose only the now-empty wrapper; never destroy the accessories we reparented.
+        if not source:IsA("Accessory") and source.Parent ~= character then
+            pcall(function() source:Destroy() end)
+        end
+        if mountedAccessory then return true end
     end
 
     local parts = {}
@@ -2228,7 +2218,8 @@ local function HXMountAuraObject(source, folder, hrp, character)
         return mounted
     end
 
-    HXEnableAuraVisuals(source)
+    -- Non-accessory fallback: preserve the original object's local offsets but
+    -- center its pivot on the HumanoidRootPart.
     local pivot
     if source:IsA("Model") then
         local ok, p = pcall(function() return source:GetPivot() end)
@@ -2252,7 +2243,9 @@ local function HXMountAuraObject(source, folder, hrp, character)
         weld.Parent = part
     end
     for _, d in ipairs(source:GetDescendants()) do
-        if d:IsA("Highlight") then
+        if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then
+            pcall(function() d.Enabled = true end)
+        elseif d:IsA("Highlight") then
             pcall(function() d.Adornee = character end)
         end
     end
@@ -2311,6 +2304,13 @@ local function ApplyAura(aura, silent)
             local good = false
             pcall(function() good = HXMountAuraObject(obj, folder, hrp, character) end)
             mounted = mounted or good
+        end
+
+        -- Give Roblox one frame to finalize accessory attachments.
+        task.wait()
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            pcall(function() humanoid:BuildRigFromAttachments() end)
         end
 
         if myToken ~= _auraRequestToken then
