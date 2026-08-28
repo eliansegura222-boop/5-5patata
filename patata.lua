@@ -59,6 +59,8 @@ QuickEmotes = {}
 CustomAnimations = {}
 local _onSpeedChanged
 local _onPauseStateChanged
+local ResolveUGCAnimationId
+local LoadUGCCatalog
 local MAX_RECENT = 20
 
 local _savePending = false
@@ -238,7 +240,7 @@ local function SafeUtf8Char(code)
 	return UTF8_FALLBACK[code] or ""
 end
 
-local logo = "HX Emotes — UNIVERSAL"
+local logo = "EMOTES — UNIVERSAL"
 
 
 local Themes = {
@@ -683,7 +685,7 @@ if not selectedLang then
     langSub.Size = UDim2.new(1, -40, 0, 18)
     langSub.Position = UDim2.new(0, 16, 0, 45)
     langSub.BackgroundTransparency = 1
-    langSub.Text = "HX EMOTES   UNIVERSAL   ES · EN"
+    langSub.Text = "EMOTES   UNIVERSAL   ES · EN"
     langSub.TextColor3 = Color3.fromRGB(130,130,130)
     langSub.Font = Enum.Font.GothamMedium
     langSub.TextSize = isMobile and 7 or 8
@@ -819,7 +821,7 @@ end
 
 local isTR, isES, isAR, isFR, isHI, isPT, isRU = false, selectedLang == "ES", false, false, false, false, false
 local L = {
-	r6Msg = isES and "Este juego usa R6. HX Emotes seguirá abierto; algunos emotes pueden no ser compatibles." or "This game uses R6. HX Emotes will stay open; some emotes may be incompatible.",
+	r6Msg = isES and "Este juego usa R6. El panel seguirá abierto; algunos emotes pueden no ser compatibles." or "This game uses R6. The panel will stay open; some emotes may not be compatible.",
 	loading = isES and "Cargando..." or "Loading...",
 	madeBy = "",
 	search = isES and "Buscar emote..." or "Search emote...",
@@ -1389,7 +1391,7 @@ local function ToggleFavorite(id)
 	end
 
 	if #Favorites >= MAX_FAVORITES then
-		Notify("HX Emotes", L.favLimit)
+		Notify("Emotes", L.favLimit)
 		return false
 	end
 
@@ -1857,10 +1859,12 @@ tabStartY = isMobile and ((_hxViewport.Y < 430) and 62 or 72) or 88
 tabBtns = {}
 tabLabels = {
     emotes = "EMOTES",
+    ugc = "UGC",
     favorites = isES and "FAVORITOS" or "FAVORITES",
     keybinds = isES and "TECLAS" or "KEYBINDS",
     info = isES and "INFORMACIÓN" or "INFO",
     animations = isES and "ANIMACIONES" or "ANIMATIONS",
+    tools = "TOOLS",
     recent = isES and "RECIENTES" or "RECENT",
     playlists = isES and "LISTAS" or "PLAYLISTS",
 }
@@ -1938,9 +1942,11 @@ end
 
 local navGap = isMobile and ((_hxViewport.Y < 430) and 3 or 5) or 5
 CreateTabBtn(Icons.Emote,"emotes",tabStartY)
-CreateTabBtn("rbxassetid://75528584354229","animations",tabStartY+(tabBtnS+navGap))
-CreateTabBtn(Icons.FavoriteFull,"favorites",tabStartY+(tabBtnS+navGap)*2)
-CreateTabBtn(Icons.Recent,"recent",tabStartY+(tabBtnS+navGap)*3)
+CreateTabBtn("rbxassetid://120313093991132","ugc",tabStartY+(tabBtnS+navGap))
+CreateTabBtn("rbxassetid://75528584354229","animations",tabStartY+(tabBtnS+navGap)*2)
+CreateTabBtn(Icons.FavoriteFull,"favorites",tabStartY+(tabBtnS+navGap)*3)
+CreateTabBtn("rbxassetid://9405931578","tools",tabStartY+(tabBtnS+navGap)*4)
+CreateTabBtn(Icons.Recent,"recent",tabStartY+(tabBtnS+navGap)*5)
 
 local profile = Instance.new("Frame")
 profile.Name = "UserProfile"
@@ -2386,7 +2392,11 @@ randBtn.MouseButton1Click:Connect(function()
 		local r = currentData[math.random(#currentData)]
 		local speedTxt = Settings.speed ~= 1 and " (" .. Settings.speed .. "x)" or ""
 		Notify(L.playing .. speedTxt, LocalizeEmoteName(r.name), 129338178452237)
-		PlayEmote(r.id, r.name, true)
+		if r.isUGC then
+			task.spawn(function() PlayEmote(ResolveUGCAnimationId(r) or r.id, r.name, true) end)
+		else
+			PlayEmote(r.id, r.name, true)
+		end
 	end
 end)
 
@@ -2957,7 +2967,7 @@ local heroText = Instance.new("TextLabel")
 heroText.Size = UDim2.new(1,-45,1,-18)
 heroText.Position = UDim2.new(0,30,0,9)
 heroText.BackgroundTransparency = 1
-heroText.Text = "HX Emotes\nUNIVERSAL"
+heroText.Text = "EMOTES\nUNIVERSAL"
 heroText.TextColor3 = Color3.fromRGB(255,255,255)
 heroText.Font = Enum.Font.GothamBlack
 heroText.TextSize = isMobile and 20 or 24
@@ -3297,7 +3307,7 @@ do
 	resetBtn.MouseButton1Click:Connect(function()
 		Settings.language = nil
 		SaveData()
-		Notify("HX Emotes", isES and "Idioma restablecido. Ejecuta el script otra vez para elegir." or "Language reset. Run the script again to choose.")
+		Notify("Emotes", isES and "Idioma restablecido. Ejecuta el script otra vez para elegir." or "Language reset. Run the script again to choose.")
 	end)
 end
 
@@ -4411,7 +4421,11 @@ actionUseBtn.MouseButton1Click:Connect(function()
         return
     end
     if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner = nil end
-    PlayEmote(selectedEmote.id,selectedEmote.name)
+    if selectedEmote.isUGC then
+        task.spawn(function() PlayEmote(ResolveUGCAnimationId(selectedEmote) or selectedEmote.id, selectedEmote.name) end)
+    else
+        PlayEmote(selectedEmote.id,selectedEmote.name)
+    end
 end)
 end
 
@@ -4955,7 +4969,7 @@ local function MakeCard(emote, ci, animate)
     metaLbl.Size = UDim2.new(1,-12,0,14)
     metaLbl.Position = UDim2.new(0,7,1,-17)
     metaLbl.BackgroundTransparency = 1
-    metaLbl.Text = emote.isAnimationPack and L.animationPack or L.emoteType
+    metaLbl.Text = emote.isAnimationPack and L.animationPack or (emote.isUGC and "UGC" or L.emoteType)
     metaLbl.TextColor3 = Color3.fromRGB(100,100,100)
     metaLbl.Font = Enum.Font.GothamMedium
     metaLbl.TextSize = isMobile and 7 or 8
@@ -5032,7 +5046,17 @@ local function MakeCard(emote, ci, animate)
             end
         end)
         if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner=nil end
-        PlayEmote(emote.id, emote.name)
+        if emote.isUGC then
+            local cardToken = tostring(emote.id)
+            visual.Active = false
+            task.spawn(function()
+                local playId = ResolveUGCAnimationId(emote) or emote.id
+                if visual and visual.Parent and tostring(emote.id) == cardToken then visual.Active = true end
+                PlayEmote(playId, emote.name)
+            end)
+        else
+            PlayEmote(emote.id, emote.name)
+        end
     end)
 
     return cardContainer
@@ -5489,6 +5513,99 @@ RefreshPlaylistsList = function()
 	end
 end
 
+local toolsContentPanel = nil
+local RefreshToolsCategory = nil
+local UGCEmotes = {}
+local _ugcSearchBusyMain = false
+local _ugcRequestTokenMain = 0
+local _ugcAnimCacheMain = {}
+
+ResolveUGCAnimationId = function(emote)
+    if not emote then return nil end
+    if emote.playId then return tonumber(emote.playId) end
+    local catalogId = tonumber(emote.id)
+    if not catalogId then return nil end
+    if _ugcAnimCacheMain[catalogId] then
+        emote.playId = _ugcAnimCacheMain[catalogId]
+        return emote.playId
+    end
+    local resolved = catalogId
+    local ok, objects = pcall(function() return game:GetObjects("rbxassetid://" .. tostring(catalogId)) end)
+    if ok and objects and #objects > 0 then
+        local root = objects[1]
+        local anim = root:IsA("Animation") and root or root:FindFirstChildWhichIsA("Animation", true)
+        if anim and anim.AnimationId then
+            resolved = tonumber(tostring(anim.AnimationId):match("%d+")) or catalogId
+        end
+    end
+    _ugcAnimCacheMain[catalogId] = resolved
+    emote.playId = resolved
+    return resolved
+end
+
+LoadUGCCatalog = function(query)
+    if _ugcSearchBusyMain then
+        _ugcRequestTokenMain = _ugcRequestTokenMain + 1
+    end
+    _ugcRequestTokenMain = _ugcRequestTokenMain + 1
+    local myToken = _ugcRequestTokenMain
+    _ugcSearchBusyMain = true
+    if emptyLbl then
+        emptyLbl.Visible = true
+        emptyLbl.Text = isES and "Cargando UGC..." or "Loading UGC..."
+    end
+    task.spawn(function()
+        local ok, items = pcall(function()
+            local params = CatalogSearchParams.new()
+            params.SearchKeyword = tostring(query or "")
+            params.AssetTypes = {Enum.AvatarAssetType.EmoteAnimation}
+            params.IncludeOffSale = true
+            params.Limit = 30
+            local pages
+            if AvatarEditorService.SearchCatalogAsync then
+                pages = AvatarEditorService:SearchCatalogAsync(params)
+            else
+                pages = AvatarEditorService:SearchCatalog(params)
+            end
+            return pages and pages:GetCurrentPage() or {}
+        end)
+        if myToken ~= _ugcRequestTokenMain then return end
+        UGCEmotes = {}
+        if ok and type(items) == "table" then
+            local seen = {}
+            for _, item in ipairs(items) do
+                local id = tonumber(item.Id or item.AssetId or item.id)
+                if id and not seen[id] then
+                    seen[id] = true
+                    local em = {
+                        id = id,
+                        name = tostring(item.Name or item.name or ("UGC " .. tostring(id))),
+                        creatorName = tostring(item.CreatorName or item.Creator or item.creatorName or "Roblox UGC"),
+                        description = tostring(item.Description or item.description or ""),
+                        isUGC = true,
+                    }
+                    em._searchBlob = (em.name .. " " .. em.creatorName .. " " .. em.description):lower()
+                    UGCEmotes[#UGCEmotes + 1] = em
+                    EmotesById[id] = em
+                end
+            end
+        end
+        _ugcSearchBusyMain = false
+        if currentTab == "ugc" then
+            currentData = UGCEmotes
+            filtered = UGCEmotes
+            page = 1
+            if not ok or #UGCEmotes == 0 then
+                if emptyLbl then
+                    emptyLbl.Visible = true
+                    emptyLbl.Text = isES and "No se encontraron emotes UGC." or "No UGC emotes found."
+                end
+            end
+            if Refresh then Refresh(false, true) end
+        end
+    end)
+end
+
 local function PrintHierarchy(obj, depth)
 	depth = depth or 0
 	local indent = string.rep("  ", depth)
@@ -5528,18 +5645,22 @@ UpdateTabData = function()
 	local isKeybinds  = currentTab == "keybinds"
 	local isPlaylists = currentTab == "playlists"
 	local isAnimations = currentTab == "animations"
+	local isTools = currentTab == "tools"
+	local isUGC = currentTab == "ugc"
 	local isInfo = currentTab == "info"
 	settingsPanel.Visible  = isSettings
 	friendsPanel.Visible   = isFriends
 	keybindsPanel.Visible  = isKeybinds
 	aboutPanel.Visible = isInfo
+	if toolsContentPanel then toolsContentPanel.Visible = isTools end
+	if isTools and RefreshToolsCategory then RefreshToolsCategory() end
 	local viewingPlaylist = isPlaylists and (_currentPlaylistId ~= nil)
 
 	if isPlaylists and not viewingPlaylist then
 		if RefreshPlaylistsList then RefreshPlaylistsList() end
 	end
 	playlistsPanel.Visible = isPlaylists and not viewingPlaylist
-	local hideNormal = isSettings or isFriends or isKeybinds or isInfo or (isPlaylists and not viewingPlaylist)
+	local hideNormal = isSettings or isFriends or isKeybinds or isInfo or isTools or (isPlaylists and not viewingPlaylist)
 	scroll.Visible  = not hideNormal
 	search.Visible  = not hideNormal
 	if playlistBackBtn then
@@ -5595,6 +5716,16 @@ UpdateTabData = function()
 		titleIcon.Image = ResolveAssetImage(Icons.Emote)
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
 		titleIcon.Visible = true
+	elseif currentTab == "ugc" then
+		currentData = UGCEmotes
+		filtered = UGCEmotes
+		title.Text = "UGC"
+		titleIcon.Image = ResolveAssetImage("rbxassetid://120313093991132")
+		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
+		titleIcon.Visible = true
+		if #UGCEmotes == 0 and not _ugcSearchBusyMain then
+			LoadUGCCatalog("")
+		end
 	elseif currentTab == "favorites" then
 		currentData = {}
 		for i = 1, #Favorites do
@@ -5646,6 +5777,11 @@ UpdateTabData = function()
 		titleIcon.Image = ResolveAssetImage("rbxassetid://122679509852670")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
 		titleIcon.Visible = true
+	elseif currentTab == "tools" then
+		title.Text = "TOOLS"
+		titleIcon.Image = ResolveAssetImage("rbxassetid://9405931578")
+		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
+		titleIcon.Visible = true
 	elseif currentTab == "info" then
 		title.Text = "INFO"
 		titleIcon.Image = ""
@@ -5668,7 +5804,9 @@ UpdateTabData = function()
 	title.Size = UDim2.new(1, isMobile and -88 or -110, 0, 24)
 	local subtitles = {
 		emotes = isES and "Biblioteca de emotes" or "Emote library",
+		ugc = isES and "Emotes UGC de Roblox" or "Roblox UGC emotes",
 		animations = isES and "Paquetes de animación" or "Animation packs",
+		tools = isES and "Control y configuración" or "Controls and configuration",
 		favorites = isES and "Tus emotes guardados" or "Your saved emotes",
 		recent = isES and "Reproducidos recientemente" or "Recently played",
 		keybinds = isES and "Accesos rápidos" or "Quick shortcuts",
@@ -5684,7 +5822,9 @@ UpdateTabData = function()
 end
 
 tabBtns["emotes"].btn.MouseButton1Click:Connect(function() currentTab = "emotes"; UpdateTabData() end)
+tabBtns["ugc"].btn.MouseButton1Click:Connect(function() currentTab = "ugc"; UpdateTabData() end)
 tabBtns["favorites"].btn.MouseButton1Click:Connect(function() currentTab = "favorites"; UpdateTabData() end)
+tabBtns["tools"].btn.MouseButton1Click:Connect(function() currentTab = "tools"; UpdateTabData() end)
 tabBtns["recent"].btn.MouseButton1Click:Connect(function() currentTab = "recent"; UpdateTabData() end)
 tabBtns["animations"].btn.MouseButton1Click:Connect(function() currentTab = "animations"; UpdateTabData() end)
 if tabBtns["playlists"] then tabBtns["playlists"].btn.MouseButton1Click:Connect(function() currentTab = "playlists"; _currentPlaylistId = nil
@@ -5712,6 +5852,10 @@ local function ApplySearchNow()
 		end)
 	elseif q == "" then
 		recordToken = recordToken + 1
+	end
+	if currentTab == "ugc" then
+		LoadUGCCatalog(search.Text)
+		return
 	end
 	filtered = BuildFilteredForSearch()
 	page = 1
@@ -6209,7 +6353,7 @@ hudCreator = Instance.new("TextLabel")
 hudCreator.Size                   = UDim2.new(1, -130, 0, 15)
 hudCreator.Position               = UDim2.new(0, 44, 0, 30)
 hudCreator.BackgroundTransparency = 1
-hudCreator.Text                   = "HX Emotes"
+hudCreator.Text                   = "Emotes"
 hudCreator.TextColor3             = Color3.fromRGB(122, 122, 122)
 hudCreator.Font                   = Enum.Font.Gotham
 hudCreator.TextSize               = isMobile and 10 or 11
@@ -6585,7 +6729,7 @@ local function _applyMetaToInfoPanel(meta)
 	else
 		infoDateLbl.Text = "—"
 	end
-	hudCreator.Text = (meta.creatorName and meta.creatorName ~= "") and meta.creatorName or "HX Emotes"
+	hudCreator.Text = (meta.creatorName and meta.creatorName ~= "") and meta.creatorName or "Emotes"
 end
 
 local function _fetchAndCacheMeta(numId, targetId)
@@ -6650,7 +6794,7 @@ local function OpenInfoPanel(emoteId, emoteName)
 		infoPriceLbl.TextColor3 = Color3.fromRGB(162, 162, 162)
 		infoFavLbl.Text     = "…"
 		infoDateLbl.Text    = "…"
-		hudCreator.Text     = "HX Emotes"
+		hudCreator.Text     = "Emotes"
 		if numId and numId > 0 then
 			task.spawn(_fetchAndCacheMeta, numId, numId)
 		end
@@ -6818,7 +6962,7 @@ ShowEmoteHUD = function(emoteId, emoteName)
 
 	RefreshHUDFavBtn()
 	hudName.Text    = LocalizeEmoteName(emoteName or "Emote")
-	hudCreator.Text = "HX Emotes"
+	hudCreator.Text = "Emotes"
 
 	_isPaused = false
 	RefreshHudPauseBtn()
@@ -7129,7 +7273,7 @@ end
 _HXExtend()
 
 -- =========================
--- HX EMOTES ADVANCED TOOLS
+-- EMOTES ADVANCED TOOLS
 -- =========================
 do
     local _toolPanel, _toolBody, _toolTab = nil, nil, "control"
@@ -7209,33 +7353,42 @@ do
             local id = tonumber(type(q)=="table" and q.id or q)
             local e = id and EmotesById[id]
             local name = (type(q)=="table" and q.name) or (e and e.name) or ("#"..tostring(id or "?"))
+            local isUGCQuick = type(q)=="table" and q.isUGC == true
             local b = HXButton(_quickDock, LocalizeEmoteName(name):sub(1,isMobile and 5 or 8), UDim2.new(0,isMobile and 42 or 54,1,0))
             b.ZIndex = 1201
-            b.MouseButton1Click:Connect(function() if id then PlayEmote(id,name) end end)
+            b.MouseButton1Click:Connect(function()
+                if not id then return end
+                if isUGCQuick then
+                    local temp = e or {id=id,name=name,isUGC=true}
+                    task.spawn(function() PlayEmote(ResolveUGCAnimationId(temp) or id, name) end)
+                else
+                    PlayEmote(id,name)
+                end
+            end)
         end
         _quickDock.Visible = #QuickEmotes > 0
     end
 
     local function AddSelectedToQuick()
         if not selectedEmote or selectedEmote.isAnimationPack then
-            Notify("HX Emotes", isES and "Selecciona un emote primero." or "Select an emote first.")
+            Notify("Emotes", isES and "Selecciona un emote primero." or "Select an emote first.")
             return
         end
         for _,q in ipairs(QuickEmotes) do
             if tonumber(type(q)=="table" and q.id or q) == tonumber(selectedEmote.id) then return end
         end
         if #QuickEmotes >= 8 then table.remove(QuickEmotes,1) end
-        QuickEmotes[#QuickEmotes+1] = {id=tonumber(selectedEmote.id), name=selectedEmote.name}
+        QuickEmotes[#QuickEmotes+1] = {id=tonumber(selectedEmote.id), name=selectedEmote.name, isUGC=selectedEmote.isUGC == true}
         SaveData(); RefreshQuickDock()
-        Notify("HX Emotes", isES and "Añadido al selector rápido." or "Added to Quick Selector.")
+        Notify("Emotes", isES and "Añadido al selector rápido." or "Added to Quick Selector.")
     end
 
     local function CreateFloatingSelected()
         if not selectedEmote or selectedEmote.isAnimationPack then
-            Notify("HX Emotes", isES and "Selecciona un emote primero." or "Select an emote first.")
+            Notify("Emotes", isES and "Selecciona un emote primero." or "Select an emote first.")
             return
         end
-        local data = {id=tonumber(selectedEmote.id), name=selectedEmote.name}
+        local data = {id=tonumber(selectedEmote.id), name=selectedEmote.name, isUGC=selectedEmote.isUGC == true}
         local b = Instance.new("TextButton")
         b.Name = "HXFloat_"..tostring(data.id)
         b.Size = UDim2.new(0,isMobile and 58 or 66,0,isMobile and 58 or 66)
@@ -7268,7 +7421,14 @@ do
         UserInputService.InputEnded:Connect(function(inp)
             if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then dragging=false end
         end)
-        b.MouseButton1Click:Connect(function() if not dragging then PlayEmote(data.id,data.name) end end)
+        b.MouseButton1Click:Connect(function()
+            if dragging then return end
+            if data.isUGC then
+                task.spawn(function() PlayEmote(ResolveUGCAnimationId(data) or data.id, data.name) end)
+            else
+                PlayEmote(data.id,data.name)
+            end
+        end)
         x.MouseButton1Click:Connect(function() b:Destroy() end)
         _floatingButtons[#_floatingButtons+1]=b
     end
@@ -7376,7 +7536,7 @@ do
             end
         end
         pcall(function() animate.Enabled=false; task.wait(0.05); animate.Enabled=true end)
-        Notify("HX Emotes",isES and "Animaciones personalizadas aplicadas." or "Custom animations applied.")
+        Notify("Emotes",isES and "Animaciones personalizadas aplicadas." or "Custom animations applied.")
     end
 
     local function MakePackPage()
@@ -7391,42 +7551,6 @@ do
         end
         local apply=HXButton(_toolBody,isES and "APLICAR" or "APPLY",UDim2.new(1,0,0,34)); apply.MouseButton1Click:Connect(ApplyCustomAnimations)
         local reset=HXButton(_toolBody,isES and "LIMPIAR CONFIGURACIÓN" or "CLEAR CONFIG",UDim2.new(1,0,0,32)); reset.MouseButton1Click:Connect(function() CustomAnimations={}; SaveData(); MakePackPage() end)
-    end
-
-    local function MakeUGCPage()
-        ClearBody(); HXLabel(_toolBody,"UGC / ROBLOX MARKETPLACE",24,true)
-        HXLabel(_toolBody,isES and "Busca emotes directamente en el catálogo de Roblox." or "Search emotes directly in the Roblox catalog.",28,false).TextWrapped=true
-        local row=Instance.new("Frame",_toolBody); row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1
-        local box=Instance.new("TextBox",row); box.Size=UDim2.new(0.72,-4,1,0); box.BackgroundColor3=Color3.fromRGB(18,18,18); box.PlaceholderText=isES and "Buscar UGC..." or "Search UGC..."; box.Text=""; box.TextColor3=Color3.new(1,1,1); box.PlaceholderColor3=Color3.fromRGB(110,110,110); box.TextStrokeTransparency=1; box.Font=Enum.Font.Gotham; box.TextSize=isMobile and 9 or 10; box.ClearTextOnFocus=false; box.ZIndex=905; Instance.new("UICorner",box).CornerRadius=UDim.new(0,8)
-        local go=HXButton(row,isES and "BUSCAR" or "SEARCH",UDim2.new(0.28,-2,1,0),UDim2.new(0.72,4,0,0))
-        local results=Instance.new("Frame",_toolBody); results.Size=UDim2.new(1,0,0,170); results.BackgroundTransparency=1; results.ZIndex=905
-        local rl=Instance.new("UIListLayout",results); rl.Padding=UDim.new(0,4); rl.SortOrder=Enum.SortOrder.LayoutOrder
-        local function runSearch()
-            if _ugcSearchBusy then return end; _ugcSearchBusy=true; go.Text="..."
-            for _,c in ipairs(results:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-            task.spawn(function()
-                local ok, items=pcall(function()
-                    local p=CatalogSearchParams.new(); p.SearchKeyword=box.Text; p.AssetTypes={Enum.AvatarAssetType.EmoteAnimation}; p.IncludeOffSale=true; p.Limit=10
-                    local pages
-                    if AvatarEditorService.SearchCatalogAsync then pages=AvatarEditorService:SearchCatalogAsync(p) else pages=AvatarEditorService:SearchCatalog(p) end
-                    return pages:GetCurrentPage()
-                end)
-                if ok and type(items)=="table" then
-                    for _,item in ipairs(items) do
-                        local id=tonumber(item.Id or item.AssetId or item.id); local nm=tostring(item.Name or item.name or ("Emote "..tostring(id or "")))
-                        if id then
-                            local b=HXButton(results,nm,UDim2.new(1,0,0,30)); b.TextXAlignment=Enum.TextXAlignment.Left; b.TextTruncate=Enum.TextTruncate.AtEnd
-                            local pad=Instance.new("UIPadding",b); pad.PaddingLeft=UDim.new(0,8); pad.PaddingRight=UDim.new(0,8)
-                            b.MouseButton1Click:Connect(function() PlayEmote(id,nm) end)
-                        end
-                    end
-                else
-                    HXLabel(results,isES and "No se pudo consultar el catálogo en este juego/ejecutor." or "Catalog search is unavailable in this game/executor.",40,false).TextWrapped=true
-                end
-                _ugcSearchBusy=false; go.Text=isES and "BUSCAR" or "SEARCH"
-            end)
-        end
-        go.MouseButton1Click:Connect(runSearch); box.FocusLost:Connect(function(enter) if enter then runSearch() end end)
     end
 
     local function MakeSizePage()
@@ -7445,33 +7569,56 @@ do
         local reset=HXButton(_toolBody,isES and "RESTABLECER 100%" or "RESET 100%",UDim2.new(1,0,0,34)); reset.MouseButton1Click:Connect(function() Settings.panelScale=1; SaveData(); val.Text="100%"; TweenService:Create(main,TweenInfo.new(0.22),{Size=GetDefaultSize()}):Play(); task.delay(0.25,function() Refresh(false,true) end) end)
     end
 
-    local renderers={control=MakeControlPage,quick=MakeQuickPage,pack=MakePackPage,ugc=MakeUGCPage,size=MakeSizePage}
+    local renderers={control=MakeControlPage,quick=MakeQuickPage,pack=MakePackPage,size=MakeSizePage}
     local function ShowToolTab(name) _toolTab=name; if renderers[name] then renderers[name]() end end
 
     _toolPanel=Instance.new("Frame")
-    _toolPanel.Name="HXAdvancedTools"
-    _toolPanel.Size=UDim2.new(isMobile and 0.92 or 0.76,0,isMobile and 0.82 or 0.78,0)
-    _toolPanel.Position=UDim2.fromScale(0.5,0.53); _toolPanel.AnchorPoint=Vector2.new(0.5,0.5)
-    _toolPanel.BackgroundColor3=Color3.fromRGB(6,6,6); _toolPanel.BackgroundTransparency=0.03; _toolPanel.BorderSizePixel=0; _toolPanel.Visible=false; _toolPanel.ZIndex=900; _toolPanel.Parent=main
-    Instance.new("UICorner",_toolPanel).CornerRadius=UDim.new(0,16)
-    local pst=Instance.new("UIStroke",_toolPanel); pst.Color=Color3.fromRGB(255,255,255); pst.Transparency=0.18; pst.Thickness=1.2
-    local head=Instance.new("Frame",_toolPanel); head.Size=UDim2.new(1,0,0,isMobile and 42 or 46); head.BackgroundTransparency=1; head.ZIndex=902
-    local ht=HXLabel(head,"HX TOOLS",head.Size.Y.Offset,true); ht.Size=UDim2.new(1,-50,1,0); ht.Position=UDim2.new(0,14,0,0); ht.TextSize=isMobile and 12 or 14
-    local close=HXButton(head,"X",UDim2.new(0,32,0,32),UDim2.new(1,-40,0,6)); close.ZIndex=910; close.MouseButton1Click:Connect(function() _toolPanel.Visible=false; if _toolTrackerConn then _toolTrackerConn:Disconnect(); _toolTrackerConn=nil end end)
-    local tabs=Instance.new("Frame",_toolPanel); tabs.Size=UDim2.new(1,-16,0,isMobile and 34 or 38); tabs.Position=UDim2.new(0,8,0,isMobile and 42 or 46); tabs.BackgroundTransparency=1; tabs.ZIndex=902
-    local tl=Instance.new("UIListLayout",tabs); tl.FillDirection=Enum.FillDirection.Horizontal; tl.Padding=UDim.new(0,4); tl.HorizontalAlignment=Enum.HorizontalAlignment.Center
-    local defs={{"control",isES and "CTRL" or "CTRL"},{"quick",isES and "RÁPIDO" or "QUICK"},{"pack",isES and "ANIM" or "ANIM"},{"ugc","UGC"},{"size",isES and "TAMAÑO" or "SIZE"}}
-    for _,d in ipairs(defs) do local b=HXButton(tabs,d[2],UDim2.new(0.2,-4,1,0)); b.MouseButton1Click:Connect(function() ShowToolTab(d[1]) end) end
-    _toolBody=Instance.new("ScrollingFrame",_toolPanel); _toolBody.Size=UDim2.new(1,-20,1,-(isMobile and 90 or 98)); _toolBody.Position=UDim2.new(0,10,0,isMobile and 82 or 90); _toolBody.BackgroundTransparency=1; _toolBody.BorderSizePixel=0; _toolBody.ScrollBarThickness=2; _toolBody.AutomaticCanvasSize=Enum.AutomaticSize.Y; _toolBody.CanvasSize=UDim2.new(); _toolBody.ZIndex=903
+    _toolPanel.Name="AdvancedTools"
+    _toolPanel.Size=UDim2.new(1,-16,1,-(titleH+12))
+    _toolPanel.Position=UDim2.new(0,8,0,titleH+4)
+    _toolPanel.BackgroundColor3=Color3.fromRGB(6,6,6)
+    _toolPanel.BackgroundTransparency=0.22
+    _toolPanel.BorderSizePixel=0
+    _toolPanel.Visible=false
+    _toolPanel.ZIndex=3
+    _toolPanel.Parent=content
+    toolsContentPanel=_toolPanel
+    Instance.new("UICorner",_toolPanel).CornerRadius=UDim.new(0,12)
+    local pst=Instance.new("UIStroke",_toolPanel); pst.Color=Color3.fromRGB(255,255,255); pst.Transparency=0.42; pst.Thickness=1
+
+    local tabs=Instance.new("Frame",_toolPanel)
+    tabs.Size=UDim2.new(1,-16,0,isMobile and 34 or 38)
+    tabs.Position=UDim2.new(0,8,0,8)
+    tabs.BackgroundTransparency=1
+    tabs.ZIndex=4
+    local tl=Instance.new("UIListLayout",tabs)
+    tl.FillDirection=Enum.FillDirection.Horizontal
+    tl.Padding=UDim.new(0,5)
+    tl.HorizontalAlignment=Enum.HorizontalAlignment.Left
+    local defs={{"control",isES and "CONTROL" or "CONTROL"},{"quick",isES and "RÁPIDO" or "QUICK"},{"pack",isES and "ANIMACIONES" or "ANIMATIONS"},{"size",isES and "TAMAÑO" or "SIZE"}}
+    for _,d in ipairs(defs) do
+        local b=HXButton(tabs,d[2],UDim2.new(0.25,-4,1,0))
+        b.ZIndex=5
+        b.MouseButton1Click:Connect(function() ShowToolTab(d[1]) end)
+    end
+
+    _toolBody=Instance.new("ScrollingFrame",_toolPanel)
+    _toolBody.Size=UDim2.new(1,-20,1,-(isMobile and 58 or 64))
+    _toolBody.Position=UDim2.new(0,10,0,isMobile and 50 or 54)
+    _toolBody.BackgroundTransparency=1
+    _toolBody.BorderSizePixel=0
+    _toolBody.ScrollBarThickness=2
+    _toolBody.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    _toolBody.CanvasSize=UDim2.new()
+    _toolBody.ZIndex=4
     local bodyPad=Instance.new("UIPadding",_toolBody); bodyPad.PaddingBottom=UDim.new(0,8)
     local bodyLay=Instance.new("UIListLayout",_toolBody); bodyLay.Padding=UDim.new(0,6); bodyLay.SortOrder=Enum.SortOrder.LayoutOrder
 
-    -- Keep the visible search field full width; the tool trigger lives inside it instead of consuming layout space.
-    local toolsBtn=Instance.new("TextButton")
-    toolsBtn.Name="HXToolsButton"; toolsBtn.Size=UDim2.new(0,isMobile and 42 or 52,1,-6); toolsBtn.Position=UDim2.new(1,-(isMobile and 45 or 55),0,3); toolsBtn.BackgroundColor3=Color3.fromRGB(35,35,35); toolsBtn.BackgroundTransparency=0.04; toolsBtn.Text=isMobile and "HX" or "TOOLS"; toolsBtn.TextColor3=Color3.fromRGB(255,255,255); toolsBtn.TextStrokeTransparency=1; toolsBtn.Font=Enum.Font.GothamBold; toolsBtn.TextSize=isMobile and 9 or 10; toolsBtn.ZIndex=9; toolsBtn.Parent=search
-    Instance.new("UICorner",toolsBtn).CornerRadius=UDim.new(0,8)
-    searchPadding.PaddingRight=UDim.new(0,isMobile and 50 or 60)
-    toolsBtn.MouseButton1Click:Connect(function() _toolPanel.Visible=not _toolPanel.Visible; if _toolPanel.Visible then ShowToolTab(_toolTab) elseif _toolTrackerConn then _toolTrackerConn:Disconnect(); _toolTrackerConn=nil end end)
+    RefreshToolsCategory=function()
+        if not _toolPanel or not _toolPanel.Parent then return end
+        _toolPanel.Visible = currentTab == "tools"
+        if _toolPanel.Visible then ShowToolTab(_toolTab) end
+    end
 
     RefreshQuickDock()
 end
