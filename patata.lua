@@ -1108,10 +1108,17 @@ local function HXRunR6WarningGate()
     box.BackgroundColor3 = currentTheme.secondary
     box.BackgroundTransparency = 0.08
     box.BorderSizePixel = 0
-    box.ClipsDescendants = false
+    box.ClipsDescendants = true
     box.ZIndex = 22002
     box.Parent = r6Screen
-    HXApplyChamfer(box, {transparent=false, cut=isMobile and 9 or 12, thickness=1.2, glowThickness=3.6})
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0,18)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(245,245,245)
+    stroke.Thickness = 1.2
+    stroke.Transparency = 0.08
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = box
 
     local logoR6 = Instance.new("ImageLabel")
     logoR6.Size = UDim2.new(0,22,0,22)
@@ -1154,30 +1161,35 @@ local function HXRunR6WarningGate()
     local continueBtn = Instance.new("TextButton")
     continueBtn.Size = UDim2.new(0.42,0,0,32)
     continueBtn.Position = UDim2.new(0.06,0,1,-48)
-    continueBtn.BackgroundTransparency = 1
+    continueBtn.BackgroundColor3 = Color3.fromRGB(245,245,245)
     continueBtn.BorderSizePixel = 0
     continueBtn.Text = isES and "CONTINUAR" or "CONTINUE"
-    continueBtn.TextColor3 = Color3.fromRGB(245,245,245)
+    continueBtn.TextColor3 = Color3.fromRGB(6,6,6)
     continueBtn.Font = Enum.Font.Gotham
     continueBtn.TextSize = isMobile and 10 or 11
     continueBtn.AutoButtonColor = false
     continueBtn.ZIndex = 22004
     continueBtn.Parent = box
-    HXApplyChamfer(continueBtn, {transparent=true, cut=isMobile and 5 or 7, thickness=1.15, glowThickness=3.5})
+    Instance.new("UICorner", continueBtn).CornerRadius = UDim.new(0,10)
 
     local cancelBtn = Instance.new("TextButton")
     cancelBtn.Size = UDim2.new(0.42,0,0,32)
     cancelBtn.Position = UDim2.new(0.52,0,1,-48)
-    cancelBtn.BackgroundTransparency = 1
+    cancelBtn.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    cancelBtn.BackgroundTransparency = 0.02
     cancelBtn.BorderSizePixel = 0
     cancelBtn.Text = isES and "CANCELAR" or "CANCEL"
-    cancelBtn.TextColor3 = Color3.fromRGB(205,205,205)
+    cancelBtn.TextColor3 = Color3.fromRGB(235,235,235)
     cancelBtn.Font = Enum.Font.Gotham
     cancelBtn.TextSize = isMobile and 10 or 11
     cancelBtn.AutoButtonColor = false
     cancelBtn.ZIndex = 22004
     cancelBtn.Parent = box
-    HXApplyChamfer(cancelBtn, {transparent=true, cut=isMobile and 5 or 7, thickness=1.0, glowThickness=2.8})
+    Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0,10)
+    local cancelStroke = Instance.new("UIStroke")
+    cancelStroke.Color = Color3.fromRGB(90,90,90)
+    cancelStroke.Thickness = 1
+    cancelStroke.Parent = cancelBtn
 
     local choice = nil
     continueBtn.MouseButton1Click:Connect(function() choice = true end)
@@ -1201,20 +1213,6 @@ if not HXRunR6WarningGate() then
 end
 
 local Emotes = {}
-
-local Auras = {
-    {Name = "Super Saiyan", AssetId = 101738989616176},
-    {Name = "Super Saiyan Blue", AssetId = 105834120415428},
-    {Name = "Ultra Instinct", AssetId = 92328894797321},
-    {Name = "Kaioken", AssetId = 91323564159786},
-    {Name = "Ultra Ego", AssetId = 114830783982100},
-    {Name = "Legendary Super Saiyan", AssetId = 118497313013314},
-}
-for _, aura in ipairs(Auras) do
-    aura.id = aura.AssetId
-    aura.name = aura.Name
-    aura.isAura = true
-end
 
 
 local _bgMusic
@@ -1925,7 +1923,6 @@ PlayEmote = function(id, name, silent, syncStartTime)
 
 				currentAnimTrack = track
 				AddToRecent(id)
-
 			end)
 
 			if success then
@@ -1944,401 +1941,6 @@ PlayEmote = function(id, name, silent, syncStartTime)
 	end)
 end
 
-
--- =========================
--- Character aura engine
--- =========================
-local activeAuraId = nil
-local activeAuraName = nil
-local _auraRequestToken = 0
-
-local function HXDestroyAuraVisual()
-    local character = player.Character
-    if character then
-        local oldAura = character:FindFirstChild("HXActiveAura")
-        if oldAura then pcall(function() oldAura:Destroy() end) end
-        for _, child in ipairs(character:GetChildren()) do
-            if child:GetAttribute("HXAuraAccessory") == true then
-                pcall(function() child:Destroy() end)
-            end
-        end
-    end
-end
-
-local function HXPrepareAuraPart(part)
-    if not part or not part:IsA("BasePart") then return end
-    part.Anchored = false
-    part.CanCollide = false
-    part.CanTouch = false
-    part.CanQuery = false
-    part.Massless = true
-    pcall(function() part.LocalTransparencyModifier = 0 end)
-end
-
-local function HXEnableAuraVisuals(root)
-    local all = {root}
-    for _, d in ipairs(root:GetDescendants()) do all[#all + 1] = d end
-    for _, d in ipairs(all) do
-        if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
-            pcall(function() d:Destroy() end)
-        elseif d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then
-            pcall(function() d.Enabled = true end)
-        elseif d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
-            pcall(function() d.Enabled = true end)
-        elseif d:IsA("BasePart") then
-            HXPrepareAuraPart(d)
-        end
-    end
-end
-
-local function HXMakeAuraAnchor(folder, hrp)
-    local anchor = folder:FindFirstChild("AuraAnchor")
-    if anchor then return anchor end
-    anchor = Instance.new("Part")
-    anchor.Name = "AuraAnchor"
-    anchor.Size = Vector3.new(1,1,1)
-    anchor.Transparency = 1
-    anchor.Anchored = false
-    anchor.CanCollide = false
-    anchor.CanTouch = false
-    anchor.CanQuery = false
-    anchor.Massless = true
-    anchor.CFrame = hrp.CFrame
-    anchor.Parent = folder
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = hrp
-    weld.Part1 = anchor
-    weld.Parent = anchor
-    return anchor
-end
-
-local function HXMountLooseAuraEffects(source, folder, hrp)
-    local anchor = HXMakeAuraAnchor(folder, hrp)
-    local mounted = false
-    local attachmentMap = {}
-    local attachments = {}
-    if source:IsA("Attachment") then attachments[#attachments + 1] = source end
-    for _, d in ipairs(source:GetDescendants()) do
-        if d:IsA("Attachment") then attachments[#attachments + 1] = d end
-    end
-    for _, oldA in ipairs(attachments) do
-        local newA = Instance.new("Attachment")
-        newA.Name = oldA.Name
-        pcall(function() newA.CFrame = oldA.CFrame end)
-        newA.Parent = anchor
-        attachmentMap[oldA] = newA
-    end
-
-    local visuals = {source}
-    for _, d in ipairs(source:GetDescendants()) do visuals[#visuals + 1] = d end
-    local fallbackA0, fallbackA1
-    for _, d in ipairs(visuals) do
-        if d:IsA("ParticleEmitter") then
-            local c = d:Clone()
-            c.Enabled = true
-            c.Parent = attachmentMap[d.Parent] or anchor
-            mounted = true
-        elseif d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight") then
-            local c = d:Clone(); c.Enabled = true; c.Parent = anchor; mounted = true
-        elseif d:IsA("Beam") or d:IsA("Trail") then
-            if not fallbackA0 then
-                fallbackA0 = Instance.new("Attachment"); fallbackA0.Position = Vector3.new(0,-2,0); fallbackA0.Parent = anchor
-                fallbackA1 = Instance.new("Attachment"); fallbackA1.Position = Vector3.new(0,2,0); fallbackA1.Parent = anchor
-            end
-            local c = d:Clone()
-            c.Attachment0 = attachmentMap[d.Attachment0] or fallbackA0
-            c.Attachment1 = attachmentMap[d.Attachment1] or fallbackA1
-            c.Enabled = true
-            c.Parent = anchor
-            mounted = true
-        elseif d:IsA("Highlight") then
-            local c = d:Clone()
-            c.Adornee = player.Character
-            c.Parent = folder
-            mounted = true
-        end
-    end
-    return mounted
-end
-
-
-local function HXFindCharacterAttachment(character, attachmentName, ignoreRoot)
-    if not character or not attachmentName or attachmentName == "" then return nil end
-    for _, d in ipairs(character:GetDescendants()) do
-        if d:IsA("Attachment") and d.Name == attachmentName then
-            if not ignoreRoot or not d:IsDescendantOf(ignoreRoot) then
-                return d
-            end
-        end
-    end
-    return nil
-end
-
-local function HXGetAccessoryHandle(accessory)
-    if not accessory then return nil end
-    local handle = accessory:FindFirstChild("Handle")
-    if handle and handle:IsA("BasePart") then return handle end
-    return accessory:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function HXForceAccessoryWeld(accessory, character, humanoid)
-    if not accessory or not character then return false end
-    local handle = HXGetAccessoryHandle(accessory)
-    if not handle then return false end
-
-    HXPrepareAuraPart(handle)
-    accessory.Name = "HX_Aura_" .. tostring(accessory.Name)
-    accessory:SetAttribute("HXAuraAccessory", true)
-
-    -- AddAccessory is still attempted first because Roblox can create the exact weld.
-    if humanoid then
-        pcall(function() humanoid:AddAccessory(accessory) end)
-        pcall(function() humanoid:BuildRigFromAttachments() end)
-    end
-    if accessory.Parent ~= character then
-        accessory.Parent = character
-    end
-
-    -- If Roblox already produced an accessory weld, keep it.
-    local existing = handle:FindFirstChild("AccessoryWeld")
-    if existing and (existing:IsA("Weld") or existing:IsA("WeldConstraint")) then
-        local attached = true
-        pcall(function()
-            if existing.Part1 == nil then attached = false end
-        end)
-        if attached then
-            pcall(function() game:GetService("ContentProvider"):PreloadAsync({accessory}) end)
-            return true
-        end
-    end
-
-    -- Client-side AddAccessory can leave the accessory parented but unattached.
-    -- Build the exact attachment weld manually.
-    local handleAttachment = nil
-    for _, d in ipairs(handle:GetChildren()) do
-        if d:IsA("Attachment") then
-            local match = HXFindCharacterAttachment(character, d.Name, accessory)
-            if match and match.Parent and match.Parent:IsA("BasePart") then
-                handleAttachment = d
-                local weld = Instance.new("Weld")
-                weld.Name = "AccessoryWeld"
-                weld.Part0 = handle
-                weld.Part1 = match.Parent
-                weld.C0 = d.CFrame
-                weld.C1 = match.CFrame
-                weld.Parent = handle
-                pcall(function()
-                    handle.CFrame = match.WorldCFrame * d.CFrame:Inverse()
-                end)
-                pcall(function() game:GetService("ContentProvider"):PreloadAsync({accessory}) end)
-                return true
-            end
-        end
-    end
-
-    -- Last resort for back-aura accessories whose attachment is absent in a custom rig.
-    local target = character:FindFirstChild("UpperTorso")
-        or character:FindFirstChild("Torso")
-        or character:FindFirstChild("HumanoidRootPart")
-    if target and target:IsA("BasePart") then
-        local weld = Instance.new("Weld")
-        weld.Name = "AccessoryWeld"
-        weld.Part0 = handle
-        weld.Part1 = target
-        local attachmentPoint = CFrame.new()
-        pcall(function() attachmentPoint = accessory.AttachmentPoint end)
-        weld.C0 = attachmentPoint
-        weld.C1 = CFrame.new()
-        weld.Parent = handle
-        pcall(function()
-            handle.CFrame = target.CFrame * attachmentPoint:Inverse()
-        end)
-        pcall(function() game:GetService("ContentProvider"):PreloadAsync({accessory}) end)
-        return true
-    end
-
-    return false
-end
-
-local function HXCollectNestedAccessories(source)
-    local out = {}
-    if source:IsA("Accessory") then
-        out[#out + 1] = source
-        return out
-    end
-    for _, d in ipairs(source:GetDescendants()) do
-        if d:IsA("Accessory") then
-            out[#out + 1] = d
-        end
-    end
-    return out
-end
-
-local function HXMountAuraObject(source, folder, hrp, character)
-    if not source then return false end
-    if source:IsA("Script") or source:IsA("LocalScript") or source:IsA("ModuleScript") then
-        pcall(function() source:Destroy() end)
-        return false
-    end
-
-    HXEnableAuraVisuals(source)
-
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    local nestedAccessories = HXCollectNestedAccessories(source)
-    if #nestedAccessories > 0 then
-        local mountedAccessory = false
-        for _, accessory in ipairs(nestedAccessories) do
-            -- Pull nested accessories out of wrapper Models before attaching them.
-            if accessory.Parent ~= character then
-                accessory.Parent = character
-            end
-            local okAttach = false
-            pcall(function()
-                okAttach = HXForceAccessoryWeld(accessory, character, humanoid)
-            end)
-            mountedAccessory = mountedAccessory or okAttach
-        end
-
-        -- Dispose only the now-empty wrapper; never destroy the accessories we reparented.
-        if not source:IsA("Accessory") and source.Parent ~= character then
-            pcall(function() source:Destroy() end)
-        end
-        if mountedAccessory then return true end
-    end
-
-    local parts = {}
-    if source:IsA("BasePart") then parts[#parts + 1] = source end
-    for _, d in ipairs(source:GetDescendants()) do
-        if d:IsA("BasePart") then parts[#parts + 1] = d end
-    end
-
-    if #parts == 0 then
-        local mounted = HXMountLooseAuraEffects(source, folder, hrp)
-        pcall(function() source:Destroy() end)
-        return mounted
-    end
-
-    -- Non-accessory fallback: preserve the original object's local offsets but
-    -- center its pivot on the HumanoidRootPart.
-    local pivot
-    if source:IsA("Model") then
-        local ok, p = pcall(function() return source:GetPivot() end)
-        pivot = ok and p or parts[1].CFrame
-    else
-        pivot = parts[1].CFrame
-    end
-
-    local relatives = {}
-    for _, part in ipairs(parts) do
-        relatives[part] = pivot:ToObjectSpace(part.CFrame)
-    end
-    source.Parent = folder
-    for _, part in ipairs(parts) do
-        HXPrepareAuraPart(part)
-        part.CFrame = hrp.CFrame * relatives[part]
-        local weld = Instance.new("WeldConstraint")
-        weld.Name = "HX_AuraWeld"
-        weld.Part0 = hrp
-        weld.Part1 = part
-        weld.Parent = part
-    end
-    for _, d in ipairs(source:GetDescendants()) do
-        if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then
-            pcall(function() d.Enabled = true end)
-        elseif d:IsA("Highlight") then
-            pcall(function() d.Adornee = character end)
-        end
-    end
-    return true
-end
-
-local function ClearAura(silent)
-    _auraRequestToken = _auraRequestToken + 1
-    activeAuraId = nil
-    activeAuraName = nil
-    HXDestroyAuraVisual()
-    if not silent then Notify("AURAS", isES and "Aura desactivada" or "Aura disabled") end
-end
-
-local function ApplyAura(aura, silent)
-    if not aura then return end
-    local assetId = tonumber(aura.AssetId or aura.id)
-    if not assetId then return end
-
-    _auraRequestToken = _auraRequestToken + 1
-    local myToken = _auraRequestToken
-    HXDestroyAuraVisual()
-    activeAuraId = assetId
-    activeAuraName = aura.Name or aura.name or "Aura"
-
-    task.spawn(function()
-        local character = player.Character
-        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-        if not character or not hrp then return end
-
-        local objects
-        local ok = pcall(function()
-            objects = game:GetObjects("rbxassetid://" .. tostring(assetId))
-        end)
-        if (not ok or not objects or #objects == 0) then
-            pcall(function()
-                local loaded = game:GetService("InsertService"):LoadAsset(assetId)
-                if loaded then objects = {loaded}; ok = true end
-            end)
-        end
-        if myToken ~= _auraRequestToken then return end
-        if not ok or not objects or #objects == 0 then
-            if activeAuraId == assetId then activeAuraId, activeAuraName = nil, nil end
-            if not silent then Notify("AURAS", isES and "No se pudo cargar esta aura." or "This aura could not be loaded.") end
-            return
-        end
-
-        local folder = Instance.new("Folder")
-        folder.Name = "HXActiveAura"
-        folder:SetAttribute("AuraAssetId", assetId)
-        folder.Parent = character
-
-        local mounted = false
-        for _, obj in ipairs(objects) do
-            if myToken ~= _auraRequestToken then break end
-            local good = false
-            pcall(function() good = HXMountAuraObject(obj, folder, hrp, character) end)
-            mounted = mounted or good
-        end
-
-        -- Give Roblox one frame to finalize accessory attachments.
-        task.wait()
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            pcall(function() humanoid:BuildRigFromAttachments() end)
-        end
-
-        if myToken ~= _auraRequestToken then
-            if folder.Parent then folder:Destroy() end
-            return
-        end
-        if not mounted then
-            if folder.Parent then folder:Destroy() end
-            activeAuraId, activeAuraName = nil, nil
-            if not silent then Notify("AURAS", isES and "El asset no contiene un efecto compatible." or "The asset has no compatible visual effect.") end
-            return
-        end
-
-        if not silent then
-            Notify("AURAS", (isES and "Aura activada: " or "Aura enabled: ") .. tostring(activeAuraName))
-        end
-    end)
-end
-
-local function ToggleAura(aura)
-    local id = tonumber(aura and (aura.AssetId or aura.id))
-    if id and activeAuraId == id then
-        ClearAura(false)
-        return false
-    end
-    ApplyAura(aura, false)
-    return true
-end
 
 local TARGET_PC_CARD = 112
 local TARGET_MOBILE_CARD = 86
@@ -2604,24 +2206,10 @@ tabLabels = {
     keybinds = isES and "TECLAS" or "KEYBINDS",
     info = isES and "INFORMACIÓN" or "INFO",
     animations = isES and "ANIMACIONES" or "ANIMATIONS",
-    auras = "AURAS",
     tools = "TOOLS",
     recent = isES and "RECIENTES" or "RECENT",
     playlists = isES and "LISTAS" or "PLAYLISTS",
 }
-
-local navScroll = Instance.new("ScrollingFrame")
-navScroll.Name = "HXNavScroll"
-navScroll.Size = UDim2.new(1,0,1,-(tabStartY + (isMobile and 54 or 64)))
-navScroll.Position = UDim2.new(0,0,0,tabStartY)
-navScroll.BackgroundTransparency = 1
-navScroll.BorderSizePixel = 0
-navScroll.ScrollBarThickness = 0
-navScroll.CanvasSize = UDim2.new(0,0,0,0)
-navScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
-navScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-navScroll.ZIndex = 9
-navScroll.Parent = sidebar
 
 local function CreateTabBtn(icon,tabName,yPos)
     local btn = Instance.new("TextButton")
@@ -2633,7 +2221,7 @@ local function CreateTabBtn(icon,tabName,yPos)
     btn.Text = ""
     btn.AutoButtonColor = false
     btn.ZIndex = 10
-    btn.Parent = navScroll
+    btn.Parent = sidebar
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(255,255,255)
     stroke.Thickness = 1
@@ -2701,14 +2289,12 @@ local function CreateTabBtn(icon,tabName,yPos)
 end
 
 local navGap = isMobile and ((_hxViewport.Y < 430) and 3 or 5) or 5
-CreateTabBtn(Icons.Emote,"emotes",0)
-CreateTabBtn("rbxassetid://3576686446","ugc",(tabBtnS+navGap))
-CreateTabBtn("rbxassetid://75528584354229","animations",(tabBtnS+navGap)*2)
-CreateTabBtn(Icons.Quatrefoil,"auras",(tabBtnS+navGap)*3)
-CreateTabBtn(Icons.FavoriteFull,"favorites",(tabBtnS+navGap)*4)
-CreateTabBtn("rbxassetid://9405931578","tools",(tabBtnS+navGap)*5)
-CreateTabBtn(Icons.Recent,"recent",(tabBtnS+navGap)*6)
-navScroll.CanvasSize = UDim2.new(0,0,0,(tabBtnS+navGap)*7)
+CreateTabBtn(Icons.Emote,"emotes",tabStartY)
+CreateTabBtn("rbxassetid://3576686446","ugc",tabStartY+(tabBtnS+navGap))
+CreateTabBtn("rbxassetid://75528584354229","animations",tabStartY+(tabBtnS+navGap)*2)
+CreateTabBtn(Icons.FavoriteFull,"favorites",tabStartY+(tabBtnS+navGap)*3)
+CreateTabBtn("rbxassetid://9405931578","tools",tabStartY+(tabBtnS+navGap)*4)
+CreateTabBtn(Icons.Recent,"recent",tabStartY+(tabBtnS+navGap)*5)
 
 local profile = Instance.new("Frame")
 profile.Name = "UserProfile"
@@ -5287,7 +4873,7 @@ local function CalcLayout()
     end
     currentCardSize = math.max(isMobile and 54 or 68, (w - PAD * (cols - 1)) / cols)
     local infoH = isMobile and 46 or 40
-    local kbH = (currentTab ~= "auras" and ((not isMobile) or _isPlaylistMode)) and (isMobile and 24 or 26) or 0
+    local kbH = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
     local cardTotalH = currentCardSize + infoH + kbH
     -- Keep a second row populated instead of limiting the page to a single top row.
     local rowsVisible = math.max(2, math.floor(scroll.AbsoluteSize.Y / (cardTotalH + PAD)))
@@ -5668,7 +5254,7 @@ local function MakeCard(emote, ci, animate)
     local CARD = currentCardSize
     local PAD = isMobile and 7 or 8
     local INFO_H = isMobile and 46 or 40
-    local KB_H = (currentTab ~= "auras" and ((not isMobile) or _isPlaylistMode)) and (isMobile and 24 or 26) or 0
+    local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
     local TOTAL_H = CARD + INFO_H + KB_H
 
     local cardContainer = Instance.new("Frame")
@@ -5785,7 +5371,7 @@ local function MakeCard(emote, ci, animate)
     favBtn.AutoButtonColor = false
     favBtn.ZIndex = 9
     favBtn.Parent = cardContainer
-    favBtn.Visible = not emote.isAnimationPack and not emote.isAura
+    favBtn.Visible = not emote.isAnimationPack
 
     local nameLbl = Instance.new("TextLabel")
     nameLbl.Size = UDim2.new(1,-12,0,isMobile and 24 or 22)
@@ -5805,7 +5391,7 @@ local function MakeCard(emote, ci, animate)
     metaLbl.Size = UDim2.new(1,-12,0,14)
     metaLbl.Position = UDim2.new(0,7,1,-17)
     metaLbl.BackgroundTransparency = 1
-    metaLbl.Text = emote.isAura and ((activeAuraId == tonumber(emote.id)) and (isES and "AURA • ACTIVA" or "AURA • ACTIVE") or "AURA") or (emote.isAnimationPack and L.animationPack or (emote.isUGC and "ROBLOX" or L.emoteType))
+    metaLbl.Text = emote.isAnimationPack and L.animationPack or (emote.isUGC and "ROBLOX" or L.emoteType)
     metaLbl.TextColor3 = Color3.fromRGB(100,100,100)
     metaLbl.Font = Enum.Font.GothamMedium
     metaLbl.TextSize = isMobile and 7 or 8
@@ -5815,7 +5401,7 @@ local function MakeCard(emote, ci, animate)
     metaLbl.Parent = cardContainer
 
     local kbHasBinding = GetKeybind(emote.id) ~= nil
-    if not emote.isAura and ((not isMobile) or _isPlaylistMode) then
+    if (not isMobile) or _isPlaylistMode then
         local kbBtn = Instance.new("TextButton")
         kbBtn.Size = UDim2.new(1,-10,0,KB_H-4)
         kbBtn.Position = UDim2.new(0,5,0,3)
@@ -5883,13 +5469,7 @@ local function MakeCard(emote, ci, animate)
             end
         end)
         if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner=nil end
-        if emote.isAura then
-            selectedEmote = emote
-            ToggleAura(emote)
-            task.delay(0.08, function()
-                if currentTab == "auras" and Refresh then Refresh(false, true) end
-            end)
-        elseif emote.isUGC then
+        if emote.isUGC then
             local cardToken = tostring(emote.id)
             visual.Active = false
             task.spawn(function()
@@ -5924,7 +5504,7 @@ local function UpdateCards(animate, fastMode)
 	local CARD = currentCardSize
 	local PAD = isMobile and 7 or 8
 	local INFO_H = isMobile and 46 or 40
-	local KB_H = (currentTab ~= "auras" and ((not isMobile) or _isPlaylistMode)) and (isMobile and 24 or 26) or 0
+	local KB_H = ((not isMobile) or _isPlaylistMode) and (isMobile and 24 or 26) or 0
 	local CARD_TOTAL_H = CARD + INFO_H + KB_H
 
 	local rows = math.ceil(ci / math.max(cols, 1))
@@ -6822,7 +6402,6 @@ UpdateTabData = function()
 	local isKeybinds  = currentTab == "keybinds"
 	local isPlaylists = currentTab == "playlists"
 	local isAnimations = currentTab == "animations"
-	local isAuras = currentTab == "auras"
 	local isTools = currentTab == "tools"
 	local isUGC = currentTab == "ugc"
 	local isInfo = currentTab == "info"
@@ -6972,13 +6551,6 @@ UpdateTabData = function()
 		titleIcon.Image = ResolveAssetImage("rbxassetid://75528584354229")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
 		titleIcon.Visible = false
-	elseif currentTab == "auras" then
-		currentData = Auras
-		filtered = Auras
-		title.Text = "AURAS"
-		titleIcon.Image = ResolveAssetImage(Icons.Quatrefoil)
-		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
-		titleIcon.Visible = false
 	end
 
 	local tabIconSz = isMobile and 24 or 27
@@ -6992,7 +6564,6 @@ UpdateTabData = function()
 		emotes = isES and "Biblioteca de emotes" or "Emote library",
 		ugc = isES and "Catálogo de emotes de Roblox" or "Roblox emote catalog",
 		animations = isES and "Paquetes de animación" or "Animation packs",
-		auras = isES and "Efectos visuales alrededor del personaje" or "Visual effects around your character",
 		tools = isES and "Control y configuración" or "Controls and configuration",
 		favorites = isES and "Tus emotes guardados" or "Your saved emotes",
 		recent = isES and "Reproducidos recientemente" or "Recently played",
@@ -7014,7 +6585,6 @@ tabBtns["favorites"].btn.MouseButton1Click:Connect(function() currentTab = "favo
 tabBtns["tools"].btn.MouseButton1Click:Connect(function() currentTab = "tools"; UpdateTabData() end)
 tabBtns["recent"].btn.MouseButton1Click:Connect(function() currentTab = "recent"; UpdateTabData() end)
 tabBtns["animations"].btn.MouseButton1Click:Connect(function() currentTab = "animations"; UpdateTabData() end)
-tabBtns["auras"].btn.MouseButton1Click:Connect(function() currentTab = "auras"; UpdateTabData() end)
 if tabBtns["playlists"] then tabBtns["playlists"].btn.MouseButton1Click:Connect(function() currentTab = "playlists"; _currentPlaylistId = nil
 _isPlaylistMode = false
 _selectedEmotesForPlaylist = {}
@@ -7261,7 +6831,6 @@ local function _CleanupScript()
 	pcall(function() StopHUDTracking() end)
 	pcall(function() HXAcrylic.Stop() end)
 	pcall(function() StopEmote(false) end)
-	pcall(function() ClearAura(true) end)
 	_genv().HXEmotesCleanup = nil
 	_genv().lastHXEmote = nil
 	_genv().autoReloadEnabled_HX = nil
@@ -7374,17 +6943,6 @@ local _charAddedConn = player.CharacterAdded:Connect(function(newChar)
 		local newAnimate = newChar:WaitForChild("Animate", 5)
 		if newAnimate then
 			pcall(function() EquipAnimationPack(lastHXAnimationPack) end)
-		end
-	end
-
-	if activeAuraId then
-		local auraToRestore = nil
-		for _, a in ipairs(Auras) do
-			if tonumber(a.AssetId) == tonumber(activeAuraId) then auraToRestore = a break end
-		end
-		if auraToRestore then
-			task.wait(0.35)
-			ApplyAura(auraToRestore, true)
 		end
 	end
 
