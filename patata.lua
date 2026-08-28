@@ -2230,8 +2230,13 @@ local function CreateTabBtn(icon,tabName,yPos)
     HXApplyChamfer(btn, {transparent=true, cut=isMobile and 6 or 8})
 
     local iconHolder = Instance.new("ImageLabel")
-    -- Every category icon uses the exact same visual box so the sidebar stays balanced.
+    -- Slightly emphasize Favorites/Recent, while keeping Tools a little more compact.
     local navIconSize = isMobile and 19 or 22
+    if tabName == "favorites" or tabName == "recent" then
+        navIconSize = isMobile and 23 or 27
+    elseif tabName == "tools" then
+        navIconSize = isMobile and 17 or 19
+    end
     iconHolder.Size = UDim2.fromOffset(navIconSize, navIconSize)
     iconHolder.Position = UDim2.new(0,isMobile and 8 or 12,0.5,0)
     iconHolder.AnchorPoint = Vector2.new(0,0.5)
@@ -2730,7 +2735,16 @@ local function _SetPauseState(paused)
 		_stopBtnSquare.Image = paused and ResolveAssetImage("rbxassetid://129338178452237") or ResolveAssetImage("rbxassetid://113416463749658")
 	end
 	if _hxBottomPauseBtn and _hxBottomPauseBtn.Parent then
-		_hxBottomPauseBtn.Text = paused and (isES and "REANUDAR" or "RESUME") or (isES and "PAUSAR" or "PAUSE")
+		-- Keep BOTH the state icon and its label visible.
+		-- Playing => [pause icon PAUSA/PAUSE], Paused => [play icon REANUDAR/RESUME].
+		local bottomText = _hxBottomPauseBtn:FindFirstChild("PauseStateText")
+		if bottomText and bottomText:IsA("TextLabel") then
+			bottomText.Text = paused and (isES and "REANUDAR" or "RESUME") or (isES and "PAUSA" or "PAUSE")
+		end
+		local bottomIcon = _hxBottomPauseBtn:FindFirstChild("PauseStateIcon")
+		if bottomIcon and bottomIcon:IsA("ImageLabel") then
+			bottomIcon.Image = paused and ResolveAssetImage("rbxassetid://129338178452237") or ResolveAssetImage("rbxassetid://113416463749658")
+		end
 	end
 	if _onPauseStateChanged then _onPauseStateChanged(paused) end
 end
@@ -2988,11 +3002,18 @@ pageBar.Parent = content
 Instance.new("UICorner", pageBar).CornerRadius = UDim.new(0, 11)
 RegisterTheme(pageBar, "BackgroundColor3", "secondary")
 
-local pageBtnW = isMobile and 45 or 60
+-- Compact page controls: <  1/N  >  [icon PAUSA/REANUDAR]
+-- Keep previous/next close to the page number instead of pinning them to opposite edges.
+local pageBtnW = isMobile and 30 or 36
+local pageNumW = isMobile and 58 or 70
+local pauseBtnW = isMobile and 94 or 116
+local pageGap = isMobile and 3 or 5
+local compactControlsW = pageBtnW + pageGap + pageNumW + pageGap + pageBtnW + pageGap + pauseBtnW
+local compactStartX = -math.floor(compactControlsW / 2)
 
 prevBtn = Instance.new("TextButton")
 prevBtn.Size = UDim2.new(0, pageBtnW, 1, -4)
-prevBtn.Position = UDim2.new(0, 2, 0, 2)
+prevBtn.Position = UDim2.new(0.5, compactStartX, 0, 2)
 prevBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
 prevBtn.BackgroundTransparency = 1
 prevBtn.Text = ""
@@ -3046,7 +3067,7 @@ local function CreateChevron(parent, isNext)
 end
 
 local nextBtn = prevBtn:Clone()
-nextBtn.Position = UDim2.new(1, -(pageBtnW + 2), 0, 2)
+nextBtn.Position = UDim2.new(0.5, compactStartX + pageBtnW + pageGap + pageNumW + pageGap, 0, 2)
 nextBtn.Parent = pageBar
 HXApplyChamfer(nextBtn, {transparent=true, cut=isMobile and 5 or 7})
 
@@ -3065,8 +3086,8 @@ StylePageButtonHover(prevBtn)
 StylePageButtonHover(nextBtn)
 
 pageNum = Instance.new("TextLabel")
-pageNum.Size = UDim2.new(0.5, -(pageBtnW + 12), 1, 0)
-pageNum.Position = UDim2.new(0, pageBtnW + 8, 0, 0)
+pageNum.Size = UDim2.new(0, pageNumW, 1, 0)
+pageNum.Position = UDim2.new(0.5, compactStartX + pageBtnW + pageGap, 0, 0)
 pageNum.BackgroundTransparency = 1
 pageNum.Text = "1/1"
 pageNum.TextColor3 = currentTheme.textDim
@@ -3074,24 +3095,52 @@ pageNum.Font = Enum.Font.GothamBold
 pageNum.TextScaled = true
 pageNum.ZIndex = 6
 pageNum.Parent = pageBar
+local pageNumLimit = Instance.new("UITextSizeConstraint")
+pageNumLimit.MinTextSize = isMobile and 9 or 10
+pageNumLimit.MaxTextSize = isMobile and 12 or 14
+pageNumLimit.Parent = pageNum
 RegisterTheme(pageNum, "TextColor3", "textDim")
 
 _hxBottomPauseBtn = Instance.new("TextButton")
 _hxBottomPauseBtn.Name = "BottomPauseButton"
-_hxBottomPauseBtn.Size = UDim2.new(0.5, -(pageBtnW + 12), 1, -4)
-_hxBottomPauseBtn.Position = UDim2.new(0.5, 4, 0, 2)
+_hxBottomPauseBtn.Size = UDim2.new(0, pauseBtnW, 1, -4)
+_hxBottomPauseBtn.Position = UDim2.new(0.5, compactStartX + pageBtnW + pageGap + pageNumW + pageGap + pageBtnW + pageGap, 0, 2)
 _hxBottomPauseBtn.BackgroundColor3 = Color3.fromRGB(54,54,54)
 _hxBottomPauseBtn.BackgroundTransparency = 1
 _hxBottomPauseBtn.BorderSizePixel = 0
-_hxBottomPauseBtn.Text = isES and "PAUSAR" or "PAUSE"
-_hxBottomPauseBtn.TextColor3 = Color3.fromRGB(245,245,245)
-_hxBottomPauseBtn.TextStrokeTransparency = 1
-_hxBottomPauseBtn.Font = Enum.Font.GothamBold
-_hxBottomPauseBtn.TextSize = isMobile and 9 or 11
+_hxBottomPauseBtn.Text = ""
 _hxBottomPauseBtn.AutoButtonColor = false
 _hxBottomPauseBtn.ZIndex = 6
 _hxBottomPauseBtn.Parent = pageBar
 HXApplyChamfer(_hxBottomPauseBtn, {transparent=true, cut=isMobile and 5 or 7})
+
+local _hxBottomPauseIcon = Instance.new("ImageLabel")
+_hxBottomPauseIcon.Name = "PauseStateIcon"
+_hxBottomPauseIcon.Size = UDim2.fromOffset(isMobile and 15 or 18, isMobile and 15 or 18)
+_hxBottomPauseIcon.Position = UDim2.new(0, isMobile and 10 or 12, 0.5, 0)
+_hxBottomPauseIcon.AnchorPoint = Vector2.new(0, 0.5)
+_hxBottomPauseIcon.BackgroundTransparency = 1
+-- While an emote is playing, show PAUSE. When paused, show PLAY/RESUME.
+_hxBottomPauseIcon.Image = ResolveAssetImage("rbxassetid://113416463749658")
+_hxBottomPauseIcon.ImageColor3 = Color3.fromRGB(255,255,255)
+_hxBottomPauseIcon.ScaleType = Enum.ScaleType.Fit
+_hxBottomPauseIcon.ZIndex = 8
+_hxBottomPauseIcon.Parent = _hxBottomPauseBtn
+
+local _hxBottomPauseText = Instance.new("TextLabel")
+_hxBottomPauseText.Name = "PauseStateText"
+_hxBottomPauseText.Size = UDim2.new(1, -(isMobile and 34 or 40), 1, 0)
+_hxBottomPauseText.Position = UDim2.new(0, isMobile and 30 or 36, 0, 0)
+_hxBottomPauseText.BackgroundTransparency = 1
+_hxBottomPauseText.Text = isES and "PAUSA" or "PAUSE"
+_hxBottomPauseText.TextColor3 = Color3.fromRGB(255,255,255)
+_hxBottomPauseText.Font = Enum.Font.GothamBold
+_hxBottomPauseText.TextSize = isMobile and 10 or 12
+_hxBottomPauseText.TextStrokeTransparency = 1
+_hxBottomPauseText.TextXAlignment = Enum.TextXAlignment.Center
+_hxBottomPauseText.TextYAlignment = Enum.TextYAlignment.Center
+_hxBottomPauseText.ZIndex = 8
+_hxBottomPauseText.Parent = _hxBottomPauseBtn
 
 _hxBottomPauseBtn.MouseEnter:Connect(function()
 	TweenService:Create(_hxBottomPauseBtn, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(70,70,70)}):Play()
