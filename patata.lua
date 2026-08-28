@@ -2259,7 +2259,7 @@ tabLabels = {
     keybinds = isES and "TECLAS" or "KEYBINDS",
     info = isES and "INFORMACIÓN" or "INFO",
     animations = isES and "ANIMACIONES" or "ANIMATIONS",
-    tools = "TOOLS",
+    tools = isES and "HERRAMIENTAS" or "TOOLS",
     recent = isES and "RECIENTES" or "RECENT",
     playlists = isES and "LISTAS" or "PLAYLISTS",
 }
@@ -5111,7 +5111,7 @@ local function UpdatePageUI()
 
 	pageBar.Visible = scroll.Visible
 
-	local empty = #filtered == 0 and currentTab ~= "settings"
+	local empty = scroll.Visible and #filtered == 0 and currentTab ~= "settings"
 	emptyLbl.Visible = empty
 	if empty then
 		local q = search and search.Text ~= "" or false
@@ -6763,7 +6763,7 @@ UpdateTabData = function()
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
 		titleIcon.Visible = false
 	elseif currentTab == "tools" then
-		title.Text = "TOOLS"
+		title.Text = isES and "Herramientas" or "Tools"
 		titleIcon.Image = ResolveAssetImage("rbxassetid://9405931578")
 		titleIcon.ImageColor3 = Color3.fromRGB(255,255,255)
 		titleIcon.Visible = false
@@ -6802,7 +6802,7 @@ UpdateTabData = function()
 	if not hideNormal then filtered = ApplyCurrentSort(filtered) end
 
 	UpdateTabStyles()
-	local shouldRefresh = not isSettings and not isKeybinds and not isFriends and not isInfo and (not isPlaylists or viewingPlaylist)
+	local shouldRefresh = not isSettings and not isKeybinds and not isFriends and not isInfo and not isTools and (not isPlaylists or viewingPlaylist)
 	if shouldRefresh then Refresh(true) end
 end
 
@@ -8539,7 +8539,7 @@ do
         local row=Instance.new("Frame",_toolBody); row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1; row.ZIndex=905
         local pause=HXButton(row,isES and "PAUSA" or "PAUSE",UDim2.new(0.32,-4,1,0),UDim2.new(0,0,0,0))
         local rev=HXButton(row,isES and "REVERSA" or "REVERSE",UDim2.new(0.34,-4,1,0),UDim2.new(0.32,4,0,0))
-        local loop=HXButton(row,"LOOP",UDim2.new(0.34,-4,1,0),UDim2.new(0.66,4,0,0))
+        local loop=HXButton(row,isES and "REPETIR" or "LOOP",UDim2.new(0.34,-4,1,0),UDim2.new(0.66,4,0,0))
         local function syncButtons()
             rev.BackgroundColor3 = Settings.reversePlayback and Color3.fromRGB(72,72,72) or Color3.fromRGB(24,24,24)
             loop.BackgroundColor3 = Settings.loopEmote and Color3.fromRGB(72,72,72) or Color3.fromRGB(24,24,24)
@@ -8580,7 +8580,7 @@ do
             end)
         end
 
-        HXLabel(_toolBody,isES and "Tiempo / Seek" or "Time / Seek",18,true)
+        HXLabel(_toolBody,isES and "Tiempo / Posición" or "Time / Seek",18,true)
         local seek=Instance.new("TextButton",_toolBody); seek.Size=UDim2.new(1,0,0,30); seek.BackgroundColor3=Color3.fromRGB(18,18,18); seek.Text=""; seek.ZIndex=905; Instance.new("UICorner",seek).CornerRadius=UDim.new(0,8)
         local fill=Instance.new("Frame",seek); fill.Size=UDim2.new(0,0,1,0); fill.BackgroundColor3=Color3.fromRGB(110,110,110); fill.BorderSizePixel=0; fill.ZIndex=906; Instance.new("UICorner",fill).CornerRadius=UDim.new(0,8)
         local time=Instance.new("TextLabel",seek); time.Size=UDim2.new(1,0,1,0); time.BackgroundTransparency=1; time.Text="0.0 / 0.0"; time.TextColor3=Color3.new(1,1,1); time.TextStrokeTransparency=1; time.Font=Enum.Font.Gotham; time.TextSize=isMobile and 9 or 10; time.ZIndex=907
@@ -8600,8 +8600,8 @@ do
 
     local function MakeQuickPage()
         ClearBody(); HXLabel(_toolBody,isES and "SELECTOR RÁPIDO" or "QUICK SELECTOR",28,true)
-        local a=HXButton(_toolBody,isES and "AÑADIR EMOTE SELECCIONADO AL QUICK" or "ADD SELECTED EMOTE TO QUICK",UDim2.new(1,0,0,34)); a.MouseButton1Click:Connect(AddSelectedToQuick)
-        local c=HXButton(_toolBody,isES and "LIMPIAR QUICK SELECTOR" or "CLEAR QUICK SELECTOR",UDim2.new(1,0,0,34)); c.MouseButton1Click:Connect(function() QuickEmotes={}; SaveData(); RefreshQuickDock() end)
+        local a=HXButton(_toolBody,isES and "AÑADIR EMOTE AL SELECTOR RÁPIDO" or "ADD SELECTED EMOTE TO QUICK",UDim2.new(1,0,0,34)); a.MouseButton1Click:Connect(AddSelectedToQuick)
+        local c=HXButton(_toolBody,isES and "LIMPIAR SELECTOR RÁPIDO" or "CLEAR QUICK SELECTOR",UDim2.new(1,0,0,34)); c.MouseButton1Click:Connect(function() QuickEmotes={}; SaveData(); RefreshQuickDock() end)
         HXLabel(_toolBody,isES and "Selecciona un emote en la biblioteca y usa estas opciones." or "Select an emote in the library, then use these options.",36,false).TextWrapped=true
     end
 
@@ -8638,12 +8638,21 @@ do
 
     local function MakePackPage()
         ClearBody(); HXLabel(_toolBody,isES and "EDITOR DE ANIMACIONES" or "ANIMATION EDITOR",24,true)
-        HXLabel(_toolBody,isES and "Pon un Animation ID o Pack ID diferente para cada movimiento." or "Set a different Animation ID or Pack ID for each movement.",30,false).TextWrapped=true
-        local cats={"Idle","Walk","Run","Jump","Fall","Climb","Swim"}
-        for _,cat in ipairs(cats) do
+        HXLabel(_toolBody,isES and "Pon un ID de animación o ID de paquete diferente para cada movimiento." or "Set a different Animation ID or Pack ID for each movement.",30,false).TextWrapped=true
+        local cats={
+            {key="Idle", es="Reposo", en="Idle"},
+            {key="Walk", es="Caminar", en="Walk"},
+            {key="Run", es="Correr", en="Run"},
+            {key="Jump", es="Saltar", en="Jump"},
+            {key="Fall", es="Caer", en="Fall"},
+            {key="Climb", es="Escalar", en="Climb"},
+            {key="Swim", es="Nadar", en="Swim"},
+        }
+        for _,catData in ipairs(cats) do
+            local cat=catData.key
             local row=Instance.new("Frame",_toolBody); row.Size=UDim2.new(1,0,0,30); row.BackgroundTransparency=1
-            local l=HXLabel(row,cat,30,true); l.Size=UDim2.new(0.26,0,1,0)
-            local box=Instance.new("TextBox",row); box.Size=UDim2.new(0.74,-4,1,0); box.Position=UDim2.new(0.26,4,0,0); box.BackgroundColor3=Color3.fromRGB(18,18,18); box.Text=tostring(CustomAnimations[cat] or ""); box.PlaceholderText="Animation / Pack ID"; box.TextColor3=Color3.new(1,1,1); box.PlaceholderColor3=Color3.fromRGB(100,100,100); box.TextStrokeTransparency=1; box.Font=Enum.Font.Gotham; box.TextSize=isMobile and 9 or 10; box.ClearTextOnFocus=false; box.ZIndex=905; Instance.new("UICorner",box).CornerRadius=UDim.new(0,7)
+            local l=HXLabel(row,isES and catData.es or catData.en,30,true); l.Size=UDim2.new(0.26,0,1,0)
+            local box=Instance.new("TextBox",row); box.Size=UDim2.new(0.74,-4,1,0); box.Position=UDim2.new(0.26,4,0,0); box.BackgroundColor3=Color3.fromRGB(18,18,18); box.Text=tostring(CustomAnimations[cat] or ""); box.PlaceholderText=isES and "ID de animación / paquete" or "Animation / Pack ID"; box.TextColor3=Color3.new(1,1,1); box.PlaceholderColor3=Color3.fromRGB(100,100,100); box.TextStrokeTransparency=1; box.Font=Enum.Font.Gotham; box.TextSize=isMobile and 9 or 10; box.ClearTextOnFocus=false; box.ZIndex=905; Instance.new("UICorner",box).CornerRadius=UDim.new(0,7)
             box.FocusLost:Connect(function() local id=box.Text:match("%d+"); CustomAnimations[cat]=id and tonumber(id) or nil; SaveData() end)
         end
         local apply=HXButton(_toolBody,isES and "APLICAR" or "APPLY",UDim2.new(1,0,0,34)); apply.MouseButton1Click:Connect(ApplyCustomAnimations)
