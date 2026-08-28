@@ -488,8 +488,12 @@ local function HXApplyChamfer(obj, opts)
     opts = opts or {}
     local cut = tonumber(opts.cut) or (isMobile and 6 or 8)
     local color = opts.color or Color3.fromRGB(238,238,238)
-    local coreThickness = tonumber(opts.thickness) or 1.15
-    local glowThickness = tonumber(opts.glowThickness) or 3.4
+    local coreThickness = tonumber(opts.thickness) or 1.05
+    local glowThickness = tonumber(opts.glowThickness) or 2.8
+    local coreTransparency = tonumber(opts.coreTransparency)
+    if coreTransparency == nil then coreTransparency = 0.42 end
+    local glowTransparency = tonumber(opts.glowTransparency)
+    if glowTransparency == nil then glowTransparency = 0.90 end
     local transparent = opts.transparent == true
 
     obj:SetAttribute("HXChamfer", true)
@@ -560,9 +564,42 @@ local function HXApplyChamfer(obj, opts)
         line(prefix.."BR", UDim2.new(0,diagLen,0,thickness), UDim2.new(1,-cut/2,1,-cut/2), -45, thickness, transparency, zadd)
     end
 
-    build("Glow", glowThickness, 0.73, 0)
-    build("Core", coreThickness, 0.04, 2)
+    build("Glow", glowThickness, glowTransparency, 0)
+    build("Core", coreThickness, coreTransparency, 2)
     return border
+end
+
+-- Restyle an existing chamfer without rebuilding it. Allows normal/hover/selected
+-- states and lets selected cards emphasize only their cut corners.
+local function HXStyleChamfer(obj, opts)
+    if not obj then return end
+    opts = opts or {}
+    local border = obj:FindFirstChild("HXChamferBorder")
+    if not border then return end
+    local coreT = opts.coreTransparency
+    local glowT = opts.glowTransparency
+    local cornerCoreT = opts.cornerCoreTransparency
+    local cornerGlowT = opts.cornerGlowTransparency
+    local color = opts.color
+
+    local function isCorner(name)
+        return name:match("TL$") or name:match("TR$") or name:match("BL$") or name:match("BR$")
+    end
+
+    for _, seg in ipairs(border:GetChildren()) do
+        if seg:IsA("Frame") then
+            local name = seg.Name
+            local corner = isCorner(name) ~= nil
+            if color then seg.BackgroundColor3 = color end
+            if name:sub(1,4) == "Core" then
+                local t = corner and cornerCoreT or coreT
+                if t ~= nil then seg.BackgroundTransparency = t end
+            elseif name:sub(1,4) == "Glow" then
+                local t = corner and cornerGlowT or glowT
+                if t ~= nil then seg.BackgroundTransparency = t end
+            end
+        end
+    end
 end
 
 local function HXNormalizeVisual(obj)
@@ -2176,9 +2213,9 @@ brandStroke.Transparency = 1
 brandStroke.Parent = brand
 
 local brandLogo = Instance.new("ImageLabel")
-local brandLogoS = isMobile and 46 or 60
+local brandLogoS = isMobile and 52 or 68
 brandLogo.Size = UDim2.new(0, brandLogoS, 0, brandLogoS)
-brandLogo.Position = UDim2.new(0.5, 0, 0.5, -2)
+brandLogo.Position = UDim2.new(0.5, 0, 0.5, isMobile and -5 or -6)
 brandLogo.AnchorPoint = Vector2.new(0.5, 0.5)
 brandLogo.BackgroundTransparency = 1
 brandLogo.Image = "rbxassetid://80552458381492"
@@ -2232,8 +2269,10 @@ local function CreateTabBtn(icon,tabName,yPos)
     local iconHolder = Instance.new("ImageLabel")
     -- Slightly emphasize Favorites/Recent, while keeping Tools a little more compact.
     local navIconSize = isMobile and 19 or 22
-    if tabName == "favorites" or tabName == "recent" then
-        navIconSize = isMobile and 23 or 27
+    if tabName == "favorites" then
+        navIconSize = isMobile and 24 or 28
+    elseif tabName == "recent" then
+        navIconSize = isMobile and 29 or 34
     elseif tabName == "tools" then
         navIconSize = isMobile and 17 or 19
     end
@@ -2243,9 +2282,27 @@ local function CreateTabBtn(icon,tabName,yPos)
     iconHolder.BackgroundTransparency = 1
     iconHolder.Image = ResolveAssetImage(icon)
     iconHolder.ImageColor3 = Color3.fromRGB(255,255,255)
+    iconHolder.ImageTransparency = 0
     iconHolder.ScaleType = Enum.ScaleType.Fit
     iconHolder.ZIndex = 12
     iconHolder.Parent = btn
+
+    -- RECENT used to look too dark. Give it a very subtle light plate so the
+    -- icon stays readable even when its source artwork has dark pixels.
+    if tabName == "recent" then
+        local recentPlate = Instance.new("Frame")
+        recentPlate.Name = "RecentIconPlate"
+        recentPlate.Size = UDim2.fromOffset(navIconSize + (isMobile and 6 or 8), navIconSize + (isMobile and 6 or 8))
+        recentPlate.Position = UDim2.new(0, isMobile and 5 or 8, 0.5, 0)
+        recentPlate.AnchorPoint = Vector2.new(0,0.5)
+        recentPlate.BackgroundColor3 = Color3.fromRGB(255,255,255)
+        recentPlate.BackgroundTransparency = 0.91
+        recentPlate.BorderSizePixel = 0
+        recentPlate.ZIndex = 11
+        recentPlate:SetAttribute("HXNoAutoCorner", true)
+        recentPlate.Parent = btn
+        iconHolder.ZIndex = 13
+    end
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,-(isMobile and 38 or 50),1,-4)
@@ -2270,17 +2327,19 @@ local function CreateTabBtn(icon,tabName,yPos)
     btn.MouseEnter:Connect(function()
         if currentTab ~= tabName then
             TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(18,18,18),BackgroundTransparency=1}):Play()
-            TweenService:Create(stroke,TweenInfo.new(0.15),{Color=Color3.fromRGB(255,255,255),Transparency=0.10}):Play()
-            TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255)}):Play()
-            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(225,225,225)}):Play()
+            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255),ImageTransparency=0}):Play()
+            HXStyleChamfer(btn,{coreTransparency=0.38,glowTransparency=0.94,color=Color3.fromRGB(220,220,220)})
         end
     end)
     btn.MouseLeave:Connect(function()
         if currentTab ~= tabName then
             TweenService:Create(btn,TweenInfo.new(0.15),{BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1}):Play()
-            TweenService:Create(stroke,TweenInfo.new(0.15),{Color=Color3.fromRGB(255,255,255),Transparency=0.42}):Play()
-            TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(255,255,255)}):Play()
-            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(label,TweenInfo.new(0.15),{TextColor3=Color3.fromRGB(170,170,170)}):Play()
+            local iconT = tabName == "recent" and 0 or 0.12
+            local iconC = tabName == "recent" and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190)
+            TweenService:Create(iconHolder,TweenInfo.new(0.15),{ImageColor3=iconC,ImageTransparency=iconT}):Play()
+            HXStyleChamfer(btn,{coreTransparency=0.72,glowTransparency=1,color=Color3.fromRGB(180,180,180)})
         end
     end)
 
@@ -2578,12 +2637,12 @@ local function MakeWindowControl(name, kind, rightOffset)
     b.Parent = titleBar
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(255,255,255)
-    stroke.Thickness = 1.35
-    stroke.Transparency = 0
+    stroke.Thickness = 0.9
+    stroke.Transparency = 0.58
     stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     pcall(function() stroke.LineJoinMode = Enum.LineJoinMode.Round end)
     stroke.Parent = b
-    HXApplyChamfer(b, {transparent=true, cut=isMobile and 5 or 6})
+    HXApplyChamfer(b, {transparent=true, cut=isMobile and 5 or 6, thickness=0.9, glowThickness=1, coreTransparency=0.46, glowTransparency=1})
 
     if kind == "minus" then
         local line = Instance.new("Frame")
@@ -2607,8 +2666,8 @@ local function MakeWindowControl(name, kind, rightOffset)
         sq.Parent = b
         local sqStroke = Instance.new("UIStroke")
         sqStroke.Color = Color3.fromRGB(255,255,255)
-        sqStroke.Thickness = 1.35
-        sqStroke.Transparency = 0
+        sqStroke.Thickness = 1.0
+        sqStroke.Transparency = 0.28
         sqStroke:SetAttribute("HXKeepStroke", true)
         sqStroke.Parent = sq
     else
@@ -2631,14 +2690,14 @@ local function MakeWindowControl(name, kind, rightOffset)
             BackgroundColor3 = Color3.fromRGB(34,34,34),
             BackgroundTransparency = 1
         }):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 1.65}):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 1.0, Transparency = 0.40}):Play()
     end)
     b.MouseLeave:Connect(function()
         TweenService:Create(b, TweenInfo.new(0.12), {
             BackgroundColor3 = Color3.fromRGB(15,15,15),
             BackgroundTransparency = 1
         }):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 1.35}):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.12), {Thickness = 0.9, Transparency = 0.58}):Play()
     end)
 
     return b
@@ -2668,7 +2727,7 @@ discordTopBtn.TextSize = isMobile and 8 or 10
 discordTopBtn.AutoButtonColor = false
 discordTopBtn.ZIndex = 11
 discordTopBtn.Parent = titleBar
-HXApplyChamfer(discordTopBtn, {transparent=true, cut=isMobile and 6 or 8})
+HXApplyChamfer(discordTopBtn, {transparent=true, cut=isMobile and 6 or 8, coreTransparency=0.52, glowTransparency=0.97})
 
 local universalTopW = isMobile and 58 or 72
 local universalTopGap = isMobile and 18 or 26
@@ -2800,7 +2859,7 @@ searchStroke.Thickness = 1.35
 searchStroke.Transparency = 0.05
 searchStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 searchStroke.Parent = search
-HXApplyChamfer(search, {transparent=true, cut=isMobile and 7 or 9, thickness=1.2, glowThickness=3.8})
+HXApplyChamfer(search, {transparent=true, cut=isMobile and 7 or 9, thickness=1.0, glowThickness=2.4, coreTransparency=0.50, glowTransparency=0.96})
 
 local magnifier = Instance.new("ImageLabel")
 magnifier.Size = UDim2.new(0,isMobile and 18 or 21,0,isMobile and 18 or 21)
@@ -2991,7 +3050,7 @@ search.FocusLost:Connect(function(enterPressed)
 	end)
 end)
 
-local pageH = isMobile and ((_hxViewport.Y < 500) and 26 or 30) or 36
+local pageH = isMobile and ((_hxViewport.Y < 500) and 30 or 34) or 42
 pageBar = Instance.new("Frame")
 pageBar.Size = UDim2.new(1,-24,0,pageH)
 pageBar.Position = UDim2.new(0, 12, 1, -(pageH + 10))
@@ -3004,11 +3063,12 @@ RegisterTheme(pageBar, "BackgroundColor3", "secondary")
 
 -- Compact page controls: <  1/N  >  [icon PAUSA/REANUDAR]
 -- Keep previous/next close to the page number instead of pinning them to opposite edges.
-local pageBtnW = isMobile and 30 or 36
-local pageNumW = isMobile and 58 or 70
-local pauseBtnW = isMobile and 94 or 116
-local pageGap = isMobile and 3 or 5
-local compactControlsW = pageBtnW + pageGap + pageNumW + pageGap + pageBtnW + pageGap + pauseBtnW
+local pageBtnW = isMobile and 36 or 44
+local pageNumW = isMobile and 66 or 80
+local pauseBtnW = isMobile and 108 or 136
+local pageGap = isMobile and 6 or 8
+local pauseGap = isMobile and 14 or 18
+local compactControlsW = pageBtnW + pageGap + pageNumW + pageGap + pageBtnW + pauseGap + pauseBtnW
 local compactStartX = -math.floor(compactControlsW / 2)
 
 prevBtn = Instance.new("TextButton")
@@ -3021,11 +3081,11 @@ prevBtn.AutoButtonColor = false
 prevBtn.ZIndex = 6
 prevBtn.Parent = pageBar
 local prevStroke = Instance.new("UIStroke")
-prevStroke.Color = Color3.fromRGB(0,0,0)
+prevStroke.Color = Color3.fromRGB(220,220,220)
 prevStroke.Thickness = 1
-prevStroke.Transparency = 0.38
+prevStroke.Transparency = 0.72
 prevStroke.Parent = prevBtn
-HXApplyChamfer(prevBtn, {transparent=true, cut=isMobile and 5 or 7})
+HXApplyChamfer(prevBtn, {transparent=true, cut=isMobile and 5 or 7, coreTransparency=0.50, glowTransparency=0.97})
 
 local function CreateChevron(parent, isNext)
 	local container = Instance.new("Frame")
@@ -3069,7 +3129,7 @@ end
 local nextBtn = prevBtn:Clone()
 nextBtn.Position = UDim2.new(0.5, compactStartX + pageBtnW + pageGap + pageNumW + pageGap, 0, 2)
 nextBtn.Parent = pageBar
-HXApplyChamfer(nextBtn, {transparent=true, cut=isMobile and 5 or 7})
+HXApplyChamfer(nextBtn, {transparent=true, cut=isMobile and 5 or 7, coreTransparency=0.50, glowTransparency=0.97})
 
 CreateChevron(prevBtn, false)
 CreateChevron(nextBtn, true)
@@ -3096,15 +3156,15 @@ pageNum.TextScaled = true
 pageNum.ZIndex = 6
 pageNum.Parent = pageBar
 local pageNumLimit = Instance.new("UITextSizeConstraint")
-pageNumLimit.MinTextSize = isMobile and 9 or 10
-pageNumLimit.MaxTextSize = isMobile and 12 or 14
+pageNumLimit.MinTextSize = isMobile and 11 or 12
+pageNumLimit.MaxTextSize = isMobile and 14 or 17
 pageNumLimit.Parent = pageNum
 RegisterTheme(pageNum, "TextColor3", "textDim")
 
 _hxBottomPauseBtn = Instance.new("TextButton")
 _hxBottomPauseBtn.Name = "BottomPauseButton"
 _hxBottomPauseBtn.Size = UDim2.new(0, pauseBtnW, 1, -4)
-_hxBottomPauseBtn.Position = UDim2.new(0.5, compactStartX + pageBtnW + pageGap + pageNumW + pageGap + pageBtnW + pageGap, 0, 2)
+_hxBottomPauseBtn.Position = UDim2.new(0.5, compactStartX + pageBtnW + pageGap + pageNumW + pageGap + pageBtnW + pauseGap, 0, 2)
 _hxBottomPauseBtn.BackgroundColor3 = Color3.fromRGB(54,54,54)
 _hxBottomPauseBtn.BackgroundTransparency = 1
 _hxBottomPauseBtn.BorderSizePixel = 0
@@ -3112,12 +3172,12 @@ _hxBottomPauseBtn.Text = ""
 _hxBottomPauseBtn.AutoButtonColor = false
 _hxBottomPauseBtn.ZIndex = 6
 _hxBottomPauseBtn.Parent = pageBar
-HXApplyChamfer(_hxBottomPauseBtn, {transparent=true, cut=isMobile and 5 or 7})
+HXApplyChamfer(_hxBottomPauseBtn, {transparent=true, cut=isMobile and 5 or 7, coreTransparency=0.44, glowTransparency=0.96})
 
 local _hxBottomPauseIcon = Instance.new("ImageLabel")
 _hxBottomPauseIcon.Name = "PauseStateIcon"
-_hxBottomPauseIcon.Size = UDim2.fromOffset(isMobile and 15 or 18, isMobile and 15 or 18)
-_hxBottomPauseIcon.Position = UDim2.new(0, isMobile and 10 or 12, 0.5, 0)
+_hxBottomPauseIcon.Size = UDim2.fromOffset(isMobile and 18 or 21, isMobile and 18 or 21)
+_hxBottomPauseIcon.Position = UDim2.new(0, isMobile and 12 or 15, 0.5, 0)
 _hxBottomPauseIcon.AnchorPoint = Vector2.new(0, 0.5)
 _hxBottomPauseIcon.BackgroundTransparency = 1
 -- While an emote is playing, show PAUSE. When paused, show PLAY/RESUME.
@@ -3129,13 +3189,13 @@ _hxBottomPauseIcon.Parent = _hxBottomPauseBtn
 
 local _hxBottomPauseText = Instance.new("TextLabel")
 _hxBottomPauseText.Name = "PauseStateText"
-_hxBottomPauseText.Size = UDim2.new(1, -(isMobile and 34 or 40), 1, 0)
-_hxBottomPauseText.Position = UDim2.new(0, isMobile and 30 or 36, 0, 0)
+_hxBottomPauseText.Size = UDim2.new(1, -(isMobile and 40 or 48), 1, 0)
+_hxBottomPauseText.Position = UDim2.new(0, isMobile and 36 or 43, 0, 0)
 _hxBottomPauseText.BackgroundTransparency = 1
 _hxBottomPauseText.Text = isES and "PAUSA" or "PAUSE"
 _hxBottomPauseText.TextColor3 = Color3.fromRGB(255,255,255)
 _hxBottomPauseText.Font = Enum.Font.GothamBold
-_hxBottomPauseText.TextSize = isMobile and 10 or 12
+_hxBottomPauseText.TextSize = isMobile and 11 or 13
 _hxBottomPauseText.TextStrokeTransparency = 1
 _hxBottomPauseText.TextXAlignment = Enum.TextXAlignment.Center
 _hxBottomPauseText.TextYAlignment = Enum.TextYAlignment.Center
@@ -4774,7 +4834,12 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
     end
     if selectedCardContainer and selectedCardContainer ~= newContainer and selectedCardContainer.Parent then
         selectedCardContainer.BackgroundColor3 = currentTheme.secondary
-        selectedCardContainer.BackgroundTransparency = 0.34
+        selectedCardContainer.BackgroundTransparency = 0.62
+        HXStyleChamfer(selectedCardContainer,{
+            coreTransparency=0.62, glowTransparency=0.98,
+            cornerCoreTransparency=0.58, cornerGlowTransparency=0.96,
+            color=Color3.fromRGB(190,190,190)
+        })
     end
 
     selectedEmote = emote
@@ -4785,7 +4850,13 @@ UpdateSelectedEmoteUI = function(emote,newStroke,newContainer)
         TweenService:Create(newStroke,TweenInfo.new(0.14),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
     end
     if newContainer and newContainer.Parent then
-        TweenService:Create(newContainer,TweenInfo.new(0.14),{BackgroundColor3=currentTheme.tertiary,BackgroundTransparency=0.38}):Play()
+        TweenService:Create(newContainer,TweenInfo.new(0.14),{BackgroundColor3=currentTheme.tertiary,BackgroundTransparency=0.44}):Play()
+        -- Selected emote: brighter cut corners, while straight edges stay restrained.
+        HXStyleChamfer(newContainer,{
+            coreTransparency=0.28, glowTransparency=0.88,
+            cornerCoreTransparency=0.02, cornerGlowTransparency=0.54,
+            color=Color3.fromRGB(255,255,255)
+        })
     end
 
     if not emote then
@@ -5261,7 +5332,7 @@ local function MakeCard(emote, ci, animate)
     cardContainer.Name = "EmoteCard"
     cardContainer.Size = UDim2.new(0,CARD,0,TOTAL_H)
     cardContainer.BackgroundColor3 = currentTheme.secondary
-    cardContainer.BackgroundTransparency = 0.42
+    cardContainer.BackgroundTransparency = 0.62
     cardContainer.BorderSizePixel = 0
     cardContainer.ZIndex = 2
     cardContainer.Parent = scroll
@@ -5270,7 +5341,7 @@ local function MakeCard(emote, ci, animate)
     containerStroke.Thickness = 1
     containerStroke.Transparency = 1
     containerStroke.Parent = cardContainer
-    HXApplyChamfer(cardContainer, {transparent=false, cut=isMobile and 6 or 8, thickness=1.05, glowThickness=3.0})
+    HXApplyChamfer(cardContainer, {transparent=false, cut=isMobile and 6 or 8, thickness=0.95, glowThickness=2.2, coreTransparency=0.62, glowTransparency=0.98})
 
     local col = ci % cols
     local row = math.floor(ci / cols)
@@ -5283,7 +5354,7 @@ local function MakeCard(emote, ci, animate)
             if cardContainer.Parent then
                 TweenService:Create(cardContainer,TweenInfo.new(0.20,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{
                     Position=UDim2.new(0,targetX,0,targetY),
-                    BackgroundTransparency=0
+                    BackgroundTransparency=0.62
                 }):Play()
             end
         end)
@@ -5301,7 +5372,7 @@ local function MakeCard(emote, ci, animate)
     visual.ImageTransparency = animate and 1 or 0
     visual.ZIndex = 3
     visual.Parent = cardContainer
-    HXApplyChamfer(visual, {transparent=false, cut=isMobile and 5 or 6, thickness=0.9, glowThickness=2.6})
+    HXApplyChamfer(visual, {transparent=false, cut=isMobile and 5 or 6, thickness=0.85, glowThickness=1.8, coreTransparency=0.68, glowTransparency=1})
 
     if emote.isAnimationPack then
         local packId = tostring(emote.id):gsub("anim_", "")
@@ -5418,7 +5489,7 @@ local function MakeCard(emote, ci, animate)
         kst.Color = Color3.fromRGB(52,52,52)
         kst.Thickness = 1
         kst.Parent = kbBtn
-        HXApplyChamfer(kbBtn, {transparent=true, cut=isMobile and 4 or 5, thickness=0.9, glowThickness=2.4})
+        HXApplyChamfer(kbBtn, {transparent=true, cut=isMobile and 4 or 5, thickness=0.8, glowThickness=1.6, coreTransparency=0.64, glowTransparency=1})
         kbBtn.MouseButton1Click:Connect(function()
             if _isPlaylistMode then
                 local k = tostring(emote.id)
@@ -5456,16 +5527,27 @@ local function MakeCard(emote, ci, animate)
         TweenService:Create(visual,TweenInfo.new(0.16),{BackgroundColor3=Color3.fromRGB(13,13,13),Position=UDim2.new(0,5,0,5+KB_H)}):Play()
         TweenService:Create(visualStroke,TweenInfo.new(0.16),{Color=Color3.fromRGB(48,48,48),Thickness=1}):Play()
         TweenService:Create(containerStroke,TweenInfo.new(0.16),{Color=(selectedEmote == emote) and Color3.fromRGB(255,255,255) or Color3.fromRGB(58,58,58)}):Play()
+        if selectedEmote == emote then
+            HXStyleChamfer(cardContainer,{coreTransparency=0.28,glowTransparency=0.88,cornerCoreTransparency=0.02,cornerGlowTransparency=0.54,color=Color3.fromRGB(255,255,255)})
+        else
+            HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,color=Color3.fromRGB(190,190,190)})
+        end
     end)
 
     visual.MouseButton1Click:Connect(function()
         UpdateSelectedEmoteUI(emote, containerStroke, cardContainer)
         TweenService:Create(containerStroke,TweenInfo.new(0.12),{Color=Color3.fromRGB(255,255,255),Thickness=1.6}):Play()
-        TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24),BackgroundTransparency=0.32}):Play()
+        TweenService:Create(cardContainer,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(24,24,24),BackgroundTransparency=0.38}):Play()
+        HXStyleChamfer(cardContainer,{coreTransparency=0.20,glowTransparency=0.82,cornerCoreTransparency=0,cornerGlowTransparency=0.48,color=Color3.fromRGB(255,255,255)})
         task.delay(0.24,function()
             if cardContainer.Parent then
                 TweenService:Create(containerStroke,TweenInfo.new(0.16),{Thickness=1}):Play()
-                TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8)}):Play()
+                TweenService:Create(cardContainer,TweenInfo.new(0.16),{BackgroundColor3=(selectedEmote == emote) and Color3.fromRGB(18,18,18) or Color3.fromRGB(8,8,8),BackgroundTransparency=(selectedEmote == emote) and 0.44 or 0.62}):Play()
+                if selectedEmote == emote then
+                    HXStyleChamfer(cardContainer,{coreTransparency=0.28,glowTransparency=0.88,cornerCoreTransparency=0.02,cornerGlowTransparency=0.54,color=Color3.fromRGB(255,255,255)})
+                else
+                    HXStyleChamfer(cardContainer,{coreTransparency=0.62,glowTransparency=0.98,cornerCoreTransparency=0.58,cornerGlowTransparency=0.96,color=Color3.fromRGB(190,190,190)})
+                end
             end
         end)
         if FriendData and FriendData.currentSyncPartner then FriendData.currentSyncPartner=nil end
@@ -5577,23 +5659,36 @@ UpdateTabStyles = function()
             BackgroundColor3 = active and Color3.fromRGB(30,30,30) or Color3.fromRGB(0,0,0),
             BackgroundTransparency = 1
         }):Play()
-        if data.stroke then
-            TweenService:Create(data.stroke,TweenInfo.new(0.17),{
-                Color = Color3.fromRGB(255,255,255),
-                Transparency = 1,
-                Thickness = active and 2.25 or 1
-            }):Play()
+
+        -- Only the SELECTED category gets the bright neon cut-corner treatment.
+        if active then
+            HXStyleChamfer(data.btn,{coreTransparency=0.06,glowTransparency=0.72,color=Color3.fromRGB(250,250,250)})
+        else
+            HXStyleChamfer(data.btn,{coreTransparency=0.72,glowTransparency=1,color=Color3.fromRGB(180,180,180)})
         end
+
         if data.img then
-            local c = Color3.fromRGB(255,255,255)
             if data.img:IsA("ImageLabel") or data.img:IsA("ImageButton") then
-                TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=c}):Play()
+                local iconColor
+                local iconTransparency
+                if active then
+                    iconColor = Color3.fromRGB(255,255,255)
+                    iconTransparency = 0
+                elseif name == "recent" then
+                    -- Recent stays especially visible even when inactive.
+                    iconColor = Color3.fromRGB(255,255,255)
+                    iconTransparency = 0
+                else
+                    iconColor = Color3.fromRGB(190,190,190)
+                    iconTransparency = 0.12
+                end
+                TweenService:Create(data.img,TweenInfo.new(0.17),{ImageColor3=iconColor,ImageTransparency=iconTransparency}):Play()
             elseif data.img:IsA("TextLabel") then
-                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=c}):Play()
+                TweenService:Create(data.img,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(255,255,255) or Color3.fromRGB(190,190,190)}):Play()
             end
         end
         if data.label then
-            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=Color3.fromRGB(255,255,255)}):Play()
+            TweenService:Create(data.label,TweenInfo.new(0.17),{TextColor3=active and Color3.fromRGB(255,255,255) or Color3.fromRGB(170,170,170)}):Play()
         end
     end
 end
