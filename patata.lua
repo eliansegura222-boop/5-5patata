@@ -4166,7 +4166,483 @@ function CheckItemBPCRBPCR(p611)
     end
 end
 
-local MainWindow = loadstring(game:HttpGet('https://raw.githubusercontent.com/farehamhz/RedzLib/main/RedzLib'))():MakeWindow({
+--[[
+    LocalUI compatibility layer.
+    Replaces the external RedzLib dependency used by this script.
+    Implements only the API surface this script actually uses.
+]]
+local LocalUI = {}
+
+do
+    local Players = game:GetService('Players')
+    local UserInputService = game:GetService('UserInputService')
+    local TweenService = game:GetService('TweenService')
+    local CoreGui = game:GetService('CoreGui')
+
+    local function safeCallback(callback, ...)
+        if type(callback) == 'function' then
+            task.spawn(function(...)
+                local ok, err = pcall(callback, ...)
+                if not ok then
+                    warn('[LocalUI callback]', err)
+                end
+            end, ...)
+        end
+    end
+
+    local function makeCorner(parent, radius)
+        local corner = Instance.new('UICorner')
+        corner.CornerRadius = UDim.new(0, radius or 8)
+        corner.Parent = parent
+        return corner
+    end
+
+    local function makeStroke(parent, transparency)
+        local stroke = Instance.new('UIStroke')
+        stroke.Color = Color3.fromRGB(72, 72, 78)
+        stroke.Transparency = transparency or 0.25
+        stroke.Thickness = 1
+        stroke.Parent = parent
+        return stroke
+    end
+
+    local function label(parent, text, size, bold)
+        local obj = Instance.new('TextLabel')
+        obj.BackgroundTransparency = 1
+        obj.Text = tostring(text or '')
+        obj.TextColor3 = Color3.fromRGB(238, 238, 242)
+        obj.TextSize = size or 13
+        obj.Font = bold and Enum.Font.GothamSemibold or Enum.Font.Gotham
+        obj.TextXAlignment = Enum.TextXAlignment.Left
+        obj.TextWrapped = true
+        obj.Parent = parent
+        return obj
+    end
+
+    function LocalUI:MakeWindow(config)
+        config = config or {}
+
+        local old = CoreGui:FindFirstChild('StandaloneRedzCompat')
+        if old then
+            old:Destroy()
+        end
+
+        local screenGui = Instance.new('ScreenGui')
+        screenGui.Name = 'StandaloneRedzCompat'
+        screenGui.ResetOnSpawn = false
+        screenGui.IgnoreGuiInset = false
+        screenGui.DisplayOrder = 100000
+        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        screenGui.Parent = CoreGui
+
+        local main = Instance.new('Frame')
+        main.Name = 'MainWindow'
+        main.Size = UDim2.fromOffset(590, 405)
+        main.Position = UDim2.new(0.5, -295, 0.5, -202)
+        main.BackgroundColor3 = Color3.fromRGB(20, 20, 23)
+        main.BorderSizePixel = 0
+        main.ClipsDescendants = true
+        main.Parent = screenGui
+        makeCorner(main, 12)
+        makeStroke(main, 0.12)
+
+        local header = Instance.new('Frame')
+        header.Size = UDim2.new(1, 0, 0, 52)
+        header.BackgroundColor3 = Color3.fromRGB(25, 25, 29)
+        header.BorderSizePixel = 0
+        header.Parent = main
+
+        local title = label(header, config.Title or 'Hub', 17, true)
+        title.Position = UDim2.fromOffset(16, 8)
+        title.Size = UDim2.new(1, -60, 0, 20)
+
+        local subtitle = label(header, config.SubTitle or '', 11, false)
+        subtitle.TextColor3 = Color3.fromRGB(158, 158, 168)
+        subtitle.Position = UDim2.fromOffset(16, 28)
+        subtitle.Size = UDim2.new(1, -60, 0, 16)
+
+        local side = Instance.new('ScrollingFrame')
+        side.Name = 'Tabs'
+        side.Position = UDim2.fromOffset(0, 52)
+        side.Size = UDim2.new(0, 154, 1, -52)
+        side.BackgroundColor3 = Color3.fromRGB(17, 17, 20)
+        side.BorderSizePixel = 0
+        side.ScrollBarThickness = 3
+        side.ScrollBarImageColor3 = Color3.fromRGB(95, 95, 105)
+        side.CanvasSize = UDim2.new()
+        side.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        side.Parent = main
+
+        local sidePadding = Instance.new('UIPadding')
+        sidePadding.PaddingTop = UDim.new(0, 8)
+        sidePadding.PaddingLeft = UDim.new(0, 8)
+        sidePadding.PaddingRight = UDim.new(0, 8)
+        sidePadding.PaddingBottom = UDim.new(0, 8)
+        sidePadding.Parent = side
+
+        local sideLayout = Instance.new('UIListLayout')
+        sideLayout.Padding = UDim.new(0, 5)
+        sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        sideLayout.Parent = side
+
+        local contentHost = Instance.new('Frame')
+        contentHost.Name = 'ContentHost'
+        contentHost.Position = UDim2.fromOffset(154, 52)
+        contentHost.Size = UDim2.new(1, -154, 1, -52)
+        contentHost.BackgroundTransparency = 1
+        contentHost.Parent = main
+
+        -- Dragging
+        local dragging, dragStart, startPos
+        header.Active = true
+        header.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = main.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+
+        local window = {
+            _gui = screenGui,
+            _main = main,
+            _side = side,
+            _contentHost = contentHost,
+            _tabs = {},
+            _activeTab = nil,
+        }
+
+        function window:Minimize(minimized)
+            self._main.Visible = not minimized
+        end
+
+        function window:_selectTab(tab)
+            if self._activeTab == tab then
+                return
+            end
+            for _, other in ipairs(self._tabs) do
+                other._page.Visible = other == tab
+                other._button.BackgroundColor3 = other == tab and Color3.fromRGB(48, 48, 56) or Color3.fromRGB(27, 27, 32)
+                other._button.TextColor3 = other == tab and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(190, 190, 200)
+            end
+            self._activeTab = tab
+        end
+
+        function window:MakeTab(tabConfig)
+            tabConfig = tabConfig or {}
+            local tabName = tabConfig.Name or tabConfig.Title or tabConfig[1] or 'Tab'
+
+            local tabButton = Instance.new('TextButton')
+            tabButton.Name = tostring(tabName)
+            tabButton.Size = UDim2.new(1, 0, 0, 34)
+            tabButton.BackgroundColor3 = Color3.fromRGB(27, 27, 32)
+            tabButton.BorderSizePixel = 0
+            tabButton.AutoButtonColor = false
+            tabButton.Text = tostring(tabName)
+            tabButton.TextColor3 = Color3.fromRGB(190, 190, 200)
+            tabButton.TextSize = 12
+            tabButton.Font = Enum.Font.GothamMedium
+            tabButton.Parent = side
+            makeCorner(tabButton, 7)
+
+            local page = Instance.new('ScrollingFrame')
+            page.Name = tostring(tabName) .. '_Page'
+            page.Size = UDim2.fromScale(1, 1)
+            page.BackgroundTransparency = 1
+            page.BorderSizePixel = 0
+            page.ScrollBarThickness = 4
+            page.ScrollBarImageColor3 = Color3.fromRGB(95, 95, 105)
+            page.CanvasSize = UDim2.new()
+            page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            page.Visible = false
+            page.Parent = contentHost
+
+            local padding = Instance.new('UIPadding')
+            padding.PaddingTop = UDim.new(0, 10)
+            padding.PaddingBottom = UDim.new(0, 12)
+            padding.PaddingLeft = UDim.new(0, 12)
+            padding.PaddingRight = UDim.new(0, 12)
+            padding.Parent = page
+
+            local layout = Instance.new('UIListLayout')
+            layout.Padding = UDim.new(0, 7)
+            layout.SortOrder = Enum.SortOrder.LayoutOrder
+            layout.Parent = page
+
+            local tab = {_window = self, _page = page, _button = tabButton}
+
+            local function baseRow(height)
+                local row = Instance.new('Frame')
+                row.Size = UDim2.new(1, 0, 0, height or 42)
+                row.BackgroundColor3 = Color3.fromRGB(28, 28, 33)
+                row.BorderSizePixel = 0
+                row.Parent = page
+                makeCorner(row, 8)
+                makeStroke(row, 0.45)
+                return row
+            end
+
+            function tab:AddSection(sectionConfig)
+                local text = type(sectionConfig) == 'table' and (sectionConfig.Title or sectionConfig.Name or sectionConfig[1]) or sectionConfig
+                local section = label(page, text or '', 12, true)
+                section.TextColor3 = Color3.fromRGB(155, 155, 166)
+                section.Size = UDim2.new(1, 0, 0, 24)
+                section.TextYAlignment = Enum.TextYAlignment.Bottom
+                return section
+            end
+
+            function tab:AddParagraph(paragraphConfig)
+                paragraphConfig = paragraphConfig or {}
+                local row = baseRow(62)
+                local heading = label(row, paragraphConfig.Title or paragraphConfig.Name or '', 12, true)
+                heading.Position = UDim2.fromOffset(12, 8)
+                heading.Size = UDim2.new(1, -24, 0, 18)
+                local body = label(row, paragraphConfig.Content or '', 11, false)
+                body.TextColor3 = Color3.fromRGB(176, 176, 187)
+                body.Position = UDim2.fromOffset(12, 29)
+                body.Size = UDim2.new(1, -24, 0, 25)
+                local object = {}
+                function object:Set(text)
+                    body.Text = tostring(text or '')
+                    local lines = math.max(1, math.ceil(body.TextBounds.X / math.max(1, body.AbsoluteSize.X)))
+                    row.Size = UDim2.new(1, 0, 0, math.max(62, 44 + lines * 14))
+                end
+                return object
+            end
+
+            function tab:AddButton(buttonConfig)
+                buttonConfig = buttonConfig or {}
+                local row = baseRow(buttonConfig.Description and 54 or 42)
+                local button = Instance.new('TextButton')
+                button.BackgroundTransparency = 1
+                button.Size = UDim2.fromScale(1, 1)
+                button.Text = ''
+                button.Parent = row
+                local heading = label(row, buttonConfig.Title or buttonConfig.Name or 'Button', 12, true)
+                heading.Position = UDim2.fromOffset(12, buttonConfig.Description and 7 or 0)
+                heading.Size = UDim2.new(1, -24, 0, buttonConfig.Description and 20 or 42)
+                heading.TextYAlignment = Enum.TextYAlignment.Center
+                if buttonConfig.Description then
+                    local desc = label(row, buttonConfig.Description, 10, false)
+                    desc.TextColor3 = Color3.fromRGB(155, 155, 166)
+                    desc.Position = UDim2.fromOffset(12, 28)
+                    desc.Size = UDim2.new(1, -24, 0, 18)
+                end
+                button.MouseButton1Click:Connect(function()
+                    safeCallback(buttonConfig.Callback)
+                    TweenService:Create(row, TweenInfo.new(0.08), {BackgroundColor3 = Color3.fromRGB(43, 43, 50)}):Play()
+                    task.delay(0.09, function()
+                        if row.Parent then
+                            TweenService:Create(row, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(28, 28, 33)}):Play()
+                        end
+                    end)
+                end)
+                return {Button = button}
+            end
+
+            function tab:AddToggle(toggleConfig)
+                toggleConfig = toggleConfig or {}
+                local row = baseRow(toggleConfig.Description and 56 or 44)
+                local initial = toggleConfig.Default
+                if initial == nil then initial = toggleConfig.Value end
+                initial = initial == true
+
+                local heading = label(row, toggleConfig.Title or toggleConfig.Name or 'Toggle', 12, true)
+                heading.Position = UDim2.fromOffset(12, toggleConfig.Description and 7 or 0)
+                heading.Size = UDim2.new(1, -74, 0, toggleConfig.Description and 20 or 44)
+                heading.TextYAlignment = Enum.TextYAlignment.Center
+                if toggleConfig.Description then
+                    local desc = label(row, toggleConfig.Description, 10, false)
+                    desc.TextColor3 = Color3.fromRGB(155, 155, 166)
+                    desc.Position = UDim2.fromOffset(12, 28)
+                    desc.Size = UDim2.new(1, -80, 0, 18)
+                end
+
+                local track = Instance.new('Frame')
+                track.Size = UDim2.fromOffset(42, 22)
+                track.Position = UDim2.new(1, -54, 0.5, -11)
+                track.BorderSizePixel = 0
+                track.Parent = row
+                makeCorner(track, 11)
+                local knob = Instance.new('Frame')
+                knob.Size = UDim2.fromOffset(16, 16)
+                knob.BorderSizePixel = 0
+                knob.Parent = track
+                makeCorner(knob, 8)
+
+                local hit = Instance.new('TextButton')
+                hit.BackgroundTransparency = 1
+                hit.Size = UDim2.fromScale(1, 1)
+                hit.Text = ''
+                hit.Parent = row
+
+                local object = {Value = initial}
+                local function render(animated)
+                    local trackColor = object.Value and Color3.fromRGB(82, 130, 255) or Color3.fromRGB(60, 60, 68)
+                    local knobPos = object.Value and UDim2.fromOffset(23, 3) or UDim2.fromOffset(3, 3)
+                    if animated then
+                        TweenService:Create(track, TweenInfo.new(0.12), {BackgroundColor3 = trackColor}):Play()
+                        TweenService:Create(knob, TweenInfo.new(0.12), {Position = knobPos}):Play()
+                    else
+                        track.BackgroundColor3 = trackColor
+                        knob.Position = knobPos
+                    end
+                    knob.BackgroundColor3 = Color3.fromRGB(245, 245, 248)
+                end
+                function object:Set(value, callCallback)
+                    object.Value = value == true
+                    render(true)
+                    if callCallback ~= false then safeCallback(toggleConfig.Callback, object.Value) end
+                end
+                hit.MouseButton1Click:Connect(function()
+                    object:Set(not object.Value, true)
+                end)
+                render(false)
+                -- Redz-style defaults are expected to initialize state.
+                safeCallback(toggleConfig.Callback, object.Value)
+                return object
+            end
+
+            function tab:AddDropdown(dropdownConfig)
+                dropdownConfig = dropdownConfig or {}
+                local options = dropdownConfig.Options or {}
+                local selected = dropdownConfig.Default or dropdownConfig.Value or options[1]
+                local row = baseRow(dropdownConfig.Description and 62 or 50)
+                local heading = label(row, dropdownConfig.Title or dropdownConfig.Name or 'Dropdown', 11, true)
+                heading.Position = UDim2.fromOffset(12, 6)
+                heading.Size = UDim2.new(0.48, -10, 0, 18)
+                if dropdownConfig.Description then
+                    local desc = label(row, dropdownConfig.Description, 9, false)
+                    desc.TextColor3 = Color3.fromRGB(145, 145, 156)
+                    desc.Position = UDim2.fromOffset(12, 27)
+                    desc.Size = UDim2.new(0.48, -10, 0, 26)
+                end
+                local select = Instance.new('TextButton')
+                select.Size = UDim2.new(0.48, -12, 0, 30)
+                select.Position = UDim2.new(0.52, 0, 0.5, -15)
+                select.BackgroundColor3 = Color3.fromRGB(39, 39, 46)
+                select.BorderSizePixel = 0
+                select.TextColor3 = Color3.fromRGB(235, 235, 240)
+                select.TextSize = 10
+                select.Font = Enum.Font.GothamMedium
+                select.TextTruncate = Enum.TextTruncate.AtEnd
+                select.Text = tostring(selected or 'None')
+                select.Parent = row
+                makeCorner(select, 7)
+
+                local object = {Value = selected, Options = options}
+                function object:Set(value, callCallback)
+                    object.Value = value
+                    select.Text = tostring(value or 'None')
+                    if callCallback ~= false then safeCallback(dropdownConfig.Callback, value) end
+                end
+                select.MouseButton1Click:Connect(function()
+                    if #object.Options == 0 then return end
+                    local index = table.find(object.Options, object.Value) or 0
+                    index = index % #object.Options + 1
+                    object:Set(object.Options[index], true)
+                end)
+                if selected ~= nil then safeCallback(dropdownConfig.Callback, selected) end
+                return object
+            end
+
+            function tab:AddSlider(sliderConfig)
+                sliderConfig = sliderConfig or {}
+                local min = tonumber(sliderConfig.Min) or 0
+                local max = tonumber(sliderConfig.Max) or 100
+                local value = tonumber(sliderConfig.Default or sliderConfig.Value) or min
+                value = math.clamp(value, min, max)
+                local row = baseRow(58)
+                local heading = label(row, sliderConfig.Title or sliderConfig.Name or 'Slider', 11, true)
+                heading.Position = UDim2.fromOffset(12, 6)
+                heading.Size = UDim2.new(1, -80, 0, 18)
+                local valueLabel = label(row, tostring(value), 10, true)
+                valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+                valueLabel.Position = UDim2.new(1, -68, 0, 6)
+                valueLabel.Size = UDim2.fromOffset(56, 18)
+                local track = Instance.new('Frame')
+                track.Position = UDim2.fromOffset(12, 36)
+                track.Size = UDim2.new(1, -24, 0, 8)
+                track.BackgroundColor3 = Color3.fromRGB(52, 52, 60)
+                track.BorderSizePixel = 0
+                track.Parent = row
+                makeCorner(track, 4)
+                local fill = Instance.new('Frame')
+                fill.Size = UDim2.new((value - min) / math.max(1, max - min), 0, 1, 0)
+                fill.BackgroundColor3 = Color3.fromRGB(82, 130, 255)
+                fill.BorderSizePixel = 0
+                fill.Parent = track
+                makeCorner(fill, 4)
+
+                local object = {Value = value}
+                local sliding = false
+                local function setFromX(x, callCallback)
+                    local alpha = math.clamp((x - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X), 0, 1)
+                    local newValue = min + (max - min) * alpha
+                    if math.floor(min) == min and math.floor(max) == max then
+                        newValue = math.floor(newValue + 0.5)
+                    end
+                    object.Value = newValue
+                    fill.Size = UDim2.new(alpha, 0, 1, 0)
+                    valueLabel.Text = tostring(newValue)
+                    if callCallback then safeCallback(sliderConfig.Callback, newValue) end
+                end
+                function object:Set(newValue, callCallback)
+                    newValue = math.clamp(tonumber(newValue) or min, min, max)
+                    object.Value = newValue
+                    fill.Size = UDim2.new((newValue - min) / math.max(1, max - min), 0, 1, 0)
+                    valueLabel.Text = tostring(newValue)
+                    if callCallback ~= false then safeCallback(sliderConfig.Callback, newValue) end
+                end
+                track.Active = true
+                track.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        sliding = true
+                        setFromX(input.Position.X, true)
+                    end
+                end)
+                UserInputService.InputChanged:Connect(function(input)
+                    if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        setFromX(input.Position.X, true)
+                    end
+                end)
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        sliding = false
+                    end
+                end)
+                safeCallback(sliderConfig.Callback, value)
+                return object
+            end
+
+            tabButton.MouseButton1Click:Connect(function()
+                self:_selectTab(tab)
+            end)
+
+            table.insert(self._tabs, tab)
+            if not self._activeTab then
+                self:_selectTab(tab)
+            end
+            return tab
+        end
+
+        return window
+    end
+end
+
+
+local MainWindow = LocalUI:MakeWindow({
     Title = 'redz Hub',
     SubTitle = 'by real_redz',
     SaveFolder = 'Redz | redz lib v5.lua',
@@ -10849,7 +11325,147 @@ SettingsTab:AddParagraph({
     Title = 'Unban Fast Attack - M1 Fruit',
     Content = 'On: ✅',
 })
-loadstring(game:HttpGet('https://raw.githubusercontent.com/AnhDangNhoEm/TuanAnhIOS/refs/heads/main/koby'))()
+--[[
+    Local fast-attack implementation.
+    Replaces the external TuanAnhIOS/koby + FastMax dependency chain.
+    It is intentionally self-contained and uses the same in-game Net remotes
+    the former dependency targeted, with safe fallbacks when a remote/module
+    is unavailable after a game update.
+]]
+do
+    local Players = game:GetService('Players')
+    local ReplicatedStorage = game:GetService('ReplicatedStorage')
+    local RunService = game:GetService('RunService')
+    local VirtualInputManager = game:GetService('VirtualInputManager')
+    local Workspace = game:GetService('Workspace')
+    local LocalPlayer = Players.LocalPlayer
+
+    local FastAttack = {
+        Enabled = true,
+        Distance = 65,
+        Cooldown = 0.05,
+        LastAttack = 0,
+        Combo = 0,
+        LastCombo = 0,
+    }
+
+    local function alive(model)
+        local humanoid = model and model:FindFirstChildOfClass('Humanoid')
+        return humanoid and humanoid.Health > 0
+    end
+
+    local function getTargets(character, distance)
+        local root = character and character:FindFirstChild('HumanoidRootPart')
+        if not root then return nil, {} end
+
+        local primary
+        local hits = {}
+        local folders = {
+            Workspace:FindFirstChild('Enemies'),
+            Workspace:FindFirstChild('Characters'),
+        }
+
+        for _, folder in ipairs(folders) do
+            if folder then
+                for _, model in ipairs(folder:GetChildren()) do
+                    if model ~= character and model.Name ~= LocalPlayer.Name and alive(model) then
+                        local part = model:FindFirstChild('HumanoidRootPart') or model:FindFirstChild('Head')
+                        if part and (part.Position - root.Position).Magnitude <= distance then
+                            if not primary then
+                                primary = model:FindFirstChild('Head') or part
+                            end
+                            table.insert(hits, {model, part})
+                        end
+                    end
+                end
+            end
+        end
+        return primary, hits
+    end
+
+    local function getNetRemotes()
+        local modules = ReplicatedStorage:FindFirstChild('Modules')
+        local net = modules and modules:FindFirstChild('Net')
+        if not net then return nil end
+        return {
+            RegisterAttack = net:FindFirstChild('RE/RegisterAttack'),
+            RegisterHit = net:FindFirstChild('RE/RegisterHit'),
+            ShootGunEvent = net:FindFirstChild('RE/ShootGunEvent'),
+        }
+    end
+
+    local function nextCombo()
+        local now = tick()
+        if now - FastAttack.LastCombo > 0.3 then
+            FastAttack.Combo = 0
+        end
+        FastAttack.Combo = FastAttack.Combo >= 4 and 1 or FastAttack.Combo + 1
+        FastAttack.LastCombo = now
+        return FastAttack.Combo
+    end
+
+    local function attackOnce()
+        if not FastAttack.Enabled then return end
+        local now = tick()
+        if now - FastAttack.LastAttack < FastAttack.Cooldown then return end
+
+        local character = LocalPlayer.Character
+        if not alive(character) then return end
+        local humanoid = character:FindFirstChildOfClass('Humanoid')
+        local tool = character:FindFirstChildOfClass('Tool')
+        if not humanoid or not tool then return end
+
+        local tooltip = tool.ToolTip
+        if tooltip ~= 'Melee' and tooltip ~= 'Sword' and tooltip ~= 'Blox Fruit' and tooltip ~= 'Gun' then
+            return
+        end
+        local stun = character:FindFirstChild('Stun')
+        local busy = character:FindFirstChild('Busy')
+        if (stun and stun.Value > 0) or (busy and busy.Value) then return end
+        if humanoid.Sit and tooltip ~= 'Gun' then return end
+
+        local primary, hits = getTargets(character, tooltip == 'Gun' and 120 or FastAttack.Distance)
+        if not primary or #hits == 0 then return end
+
+        FastAttack.LastAttack = now
+        local combo = nextCombo()
+
+        if tooltip == 'Blox Fruit' and tool:FindFirstChild('LeftClickRemote') then
+            local firstPart = hits[1] and hits[1][2]
+            if firstPart then
+                local direction = (firstPart.Position - character:GetPivot().Position).Unit
+                pcall(function()
+                    tool.LeftClickRemote:FireServer(direction, combo)
+                end)
+            end
+            return
+        end
+
+        if tooltip == 'Gun' then
+            -- Generic gun fallback that does not depend on the old remote validator implementation.
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                task.wait(0.02)
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            end)
+            return
+        end
+
+        local remotes = getNetRemotes()
+        if not remotes or not remotes.RegisterAttack or not remotes.RegisterHit then return end
+        pcall(function()
+            remotes.RegisterAttack:FireServer(0)
+            remotes.RegisterHit:FireServer(primary, hits)
+        end)
+    end
+
+    local environment = (getgenv and getgenv()) or _G
+    environment.StandaloneFastAttack = FastAttack
+    RunService.Stepped:Connect(function()
+        pcall(attackOnce)
+    end)
+end
+
 SettingsTab:AddToggle({
     Name = 'Bring Mod',
     Description = 'Tự Động Gom Quái',
