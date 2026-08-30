@@ -1,5 +1,5 @@
 --[[
-	HEXA | +1 Speed Monkey Escape Hub | v39 Mobile + Teleport Fix | Keyless
+	HEXA | +1 Speed Monkey Escape Hub | v35 Language Before PlaceId | Keyless
 
 	Features:
 	  - Auto Farm Wins (touch replication, no course running)
@@ -31,19 +31,6 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 -- ================= LANGUAGE -> PLACE ID PREFLIGHT =================
 -- Language is resolved before loading any +1 Speed Monkey Escape-only objects.
 local TARGET_PLACE_ID = 114697347887839
-
--- ================================================================
--- TAMAÑOS MÓVIL / MOBILE SIZES — EDITA SOLO ESTOS NÚMEROS
--- ================================================================
-local MOBILE_SIZE = {
-	MAIN_WIDTH = 520,       -- ancho del panel principal en celular horizontal
-	MAIN_HEIGHT = 385,      -- alto del panel principal
-	LANG_WIDTH = 340,       -- ancho del selector de idioma
-	LANG_HEIGHT = 330,      -- alto del selector de idioma
-	WRONG_WIDTH = 285,      -- ancho del panel "juego incorrecto"
-	WRONG_HEIGHT = 215,     -- alto del panel "juego incorrecto"
-}
-
 local PREFLIGHT_LANGUAGE_FILE = "hexa_language_pref.json"
 local TweenServicePreflight = game:GetService("TweenService")
 
@@ -161,13 +148,9 @@ local function showPreflightLanguagePicker()
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
-	local compact = InputService.TouchEnabled or vp.X < 620
-	local w = compact
-		and math.max(250, math.min(MOBILE_SIZE.LANG_WIDTH, vp.X - 18))
-		or math.min(430, math.max(290, vp.X - 28))
-	local h = compact
-		and math.max(280, math.min(MOBILE_SIZE.LANG_HEIGHT, vp.Y - 32))
-		or math.min(320, math.max(280, vp.Y - 60))
+	local compact = vp.X < 620
+	local w = math.min(compact and 360 or 430, math.max(290, vp.X - 28))
+	local h = math.min(compact and 340 or 320, math.max(280, vp.Y - 60))
 
 	local frame = Instance.new("Frame")
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -177,7 +160,7 @@ local function showPreflightLanguagePicker()
 	frame.BorderSizePixel = 0
 	frame.ClipsDescendants = true
 	frame.Parent = dim
-	preflightCorner(frame, compact and 16 or 22)
+	preflightCorner(frame, 22)
 	preflightStroke(frame, PREFLIGHT_THEME.BrownNeon, 0.20, 1.4)
 
 	local scale = Instance.new("UIScale")
@@ -371,13 +354,9 @@ local function showWrongGame(languageCode)
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
-	local compact = InputService.TouchEnabled or vp.X < 620
-	local w = compact
-		and math.max(230, math.min(MOBILE_SIZE.WRONG_WIDTH, vp.X - 18))
-		or math.min(420, math.max(290, vp.X - 28))
-	local h = compact
-		and math.max(190, math.min(MOBILE_SIZE.WRONG_HEIGHT, vp.Y - 34))
-		or 265
+	local compact = vp.X < 620
+	local w = math.min(compact and 310 or 420, math.max(270, vp.X - 34))
+	local h = compact and 220 or 265
 
 	local frame = Instance.new("Frame")
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -387,66 +366,69 @@ local function showWrongGame(languageCode)
 	frame.BorderSizePixel = 0
 	frame.ClipsDescendants = true
 	frame.Parent = dim
-	preflightCorner(frame, compact and 16 or 22)
+	preflightCorner(frame, 22)
 	preflightStroke(frame, PREFLIGHT_THEME.BrownNeon, 0.20, 1.4)
 
-	local closeGuard = Instance.new("TextButton")
-	closeGuard.Name = "Close"
-	closeGuard.AnchorPoint = Vector2.new(1, 0)
-	closeGuard.Position = UDim2.new(1, compact and -8 or -10, 0, compact and 7 or 9)
-	closeGuard.Size = UDim2.fromOffset(compact and 26 or 30, compact and 26 or 30)
-	closeGuard.BackgroundColor3 = PREFLIGHT_THEME.Card
-	closeGuard.BorderSizePixel = 0
-	closeGuard.AutoButtonColor = false
-	closeGuard.Font = Enum.Font.GothamBold
-	closeGuard.Text = "×"
-	closeGuard.TextColor3 = PREFLIGHT_THEME.White
-	closeGuard.TextSize = compact and 16 or 19
-	closeGuard.ZIndex = 20
-	closeGuard.Parent = frame
-	preflightCorner(closeGuard, compact and 8 or 9)
-	preflightStroke(closeGuard, PREFLIGHT_THEME.Line, 0.38, 1)
-	closeGuard.Activated:Connect(function()
-		if gui and gui.Parent then gui:Destroy() end
-	end)
-
 	local scale = Instance.new("UIScale")
-	scale.Scale = 0.82
+	scale.Scale = compact and 0.78 or 0.82
 	scale.Parent = frame
+
+	-- Close button for the wrong-game panel (works on touch and mouse).
+	local closeWrongGame = Instance.new("TextButton")
+	closeWrongGame.Name = "Close"
+	closeWrongGame.AnchorPoint = Vector2.new(1, 0)
+	closeWrongGame.Position = UDim2.new(1, -12, 0, 12)
+	closeWrongGame.Size = UDim2.fromOffset(compact and 30 or 34, compact and 30 or 34)
+	closeWrongGame.BackgroundColor3 = PREFLIGHT_THEME.Panel2
+	closeWrongGame.BorderSizePixel = 0
+	closeWrongGame.AutoButtonColor = false
+	closeWrongGame.Text = "×"
+	closeWrongGame.TextColor3 = PREFLIGHT_THEME.White
+	closeWrongGame.TextSize = compact and 17 or 19
+	closeWrongGame.Font = Enum.Font.GothamBold
+	closeWrongGame.ZIndex = 10
+	closeWrongGame.Parent = frame
+	preflightCorner(closeWrongGame, 10)
+	preflightStroke(closeWrongGame, PREFLIGHT_THEME.Line, 0.48, 0.8)
+	closeWrongGame.Activated:Connect(function()
+		if gui and gui.Parent then
+			gui:Destroy()
+		end
+	end)
 
 	local logo = Instance.new("ImageLabel")
 	logo.BackgroundTransparency = 1
 	logo.Image = "rbxassetid://80552458381492"
 	logo.ScaleType = Enum.ScaleType.Fit
-	logo.Size = UDim2.fromOffset(compact and 34 or 58, compact and 34 or 58)
-	logo.Position = UDim2.fromOffset(compact and 12 or 18, compact and 10 or 14)
+	logo.Size = UDim2.fromOffset(compact and 50 or 58, compact and 50 or 58)
+	logo.Position = UDim2.fromOffset(18, 14)
 	logo.Parent = frame
 
 	local brand = Instance.new("TextLabel")
 	brand.BackgroundTransparency = 1
-	brand.Position = UDim2.fromOffset(compact and 52 or 86, compact and 7 or 14)
-	brand.Size = UDim2.new(1, -(compact and 86 or 108), 0, compact and 22 or 30)
+	brand.Position = UDim2.fromOffset(compact and 76 or 86, 14)
+	brand.Size = UDim2.new(1, -(compact and 96 or 108), 0, 30)
 	brand.Font = Enum.Font.GothamBold
 	brand.Text = "HEXA"
 	brand.TextColor3 = PREFLIGHT_THEME.White
-	brand.TextSize = compact and 16 or 24
+	brand.TextSize = compact and 21 or 24
 	brand.TextXAlignment = Enum.TextXAlignment.Left
 	brand.Parent = frame
 
 	local gameLabel = Instance.new("TextLabel")
 	gameLabel.BackgroundTransparency = 1
-	gameLabel.Position = UDim2.fromOffset(compact and 52 or 86, compact and 27 or 42)
-	gameLabel.Size = UDim2.new(1, -(compact and 86 or 108), 0, compact and 16 or 22)
+	gameLabel.Position = UDim2.fromOffset(compact and 76 or 86, 42)
+	gameLabel.Size = UDim2.new(1, -(compact and 96 or 108), 0, 22)
 	gameLabel.Font = Enum.Font.GothamMedium
 	gameLabel.Text = "+1 SPEED MONKEY ESCAPE"
 	gameLabel.TextColor3 = PREFLIGHT_THEME.BrownNeon
-	gameLabel.TextSize = compact and 8 or 12
+	gameLabel.TextSize = compact and 11 or 12
 	gameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	gameLabel.Parent = frame
 
 	local divider = Instance.new("Frame")
-	divider.Position = UDim2.fromOffset(compact and 12 or 18, compact and 51 or 80)
-	divider.Size = UDim2.new(1, compact and -24 or -36, 0, 1)
+	divider.Position = UDim2.fromOffset(18, 80)
+	divider.Size = UDim2.new(1, -36, 0, 1)
 	divider.BackgroundColor3 = PREFLIGHT_THEME.Line
 	divider.BackgroundTransparency = 0.42
 	divider.BorderSizePixel = 0
@@ -454,23 +436,23 @@ local function showWrongGame(languageCode)
 
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(compact and 14 or 22, compact and 59 or 96)
-	title.Size = UDim2.new(1, compact and -28 or -44, 0, compact and 20 or 28)
+	title.Position = UDim2.fromOffset(22, 96)
+	title.Size = UDim2.new(1, -44, 0, 28)
 	title.Font = Enum.Font.GothamBold
 	title.Text = titleText
 	title.TextColor3 = PREFLIGHT_THEME.White
-	title.TextSize = compact and 13 or 20
+	title.TextSize = compact and 18 or 20
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = frame
 
 	local desc = Instance.new("TextLabel")
 	desc.BackgroundTransparency = 1
-	desc.Position = UDim2.fromOffset(compact and 14 or 22, compact and 82 or 126)
-	desc.Size = UDim2.new(1, compact and -28 or -44, 0, compact and 40 or 48)
+	desc.Position = UDim2.fromOffset(22, 126)
+	desc.Size = UDim2.new(1, -44, 0, 48)
 	desc.Font = Enum.Font.Gotham
 	desc.Text = descText
 	desc.TextColor3 = PREFLIGHT_THEME.Muted
-	desc.TextSize = compact and 8 or 13
+	desc.TextSize = compact and 12 or 13
 	desc.TextWrapped = true
 	desc.TextXAlignment = Enum.TextXAlignment.Left
 	desc.TextYAlignment = Enum.TextYAlignment.Top
@@ -479,17 +461,14 @@ local function showWrongGame(languageCode)
 	local go = Instance.new("TextButton")
 	go.AutoButtonColor = false
 	go.AnchorPoint = Vector2.new(0.5, 1)
-	go.Position = UDim2.new(0.5, 0, 1, compact and -10 or -18)
-	go.Size = UDim2.new(1, compact and -28 or -44, 0, compact and 34 or 46)
+	go.Position = UDim2.new(0.5, 0, 1, -18)
+	go.Size = UDim2.new(1, -44, 0, 46)
 	go.BackgroundColor3 = PREFLIGHT_THEME.Brown2
 	go.BorderSizePixel = 0
 	go.Font = Enum.Font.GothamBold
 	go.Text = goText
 	go.TextColor3 = PREFLIGHT_THEME.White
-	go.TextSize = compact and 10 or 14
-	go.Active = true
-	go.Selectable = true
-	go.ZIndex = 10
+	go.TextSize = 14
 	go.Parent = frame
 	preflightCorner(go, 13)
 	preflightStroke(go, PREFLIGHT_THEME.BrownNeon, 0.16, 1)
@@ -500,150 +479,37 @@ local function showWrongGame(languageCode)
 	go.MouseLeave:Connect(function()
 		preflightTween(go, 0.14, { BackgroundColor3 = PREFLIGHT_THEME.Brown2 })
 	end)
-	-- ================================================================
-	-- ROBUST "GO TO GAME" FLOW
-	-- Roblox can reject cross-experience client teleports depending on the
-	-- current experience. We first try TeleportService, then hand off to the
-	-- official Roblox deep-link/web-start URL if the client blocks it.
-	-- ================================================================
 	local teleportBusy = false
-	local teleportFailedConn = nil
-	local teleportToken = 0
-
-	local function setGoText(text)
-		if go and go.Parent then
-			go.Text = text
-		end
-	end
-
-	local function unlockGo(message)
-		if not go or not go.Parent then return end
-		teleportBusy = false
-		go.Active = true
-		go.Selectable = true
-		setGoText(message or goText)
-	end
-
-	local function getExecutorEnv()
-		local ok, env = pcall(function()
-			if getgenv then return getgenv() end
-			return _G
-		end)
-		return ok and type(env) == "table" and env or _G
-	end
-
-	local function openOfficialGameLink()
-		local webUrl = "https://www.roblox.com/games/start?placeId=" .. tostring(TARGET_PLACE_ID)
-		local directUrl = "roblox://placeId=" .. tostring(TARGET_PLACE_ID)
-		local env = getExecutorEnv()
-
-		-- Executor-specific URL openers, when available on mobile.
-		for _, functionName in ipairs({ "openurl", "open_url", "openbrowser", "open_browser" }) do
-			local opener = env and env[functionName]
-			if type(opener) == "function" then
-				local ok = pcall(opener, directUrl)
-				if ok then return true end
-				ok = pcall(opener, webUrl)
-				if ok then return true end
-			end
-		end
-
-		-- Elevated executor environments sometimes expose an internal browser
-		-- service even though normal LocalScripts cannot use it.
-		local internalBrowserOk = pcall(function()
-			local browserService = game:GetService("BrowserService")
-			browserService:OpenBrowserWindow(webUrl)
-		end)
-		if internalBrowserOk then return true end
-
-		-- Compatibility with environments that expose a hidden GuiService opener.
-		local guiBrowserOk = pcall(function()
-			GuiService:OpenBrowserWindow(webUrl)
-		end)
-		if guiBrowserOk then return true end
-
-		-- Final fallback: copy the official start URL so the user is never left
-		-- with a dead JOINING state.
-		if setclipboard then
-			local copied = pcall(setclipboard, webUrl)
-			if copied then
-				setGoText(english and "LINK COPIED" or "ENLACE COPIADO")
-				return false
-			end
-		end
-		return false
-	end
-
-	local function tryTeleportService()
-		-- Try modern API first. Roblox normally restricts TeleportAsync to the
-		-- server, but some executor environments provide enough identity for it.
-		local okAsync = pcall(function()
-			TeleportService:TeleportAsync(TARGET_PLACE_ID, { LocalPlayer })
-		end)
-		if okAsync then return true end
-
-		-- Legacy client API is still the only built-in client path available.
-		local okLegacy = pcall(function()
-			TeleportService:Teleport(TARGET_PLACE_ID, LocalPlayer)
-		end)
-		if okLegacy then return true end
-
-		-- Compatibility with clients/executors that expect only PlaceId.
-		return pcall(function()
-			TeleportService:Teleport(TARGET_PLACE_ID)
-		end)
-	end
-
-	local function goToTargetGame()
+	local function goToCorrectGame()
 		if teleportBusy or not go or not go.Parent then return end
 		teleportBusy = true
 		go.Active = false
-		go.Selectable = false
-		setGoText(enteringText)
-		teleportToken += 1
-		local myToken = teleportToken
-		local fallbackStarted = false
+		go.Text = enteringText
 
-		local function startExternalFallback()
-			if fallbackStarted or myToken ~= teleportToken or game.PlaceId == TARGET_PLACE_ID then return end
-			fallbackStarted = true
-			setGoText(english and "OPENING ROBLOX..." or "ABRIENDO ROBLOX...")
-			local opened = openOfficialGameLink()
-			local unlockDelay = opened and 8.0 or 1.6
-			task.delay(unlockDelay, function()
-				if myToken == teleportToken and game.PlaceId ~= TARGET_PLACE_ID then
-					unlockGo(english and "TRY AGAIN" or "REINTENTAR")
-				end
+		-- Teleport() is the most compatible client path, including mobile executors.
+		-- If the first request is silently ignored, retry once with TeleportAsync.
+		task.spawn(function()
+			pcall(function()
+				TeleportService:Teleport(TARGET_PLACE_ID, LocalPlayer)
 			end)
-		end
 
-		if teleportFailedConn then
-			teleportFailedConn:Disconnect()
-			teleportFailedConn = nil
-		end
-		teleportFailedConn = TeleportService.TeleportInitFailed:Connect(function(player, _, _, placeId)
-			if player == LocalPlayer and tonumber(placeId) == TARGET_PLACE_ID and myToken == teleportToken then
-				startExternalFallback()
+			task.wait(1.35)
+			if game.PlaceId ~= TARGET_PLACE_ID and gui and gui.Parent then
+				pcall(function()
+					TeleportService:TeleportAsync(TARGET_PLACE_ID, { LocalPlayer })
+				end)
 			end
-		end)
 
-		local started = tryTeleportService()
-		if not started then
-			startExternalFallback()
-			return
-		end
-
-		-- A client teleport can return without throwing while Roblox blocks the
-		-- cross-experience request. If we are still in the same game after a
-		-- short grace period, use Roblox's official game-start deep link.
-		task.delay(2.4, function()
-			if myToken == teleportToken and teleportBusy and game.PlaceId ~= TARGET_PLACE_ID then
-				startExternalFallback()
+			task.wait(2.15)
+			if game.PlaceId ~= TARGET_PLACE_ID and go and go.Parent then
+				teleportBusy = false
+				go.Active = true
+				go.Text = goText
 			end
 		end)
 	end
 
-	go.Activated:Connect(goToTargetGame)
+	go.Activated:Connect(goToCorrectGame)
 
 	preflightTween(scale, 0.38, { Scale = 1 }, Enum.EasingStyle.Back)
 	preflightTween(dim, 0.28, { BackgroundTransparency = 0.12 })
@@ -2389,16 +2255,11 @@ local function buildUI(T, languageCode)
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(1000, 700)
-	local compact = InputService.TouchEnabled or vp.X < 760
-	-- Mobile size comes from MOBILE_SIZE at the top of the script.
-	local windowW = compact
-		and math.floor(math.max(280, math.min(MOBILE_SIZE.MAIN_WIDTH, vp.X - 12)))
-		or math.floor(math.min(700, math.max(590, vp.X - 170)))
-	local windowH = compact
-		and math.floor(math.max(310, math.min(MOBILE_SIZE.MAIN_HEIGHT, vp.Y - 26)))
-		or math.floor(math.min(470, math.max(400, vp.Y - 130)))
-	local sideW = compact and math.max(82, math.floor(windowW * 0.30)) or 168
-	local headerH = compact and 52 or 70
+	local compact = vp.X < 760
+	local windowW = compact and math.floor(math.min(305, math.max(270, vp.X - 34))) or math.floor(math.min(700, math.max(590, vp.X - 170)))
+	local windowH = compact and math.floor(math.min(445, math.max(360, vp.Y - 76))) or math.floor(math.min(470, math.max(400, vp.Y - 130)))
+	local sideW = compact and math.max(104, math.floor(windowW * 0.31)) or 168
+	local headerH = compact and 64 or 70
 
 	local shadow = Instance.new("Frame")
 	shadow.Name = "Shadow"
@@ -3297,7 +3158,7 @@ local function buildUI(T, languageCode)
 	mini.Name = "MinimizedPanel"
 	mini.AnchorPoint = Vector2.new(1, 0.5)
 	mini.Position = UDim2.new(1, -18, 0.5, 0)
-	mini.Size = UDim2.fromOffset(compact and 184 or 250, compact and 48 or 60)
+	mini.Size = UDim2.fromOffset(compact and 214 or 250, compact and 54 or 60)
 	mini.BackgroundColor3 = THEME.Panel
 	mini.BorderSizePixel = 0
 	mini.Visible = false
