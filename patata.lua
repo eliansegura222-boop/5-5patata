@@ -36,7 +36,7 @@ local TARGET_PLACE_ID = 114697347887839
 -- TAMAÑOS MÓVIL / MOBILE SIZES — EDITA SOLO ESTOS NÚMEROS
 -- ================================================================
 local MOBILE_SIZE = {
-	MAIN_WIDTH = 350,       -- ancho del panel principal
+	MAIN_WIDTH = 520,       -- ancho del panel principal en celular horizontal
 	MAIN_HEIGHT = 385,      -- alto del panel principal
 	LANG_WIDTH = 340,       -- ancho del selector de idioma
 	LANG_HEIGHT = 330,      -- alto del selector de idioma
@@ -2392,7 +2392,7 @@ local function buildUI(T, languageCode)
 	local compact = InputService.TouchEnabled or vp.X < 760
 	-- Mobile size comes from MOBILE_SIZE at the top of the script.
 	local windowW = compact
-		and math.floor(math.max(280, math.min(MOBILE_SIZE.MAIN_WIDTH, vp.X - 16)))
+		and math.floor(math.max(280, math.min(MOBILE_SIZE.MAIN_WIDTH, vp.X - 12)))
 		or math.floor(math.min(700, math.max(590, vp.X - 170)))
 	local windowH = compact
 		and math.floor(math.max(310, math.min(MOBILE_SIZE.MAIN_HEIGHT, vp.Y - 26)))
