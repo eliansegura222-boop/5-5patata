@@ -1,5 +1,5 @@
 --[[
-	HEXA | +1 Speed Monkey Escape Hub | v33 Player Movement + UI Animations | Keyless
+	HEXA | +1 Speed Monkey Escape Hub | v39 Mobile + Teleport Fix | Keyless
 
 	Features:
 	  - Auto Farm Wins (touch replication, no course running)
@@ -27,6 +27,632 @@ local GuiService = game:GetService("GuiService")
 local VirtualUser = game:GetService("VirtualUser")
 local InputService = game:GetService("UserInputService")
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ================= LANGUAGE -> PLACE ID PREFLIGHT =================
+-- Language is resolved before loading any +1 Speed Monkey Escape-only objects.
+local TARGET_PLACE_ID = 114697347887839
+
+-- ================================================================
+-- TAMAÑOS MÓVIL / MOBILE SIZES — EDITA SOLO ESTOS NÚMEROS
+-- ================================================================
+local MOBILE_SIZE = {
+	MAIN_WIDTH = 350,       -- ancho del panel principal
+	MAIN_HEIGHT = 385,      -- alto del panel principal
+	LANG_WIDTH = 340,       -- ancho del selector de idioma
+	LANG_HEIGHT = 330,      -- alto del selector de idioma
+	WRONG_WIDTH = 285,      -- ancho del panel "juego incorrecto"
+	WRONG_HEIGHT = 215,     -- alto del panel "juego incorrecto"
+}
+
+local PREFLIGHT_LANGUAGE_FILE = "hexa_language_pref.json"
+local TweenServicePreflight = game:GetService("TweenService")
+
+local PREFLIGHT_THEME = {
+	Black = Color3.fromRGB(2, 2, 2),
+	Panel = Color3.fromRGB(12, 7, 4),
+	Panel2 = Color3.fromRGB(24, 11, 5),
+	Card = Color3.fromRGB(36, 16, 7),
+	CardHover = Color3.fromRGB(48, 21, 8),
+	Brown = Color3.fromRGB(112, 48, 14),
+	Brown2 = Color3.fromRGB(194, 83, 20),
+	BrownNeon = Color3.fromRGB(255, 118, 20),
+	White = Color3.fromRGB(255, 252, 247),
+	Muted = Color3.fromRGB(199, 180, 163),
+	Line = Color3.fromRGB(122, 53, 18),
+}
+
+local function preflightParent(gui)
+	local ok = pcall(function()
+		gui.Parent = (gethui and gethui()) or game.CoreGui
+	end)
+	if not ok then
+		gui.Parent = game.CoreGui
+	end
+end
+
+local function preflightDestroy(name)
+	pcall(function()
+		local parent = (gethui and gethui()) or game.CoreGui
+		local old = parent:FindFirstChild(name)
+		if old then old:Destroy() end
+	end)
+end
+
+local function preflightCorner(parent, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius)
+	c.Parent = parent
+	return c
+end
+
+local function preflightStroke(parent, color, transparency, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color = color
+	s.Transparency = transparency or 0
+	s.Thickness = thickness or 1
+	s.Parent = parent
+	return s
+end
+
+local function preflightTween(obj, duration, props, style)
+	local tw = TweenServicePreflight:Create(obj, TweenInfo.new(duration, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
+	tw:Play()
+	return tw
+end
+
+local function preflightLoadLanguage()
+	if not (readfile and isfile and isfile(PREFLIGHT_LANGUAGE_FILE)) then return nil end
+	local ok, content = pcall(readfile, PREFLIGHT_LANGUAGE_FILE)
+	if not ok or not content or content == "" then return nil end
+	local okData, data = pcall(function() return HttpService:JSONDecode(content) end)
+	if okData and type(data) == "table" and data.remember and (data.language == "es" or data.language == "en") then
+		return data.language
+	end
+	return nil
+end
+
+local function preflightSaveLanguage(code, remember)
+	if remember then
+		if writefile then
+			pcall(function()
+				writefile(PREFLIGHT_LANGUAGE_FILE, HttpService:JSONEncode({ remember = true, language = code }))
+			end)
+		end
+	elseif delfile and isfile and isfile(PREFLIGHT_LANGUAGE_FILE) then
+		pcall(delfile, PREFLIGHT_LANGUAGE_FILE)
+	end
+end
+
+local function showPreflightLanguagePicker()
+	local remembered = preflightLoadLanguage()
+	if remembered then return remembered end
+
+	preflightDestroy("HexaLanguagePremium")
+	local selectedEvent = Instance.new("BindableEvent")
+	local selectedLanguage = nil
+	local rememberValue = false
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "HexaLanguagePremium"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.DisplayOrder = 2147483647
+	preflightParent(gui)
+
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = PREFLIGHT_THEME.Black
+	dim.BackgroundTransparency = 0.16
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	for i = 1, 3 do
+		local band = Instance.new("Frame")
+		band.AnchorPoint = Vector2.new(0.5, 0.5)
+		band.Position = UDim2.fromScale(0.5, 0.25 + (i - 1) * 0.25)
+		band.Size = UDim2.new(1.35, 0, 0, 1)
+		band.Rotation = -7
+		band.BackgroundColor3 = PREFLIGHT_THEME.Brown
+		band.BackgroundTransparency = 0.76 + (i - 1) * 0.06
+		band.BorderSizePixel = 0
+		band.Parent = dim
+	end
+
+	local camera = workspace.CurrentCamera
+	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
+	local compact = InputService.TouchEnabled or vp.X < 620
+	local w = compact
+		and math.max(250, math.min(MOBILE_SIZE.LANG_WIDTH, vp.X - 18))
+		or math.min(430, math.max(290, vp.X - 28))
+	local h = compact
+		and math.max(280, math.min(MOBILE_SIZE.LANG_HEIGHT, vp.Y - 32))
+		or math.min(320, math.max(280, vp.Y - 60))
+
+	local frame = Instance.new("Frame")
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(w, h)
+	frame.BackgroundColor3 = PREFLIGHT_THEME.Panel
+	frame.BorderSizePixel = 0
+	frame.ClipsDescendants = true
+	frame.Parent = dim
+	preflightCorner(frame, compact and 16 or 22)
+	preflightStroke(frame, PREFLIGHT_THEME.BrownNeon, 0.20, 1.4)
+
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.88
+	scale.Parent = frame
+
+	local brand = Instance.new("TextLabel")
+	brand.BackgroundTransparency = 1
+	brand.Position = UDim2.fromOffset(24, 18)
+	brand.Size = UDim2.new(1, -48, 0, 34)
+	brand.Font = Enum.Font.GothamBold
+	brand.Text = "HEXA"
+	brand.TextColor3 = PREFLIGHT_THEME.White
+	brand.TextSize = compact and 24 or 28
+	brand.TextXAlignment = Enum.TextXAlignment.Left
+	brand.Parent = frame
+
+	local sub = Instance.new("TextLabel")
+	sub.BackgroundTransparency = 1
+	sub.Position = UDim2.fromOffset(24, 48)
+	sub.Size = UDim2.new(1, -48, 0, 20)
+	sub.Font = Enum.Font.GothamMedium
+	sub.Text = "ENGLISH / ESPAÑOL"
+	sub.TextColor3 = PREFLIGHT_THEME.BrownNeon
+	sub.TextSize = compact and 10 or 11
+	sub.TextXAlignment = Enum.TextXAlignment.Left
+	sub.Parent = frame
+
+	local divider = Instance.new("Frame")
+	divider.Position = UDim2.fromOffset(24, 78)
+	divider.Size = UDim2.new(1, -48, 0, 1)
+	divider.BackgroundColor3 = PREFLIGHT_THEME.Line
+	divider.BackgroundTransparency = 0.35
+	divider.BorderSizePixel = 0
+	divider.Parent = frame
+
+	local choose = Instance.new("TextLabel")
+	choose.BackgroundTransparency = 1
+	choose.Position = UDim2.fromOffset(24, 90)
+	choose.Size = UDim2.new(1, -48, 0, 22)
+	choose.Font = Enum.Font.GothamBold
+	choose.Text = "SELECT LANGUAGE / SELECCIONA IDIOMA"
+	choose.TextColor3 = PREFLIGHT_THEME.Muted
+	choose.TextSize = compact and 11 or 12
+	choose.TextXAlignment = Enum.TextXAlignment.Left
+	choose.Parent = frame
+
+	local list = Instance.new("Frame")
+	list.BackgroundTransparency = 1
+	list.Position = UDim2.fromOffset(24, 120)
+	list.Size = UDim2.new(1, -48, 0, 118)
+	list.Parent = frame
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Padding = UDim.new(0, 10)
+	listLayout.Parent = list
+
+	local rememberCard = Instance.new("Frame")
+	rememberCard.AnchorPoint = Vector2.new(0, 1)
+	rememberCard.Position = UDim2.new(0, 24, 1, -18)
+	rememberCard.Size = UDim2.new(1, -48, 0, 46)
+	rememberCard.BackgroundColor3 = PREFLIGHT_THEME.Card
+	rememberCard.BorderSizePixel = 0
+	rememberCard.Parent = frame
+	preflightCorner(rememberCard, 14)
+	preflightStroke(rememberCard, PREFLIGHT_THEME.Line, 0.52, 0.8)
+
+	local rememberText = Instance.new("TextLabel")
+	rememberText.BackgroundTransparency = 1
+	rememberText.Position = UDim2.fromOffset(14, 0)
+	rememberText.Size = UDim2.new(1, -88, 1, 0)
+	rememberText.Font = Enum.Font.GothamMedium
+	rememberText.Text = "Remember / Recordar"
+	rememberText.TextColor3 = PREFLIGHT_THEME.White
+	rememberText.TextSize = compact and 11 or 12
+	rememberText.TextXAlignment = Enum.TextXAlignment.Left
+	rememberText.Parent = rememberCard
+
+	local toggle = Instance.new("TextButton")
+	toggle.AnchorPoint = Vector2.new(1, 0.5)
+	toggle.Position = UDim2.new(1, -12, 0.5, 0)
+	toggle.Size = UDim2.fromOffset(50, 26)
+	toggle.BackgroundColor3 = PREFLIGHT_THEME.Panel2
+	toggle.BorderSizePixel = 0
+	toggle.Text = ""
+	toggle.AutoButtonColor = false
+	toggle.Parent = rememberCard
+	preflightCorner(toggle, 99)
+	preflightStroke(toggle, PREFLIGHT_THEME.Line, 0.56, 0.8)
+
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.fromOffset(20, 20)
+	knob.Position = UDim2.fromOffset(3, 3)
+	knob.BackgroundColor3 = PREFLIGHT_THEME.White
+	knob.BorderSizePixel = 0
+	knob.Parent = toggle
+	preflightCorner(knob, 99)
+
+	local function refreshRemember()
+		preflightTween(toggle, 0.15, { BackgroundColor3 = rememberValue and PREFLIGHT_THEME.Brown or PREFLIGHT_THEME.Panel2 })
+		preflightTween(knob, 0.15, { Position = rememberValue and UDim2.fromOffset(27, 3) or UDim2.fromOffset(3, 3) })
+	end
+	toggle.Activated:Connect(function()
+		rememberValue = not rememberValue
+		refreshRemember()
+	end)
+
+	local langs = {
+		{ code = "es", label = "Español" },
+		{ code = "en", label = "English" },
+	}
+	for i, lang in ipairs(langs) do
+		local btn = Instance.new("TextButton")
+		btn.LayoutOrder = i
+		btn.Size = UDim2.new(1, 0, 0, compact and 50 or 54)
+		btn.BackgroundColor3 = PREFLIGHT_THEME.Card
+		btn.BorderSizePixel = 0
+		btn.Text = lang.label
+		btn.Font = Enum.Font.GothamMedium
+		btn.TextColor3 = PREFLIGHT_THEME.White
+		btn.TextSize = compact and 14 or 15
+		btn.AutoButtonColor = false
+		btn.Parent = list
+		preflightCorner(btn, 14)
+		local st = preflightStroke(btn, PREFLIGHT_THEME.Line, 0.54, 0.8)
+		btn.MouseEnter:Connect(function()
+			preflightTween(btn, 0.15, { BackgroundColor3 = PREFLIGHT_THEME.CardHover })
+			st.Color = PREFLIGHT_THEME.Brown2
+		end)
+		btn.MouseLeave:Connect(function()
+			preflightTween(btn, 0.15, { BackgroundColor3 = PREFLIGHT_THEME.Card })
+			st.Color = PREFLIGHT_THEME.Line
+		end)
+		btn.Activated:Connect(function()
+			if selectedLanguage then return end
+			selectedLanguage = lang.code
+			preflightSaveLanguage(lang.code, rememberValue)
+			preflightTween(scale, 0.14, { Scale = 0.90 })
+			preflightTween(dim, 0.14, { BackgroundTransparency = 1 })
+			task.delay(0.12, function()
+				if gui and gui.Parent then gui:Destroy() end
+				selectedEvent:Fire(lang.code)
+			end)
+		end)
+	end
+
+	preflightTween(scale, 0.38, { Scale = 1 }, Enum.EasingStyle.Back)
+	local code = selectedEvent.Event:Wait()
+	selectedEvent:Destroy()
+	return code
+end
+
+local PREFLIGHT_LANGUAGE = showPreflightLanguagePicker()
+
+local function showWrongGame(languageCode)
+	preflightDestroy("HexaWrongGame")
+	local english = languageCode == "en"
+	local titleText = english and "WRONG GAME" or "JUEGO INCORRECTO"
+	local descText = english
+		and "This script only works in +1 Speed Monkey Escape.\nPress GO TO GAME to enter the correct experience."
+		or "Este script solo funciona en +1 Speed Monkey Escape.\nPulsa IR AL JUEGO para entrar al juego correcto."
+	local goText = english and "GO TO GAME" or "IR AL JUEGO"
+	local enteringText = english and "JOINING..." or "ENTRANDO..."
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "HexaWrongGame"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.DisplayOrder = 2147483647
+	preflightParent(gui)
+
+	local dim = Instance.new("Frame")
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = PREFLIGHT_THEME.Black
+	dim.BackgroundTransparency = 0.22
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	for i = 1, 3 do
+		local band = Instance.new("Frame")
+		band.AnchorPoint = Vector2.new(0.5, 0.5)
+		band.Position = UDim2.fromScale(0.5, 0.27 + (i - 1) * 0.23)
+		band.Size = UDim2.new(1.35, 0, 0, 1)
+		band.Rotation = -7
+		band.BackgroundColor3 = PREFLIGHT_THEME.Brown
+		band.BackgroundTransparency = 0.78 + (i - 1) * 0.05
+		band.BorderSizePixel = 0
+		band.Parent = dim
+	end
+
+	local camera = workspace.CurrentCamera
+	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
+	local compact = InputService.TouchEnabled or vp.X < 620
+	local w = compact
+		and math.max(230, math.min(MOBILE_SIZE.WRONG_WIDTH, vp.X - 18))
+		or math.min(420, math.max(290, vp.X - 28))
+	local h = compact
+		and math.max(190, math.min(MOBILE_SIZE.WRONG_HEIGHT, vp.Y - 34))
+		or 265
+
+	local frame = Instance.new("Frame")
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(w, h)
+	frame.BackgroundColor3 = PREFLIGHT_THEME.Panel
+	frame.BorderSizePixel = 0
+	frame.ClipsDescendants = true
+	frame.Parent = dim
+	preflightCorner(frame, compact and 16 or 22)
+	preflightStroke(frame, PREFLIGHT_THEME.BrownNeon, 0.20, 1.4)
+
+	local closeGuard = Instance.new("TextButton")
+	closeGuard.Name = "Close"
+	closeGuard.AnchorPoint = Vector2.new(1, 0)
+	closeGuard.Position = UDim2.new(1, compact and -8 or -10, 0, compact and 7 or 9)
+	closeGuard.Size = UDim2.fromOffset(compact and 26 or 30, compact and 26 or 30)
+	closeGuard.BackgroundColor3 = PREFLIGHT_THEME.Card
+	closeGuard.BorderSizePixel = 0
+	closeGuard.AutoButtonColor = false
+	closeGuard.Font = Enum.Font.GothamBold
+	closeGuard.Text = "×"
+	closeGuard.TextColor3 = PREFLIGHT_THEME.White
+	closeGuard.TextSize = compact and 16 or 19
+	closeGuard.ZIndex = 20
+	closeGuard.Parent = frame
+	preflightCorner(closeGuard, compact and 8 or 9)
+	preflightStroke(closeGuard, PREFLIGHT_THEME.Line, 0.38, 1)
+	closeGuard.Activated:Connect(function()
+		if gui and gui.Parent then gui:Destroy() end
+	end)
+
+	local scale = Instance.new("UIScale")
+	scale.Scale = 0.82
+	scale.Parent = frame
+
+	local logo = Instance.new("ImageLabel")
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://80552458381492"
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.Size = UDim2.fromOffset(compact and 34 or 58, compact and 34 or 58)
+	logo.Position = UDim2.fromOffset(compact and 12 or 18, compact and 10 or 14)
+	logo.Parent = frame
+
+	local brand = Instance.new("TextLabel")
+	brand.BackgroundTransparency = 1
+	brand.Position = UDim2.fromOffset(compact and 52 or 86, compact and 7 or 14)
+	brand.Size = UDim2.new(1, -(compact and 86 or 108), 0, compact and 22 or 30)
+	brand.Font = Enum.Font.GothamBold
+	brand.Text = "HEXA"
+	brand.TextColor3 = PREFLIGHT_THEME.White
+	brand.TextSize = compact and 16 or 24
+	brand.TextXAlignment = Enum.TextXAlignment.Left
+	brand.Parent = frame
+
+	local gameLabel = Instance.new("TextLabel")
+	gameLabel.BackgroundTransparency = 1
+	gameLabel.Position = UDim2.fromOffset(compact and 52 or 86, compact and 27 or 42)
+	gameLabel.Size = UDim2.new(1, -(compact and 86 or 108), 0, compact and 16 or 22)
+	gameLabel.Font = Enum.Font.GothamMedium
+	gameLabel.Text = "+1 SPEED MONKEY ESCAPE"
+	gameLabel.TextColor3 = PREFLIGHT_THEME.BrownNeon
+	gameLabel.TextSize = compact and 8 or 12
+	gameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	gameLabel.Parent = frame
+
+	local divider = Instance.new("Frame")
+	divider.Position = UDim2.fromOffset(compact and 12 or 18, compact and 51 or 80)
+	divider.Size = UDim2.new(1, compact and -24 or -36, 0, 1)
+	divider.BackgroundColor3 = PREFLIGHT_THEME.Line
+	divider.BackgroundTransparency = 0.42
+	divider.BorderSizePixel = 0
+	divider.Parent = frame
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.fromOffset(compact and 14 or 22, compact and 59 or 96)
+	title.Size = UDim2.new(1, compact and -28 or -44, 0, compact and 20 or 28)
+	title.Font = Enum.Font.GothamBold
+	title.Text = titleText
+	title.TextColor3 = PREFLIGHT_THEME.White
+	title.TextSize = compact and 13 or 20
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = frame
+
+	local desc = Instance.new("TextLabel")
+	desc.BackgroundTransparency = 1
+	desc.Position = UDim2.fromOffset(compact and 14 or 22, compact and 82 or 126)
+	desc.Size = UDim2.new(1, compact and -28 or -44, 0, compact and 40 or 48)
+	desc.Font = Enum.Font.Gotham
+	desc.Text = descText
+	desc.TextColor3 = PREFLIGHT_THEME.Muted
+	desc.TextSize = compact and 8 or 13
+	desc.TextWrapped = true
+	desc.TextXAlignment = Enum.TextXAlignment.Left
+	desc.TextYAlignment = Enum.TextYAlignment.Top
+	desc.Parent = frame
+
+	local go = Instance.new("TextButton")
+	go.AutoButtonColor = false
+	go.AnchorPoint = Vector2.new(0.5, 1)
+	go.Position = UDim2.new(0.5, 0, 1, compact and -10 or -18)
+	go.Size = UDim2.new(1, compact and -28 or -44, 0, compact and 34 or 46)
+	go.BackgroundColor3 = PREFLIGHT_THEME.Brown2
+	go.BorderSizePixel = 0
+	go.Font = Enum.Font.GothamBold
+	go.Text = goText
+	go.TextColor3 = PREFLIGHT_THEME.White
+	go.TextSize = compact and 10 or 14
+	go.Active = true
+	go.Selectable = true
+	go.ZIndex = 10
+	go.Parent = frame
+	preflightCorner(go, 13)
+	preflightStroke(go, PREFLIGHT_THEME.BrownNeon, 0.16, 1)
+
+	go.MouseEnter:Connect(function()
+		preflightTween(go, 0.14, { BackgroundColor3 = PREFLIGHT_THEME.BrownNeon })
+	end)
+	go.MouseLeave:Connect(function()
+		preflightTween(go, 0.14, { BackgroundColor3 = PREFLIGHT_THEME.Brown2 })
+	end)
+	-- ================================================================
+	-- ROBUST "GO TO GAME" FLOW
+	-- Roblox can reject cross-experience client teleports depending on the
+	-- current experience. We first try TeleportService, then hand off to the
+	-- official Roblox deep-link/web-start URL if the client blocks it.
+	-- ================================================================
+	local teleportBusy = false
+	local teleportFailedConn = nil
+	local teleportToken = 0
+
+	local function setGoText(text)
+		if go and go.Parent then
+			go.Text = text
+		end
+	end
+
+	local function unlockGo(message)
+		if not go or not go.Parent then return end
+		teleportBusy = false
+		go.Active = true
+		go.Selectable = true
+		setGoText(message or goText)
+	end
+
+	local function getExecutorEnv()
+		local ok, env = pcall(function()
+			if getgenv then return getgenv() end
+			return _G
+		end)
+		return ok and type(env) == "table" and env or _G
+	end
+
+	local function openOfficialGameLink()
+		local webUrl = "https://www.roblox.com/games/start?placeId=" .. tostring(TARGET_PLACE_ID)
+		local directUrl = "roblox://placeId=" .. tostring(TARGET_PLACE_ID)
+		local env = getExecutorEnv()
+
+		-- Executor-specific URL openers, when available on mobile.
+		for _, functionName in ipairs({ "openurl", "open_url", "openbrowser", "open_browser" }) do
+			local opener = env and env[functionName]
+			if type(opener) == "function" then
+				local ok = pcall(opener, directUrl)
+				if ok then return true end
+				ok = pcall(opener, webUrl)
+				if ok then return true end
+			end
+		end
+
+		-- Elevated executor environments sometimes expose an internal browser
+		-- service even though normal LocalScripts cannot use it.
+		local internalBrowserOk = pcall(function()
+			local browserService = game:GetService("BrowserService")
+			browserService:OpenBrowserWindow(webUrl)
+		end)
+		if internalBrowserOk then return true end
+
+		-- Compatibility with environments that expose a hidden GuiService opener.
+		local guiBrowserOk = pcall(function()
+			GuiService:OpenBrowserWindow(webUrl)
+		end)
+		if guiBrowserOk then return true end
+
+		-- Final fallback: copy the official start URL so the user is never left
+		-- with a dead JOINING state.
+		if setclipboard then
+			local copied = pcall(setclipboard, webUrl)
+			if copied then
+				setGoText(english and "LINK COPIED" or "ENLACE COPIADO")
+				return false
+			end
+		end
+		return false
+	end
+
+	local function tryTeleportService()
+		-- Try modern API first. Roblox normally restricts TeleportAsync to the
+		-- server, but some executor environments provide enough identity for it.
+		local okAsync = pcall(function()
+			TeleportService:TeleportAsync(TARGET_PLACE_ID, { LocalPlayer })
+		end)
+		if okAsync then return true end
+
+		-- Legacy client API is still the only built-in client path available.
+		local okLegacy = pcall(function()
+			TeleportService:Teleport(TARGET_PLACE_ID, LocalPlayer)
+		end)
+		if okLegacy then return true end
+
+		-- Compatibility with clients/executors that expect only PlaceId.
+		return pcall(function()
+			TeleportService:Teleport(TARGET_PLACE_ID)
+		end)
+	end
+
+	local function goToTargetGame()
+		if teleportBusy or not go or not go.Parent then return end
+		teleportBusy = true
+		go.Active = false
+		go.Selectable = false
+		setGoText(enteringText)
+		teleportToken += 1
+		local myToken = teleportToken
+		local fallbackStarted = false
+
+		local function startExternalFallback()
+			if fallbackStarted or myToken ~= teleportToken or game.PlaceId == TARGET_PLACE_ID then return end
+			fallbackStarted = true
+			setGoText(english and "OPENING ROBLOX..." or "ABRIENDO ROBLOX...")
+			local opened = openOfficialGameLink()
+			local unlockDelay = opened and 8.0 or 1.6
+			task.delay(unlockDelay, function()
+				if myToken == teleportToken and game.PlaceId ~= TARGET_PLACE_ID then
+					unlockGo(english and "TRY AGAIN" or "REINTENTAR")
+				end
+			end)
+		end
+
+		if teleportFailedConn then
+			teleportFailedConn:Disconnect()
+			teleportFailedConn = nil
+		end
+		teleportFailedConn = TeleportService.TeleportInitFailed:Connect(function(player, _, _, placeId)
+			if player == LocalPlayer and tonumber(placeId) == TARGET_PLACE_ID and myToken == teleportToken then
+				startExternalFallback()
+			end
+		end)
+
+		local started = tryTeleportService()
+		if not started then
+			startExternalFallback()
+			return
+		end
+
+		-- A client teleport can return without throwing while Roblox blocks the
+		-- cross-experience request. If we are still in the same game after a
+		-- short grace period, use Roblox's official game-start deep link.
+		task.delay(2.4, function()
+			if myToken == teleportToken and teleportBusy and game.PlaceId ~= TARGET_PLACE_ID then
+				startExternalFallback()
+			end
+		end)
+	end
+
+	go.Activated:Connect(goToTargetGame)
+
+	preflightTween(scale, 0.38, { Scale = 1 }, Enum.EasingStyle.Back)
+	preflightTween(dim, 0.28, { BackgroundTransparency = 0.12 })
+end
+
+if game.PlaceId ~= TARGET_PLACE_ID then
+	showWrongGame(PREFLIGHT_LANGUAGE)
+	return
+end
 
 local RS = game:GetService("ReplicatedStorage")
 local Remotes = RS:WaitForChild("Remotes", 15)
@@ -1750,282 +2376,6 @@ local function createNavCornerAccent(parent, compact)
 	return wrap
 end
 
-local LANGS = {
-	{ code = "es", label = "Español" },
-	{ code = "en", label = "English" },
-}
-
-local LANG_PREF_FILE = "hexa_language_pref.json"
-
-local function loadRememberedLanguage()
-	if not (readfile and isfile) then return nil end
-	local ok, content = pcall(readfile, LANG_PREF_FILE)
-	if not ok or not content or content == "" then return nil end
-	local okData, data = pcall(function()
-		return HttpService:JSONDecode(content)
-	end)
-	if not okData or type(data) ~= "table" then return nil end
-	local code = data.language
-	if data.remember and (code == "es" or code == "en") then
-		return code
-	end
-	return nil
-end
-
-local function saveRememberedLanguage(code)
-	if not writefile then return end
-	pcall(function()
-		writefile(LANG_PREF_FILE, HttpService:JSONEncode({ remember = true, language = code }))
-	end)
-end
-
-local function clearRememberedLanguage()
-	if delfile and isfile and isfile(LANG_PREF_FILE) then
-		pcall(delfile, LANG_PREF_FILE)
-	end
-end
-
-local function createLanguageFlag(parent, code)
-	local holder = Instance.new("Frame")
-	holder.Size = UDim2.fromOffset(46, 32)
-	holder.Position = UDim2.new(0, 11, 0.5, -16)
-	holder.BackgroundColor3 = THEME.Panel2
-	holder.BorderSizePixel = 0
-	holder.Parent = parent
-	corner(holder, 8)
-	local clip = Instance.new("Frame")
-	clip.Size = UDim2.new(1, -2, 1, -2)
-	clip.Position = UDim2.fromOffset(1, 1)
-	clip.BackgroundTransparency = 1
-	clip.BorderSizePixel = 0
-	clip.ClipsDescendants = true
-	clip.Parent = holder
-	corner(clip, 7)
-
-	if code == "es" then
-		local top = Instance.new("Frame")
-		top.Size = UDim2.new(1, 0, 0.26, 0)
-		top.BackgroundColor3 = Color3.fromRGB(188, 38, 38)
-		top.BorderSizePixel = 0
-		top.Parent = clip
-
-		local middle = Instance.new("Frame")
-		middle.Position = UDim2.new(0, 0, 0.26, 0)
-		middle.Size = UDim2.new(1, 0, 0.48, 0)
-		middle.BackgroundColor3 = Color3.fromRGB(241, 195, 54)
-		middle.BorderSizePixel = 0
-		middle.Parent = clip
-
-		local bottom = Instance.new("Frame")
-		bottom.AnchorPoint = Vector2.new(0, 1)
-		bottom.Position = UDim2.new(0, 0, 1, 0)
-		bottom.Size = UDim2.new(1, 0, 0.26, 0)
-		bottom.BackgroundColor3 = Color3.fromRGB(188, 38, 38)
-		bottom.BorderSizePixel = 0
-		bottom.Parent = clip
-	else
-		clip.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
-		local stripeCount = 7
-		for i = 0, stripeCount - 1 do
-			local stripe = Instance.new("Frame")
-			stripe.Position = UDim2.new(0, 0, i / stripeCount, 0)
-			stripe.Size = UDim2.new(1, 0, 1 / stripeCount, 1)
-			stripe.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(182, 44, 44) or Color3.fromRGB(245, 245, 245)
-			stripe.BorderSizePixel = 0
-			stripe.Parent = clip
-		end
-		local canton = Instance.new("Frame")
-		canton.Size = UDim2.new(0.46, 0, 0.58, 0)
-		canton.BackgroundColor3 = Color3.fromRGB(36, 59, 123)
-		canton.BorderSizePixel = 0
-		canton.Parent = clip
-	end
-
-	stroke(holder, THEME.Line, 0.35, 1)
-	return holder
-end
-
-local function showLanguagePicker(onSelect)
-	local remembered = loadRememberedLanguage()
-	if remembered then
-		onSelect(remembered)
-		return
-	end
-
-	destroyOldGui("HexaLanguagePremium")
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "HexaLanguagePremium"
-	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.DisplayOrder = 2147483647
-	parentGui(gui)
-
-	local dim = Instance.new("Frame")
-	dim.Size = UDim2.fromScale(1, 1)
-	dim.BackgroundColor3 = THEME.Black
-	dim.BackgroundTransparency = 0.16
-	dim.BorderSizePixel = 0
-	dim.Parent = gui
-
-	for i = 1, 3 do
-		local band = Instance.new("Frame")
-		band.AnchorPoint = Vector2.new(0.5, 0.5)
-		band.Position = UDim2.fromScale(0.5, 0.25 + (i - 1) * 0.25)
-		band.Size = UDim2.new(1.35, 0, 0, 1)
-		band.Rotation = -7
-		band.BackgroundColor3 = THEME.Brown
-		band.BackgroundTransparency = 0.76 + (i - 1) * 0.06
-		band.BorderSizePixel = 0
-		band.Parent = dim
-	end
-
-	local camera = workspace.CurrentCamera
-	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
-	local compact = vp.X < 620
-	local pickerW = math.min(compact and 360 or 430, math.max(290, vp.X - 28))
-	local pickerH = math.min(compact and 340 or 320, math.max(280, vp.Y - 60))
-	local rememberValue = false
-
-	local shadow = Instance.new("Frame")
-	shadow.AnchorPoint = Vector2.new(0.5, 0.5)
-	shadow.Position = UDim2.new(0.5, 0, 0.5, 10)
-	shadow.Size = UDim2.fromOffset(pickerW + 12, pickerH + 12)
-	shadow.BackgroundColor3 = Color3.new(0, 0, 0)
-	shadow.BackgroundTransparency = 0.38
-	shadow.BorderSizePixel = 0
-	shadow.Parent = dim
-	shadow.Visible = false
-	corner(shadow, 24)
-
-	local frame = Instance.new("Frame")
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.fromScale(0.5, 0.5)
-	frame.Size = UDim2.fromOffset(pickerW, pickerH)
-	frame.BackgroundColor3 = THEME.Panel
-	frame.BorderSizePixel = 0
-	frame.ClipsDescendants = true
-	frame.Parent = dim
-	corner(frame, 22)
-	neonStroke(frame, THEME.BrownNeon, 0.20, 1.4)
-
-	local brand = makeLabel(frame, "HEXA", compact and 24 or 28, THEME.White, Enum.Font.GothamBold)
-	brand.Position = UDim2.fromOffset(24, 18)
-	brand.Size = UDim2.new(1, -48, 0, 34)
-
-	local sub = makeLabel(frame, "ENGLISH / ESPAÑOL", compact and 10 or 11, THEME.Brown3, Enum.Font.GothamMedium)
-	sub.Position = UDim2.fromOffset(24, 48)
-	sub.Size = UDim2.new(1, -48, 0, 20)
-
-	local divider = Instance.new("Frame")
-	divider.Position = UDim2.fromOffset(24, 78)
-	divider.Size = UDim2.new(1, -48, 0, 1)
-	divider.BackgroundColor3 = THEME.Line
-	divider.BackgroundTransparency = 0.35
-	divider.BorderSizePixel = 0
-	divider.Parent = frame
-
-	local choose = makeLabel(frame, "SELECT LANGUAGE / SELECCIONA IDIOMA", compact and 11 or 12, THEME.Muted, Enum.Font.GothamBold)
-	choose.Position = UDim2.fromOffset(24, 90)
-	choose.Size = UDim2.new(1, -48, 0, 22)
-
-	local list = Instance.new("Frame")
-	list.BackgroundTransparency = 1
-	list.Position = UDim2.fromOffset(24, 120)
-	list.Size = UDim2.new(1, -48, 0, 118)
-	list.Parent = frame
-
-	local listLayout = Instance.new("UIListLayout")
-	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	listLayout.Padding = UDim.new(0, 10)
-	listLayout.Parent = list
-
-	local rememberCard = Instance.new("Frame")
-	rememberCard.AnchorPoint = Vector2.new(0, 1)
-	rememberCard.Position = UDim2.new(0, 24, 1, -18)
-	rememberCard.Size = UDim2.new(1, -48, 0, 46)
-	rememberCard.BackgroundColor3 = THEME.Card
-	rememberCard.BorderSizePixel = 0
-	rememberCard.Parent = frame
-	corner(rememberCard, 14)
-	stroke(rememberCard, THEME.Line, 0.52, 0.8)
-
-	local rememberText = makeLabel(rememberCard, "Remember / Recordar", compact and 11 or 12, THEME.White, Enum.Font.GothamMedium)
-	rememberText.Position = UDim2.fromOffset(14, 0)
-	rememberText.Size = UDim2.new(1, -88, 1, 0)
-
-	local toggle = Instance.new("TextButton")
-	toggle.AnchorPoint = Vector2.new(1, 0.5)
-	toggle.Position = UDim2.new(1, -12, 0.5, 0)
-	toggle.Size = UDim2.fromOffset(50, 26)
-	toggle.BackgroundColor3 = THEME.Panel2
-	toggle.BorderSizePixel = 0
-	toggle.Text = ""
-	toggle.AutoButtonColor = false
-	toggle.Parent = rememberCard
-	corner(toggle, 99)
-	stroke(toggle, THEME.Line, 0.56, 0.8)
-
-	local knob = Instance.new("Frame")
-	knob.Size = UDim2.fromOffset(20, 20)
-	knob.Position = UDim2.fromOffset(3, 3)
-	knob.BackgroundColor3 = THEME.White
-	knob.BorderSizePixel = 0
-	knob.Parent = toggle
-	corner(knob, 99)
-
-	local function refreshRememberToggle()
-		tween(toggle, 0.15, { BackgroundColor3 = rememberValue and THEME.Brown or THEME.Panel2 })
-		tween(knob, 0.15, { Position = rememberValue and UDim2.fromOffset(27, 3) or UDim2.fromOffset(3, 3) })
-	end
-	refreshRememberToggle()
-	toggle.MouseButton1Click:Connect(function()
-		rememberValue = not rememberValue
-		refreshRememberToggle()
-	end)
-
-	for i, lang in ipairs(LANGS) do
-		local btn = Instance.new("TextButton")
-		btn.LayoutOrder = i
-		btn.Size = UDim2.new(1, 0, 0, compact and 50 or 54)
-		btn.BackgroundColor3 = THEME.Card
-		btn.BorderSizePixel = 0
-		btn.Text = ""
-		btn.AutoButtonColor = false
-		btn.Parent = list
-		corner(btn, 14)
-		local st = stroke(btn, THEME.Line, 0.54, 0.8)
-
-		createLanguageFlag(btn, lang.code)
-
-		local label = makeLabel(btn, lang.label, compact and 14 or 15, THEME.White, Enum.Font.GothamMedium)
-		label.Position = UDim2.fromOffset(68, 0)
-		label.Size = UDim2.new(1, -82, 1, 0)
-
-		btn.MouseEnter:Connect(function()
-			tween(btn, 0.15, { BackgroundColor3 = THEME.CardHover })
-			st.Color = THEME.Brown2
-		end)
-		btn.MouseLeave:Connect(function()
-			tween(btn, 0.15, { BackgroundColor3 = THEME.Card })
-			st.Color = THEME.Line
-		end)
-		btn.MouseButton1Click:Connect(function()
-			if rememberValue then
-				saveRememberedLanguage(lang.code)
-			else
-				clearRememberedLanguage()
-			end
-			tween(frame, 0.15, { BackgroundTransparency = 1 })
-			task.delay(0.12, function()
-				if gui then gui:Destroy() end
-				onSelect(lang.code)
-			end)
-		end)
-	end
-end
-
 local function buildUI(T, languageCode)
 	destroyOldGui("HexaPremiumHub")
 
@@ -2039,11 +2389,16 @@ local function buildUI(T, languageCode)
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(1000, 700)
-	local compact = vp.X < 760
-	local windowW = compact and math.floor(math.min(340, math.max(300, vp.X - 22))) or math.floor(math.min(700, math.max(590, vp.X - 170)))
-	local windowH = compact and math.floor(math.min(500, math.max(400, vp.Y - 40))) or math.floor(math.min(470, math.max(400, vp.Y - 130)))
-	local sideW = compact and math.max(104, math.floor(windowW * 0.31)) or 168
-	local headerH = compact and 64 or 70
+	local compact = InputService.TouchEnabled or vp.X < 760
+	-- Mobile size comes from MOBILE_SIZE at the top of the script.
+	local windowW = compact
+		and math.floor(math.max(280, math.min(MOBILE_SIZE.MAIN_WIDTH, vp.X - 16)))
+		or math.floor(math.min(700, math.max(590, vp.X - 170)))
+	local windowH = compact
+		and math.floor(math.max(310, math.min(MOBILE_SIZE.MAIN_HEIGHT, vp.Y - 26)))
+		or math.floor(math.min(470, math.max(400, vp.Y - 130)))
+	local sideW = compact and math.max(82, math.floor(windowW * 0.30)) or 168
+	local headerH = compact and 52 or 70
 
 	local shadow = Instance.new("Frame")
 	shadow.Name = "Shadow"
@@ -2942,7 +3297,7 @@ local function buildUI(T, languageCode)
 	mini.Name = "MinimizedPanel"
 	mini.AnchorPoint = Vector2.new(1, 0.5)
 	mini.Position = UDim2.new(1, -18, 0.5, 0)
-	mini.Size = UDim2.fromOffset(compact and 214 or 250, compact and 54 or 60)
+	mini.Size = UDim2.fromOffset(compact and 184 or 250, compact and 48 or 60)
 	mini.BackgroundColor3 = THEME.Panel
 	mini.BorderSizePixel = 0
 	mini.Visible = false
@@ -3189,6 +3544,4 @@ local function buildUI(T, languageCode)
 	notify(T.loaded, 4)
 end
 
-showLanguagePicker(function(code)
-	buildUI(L[code] or L.en, code)
-end)
+buildUI(L[PREFLIGHT_LANGUAGE] or L.en, PREFLIGHT_LANGUAGE)
