@@ -1,5 +1,5 @@
 --[[
-	HEXA | +1 Speed Monkey Escape Hub | v35 Language Before PlaceId | Keyless
+	HEXA | +1 Speed Monkey Escape Hub | v37 Device Detection + Mobile Fix | Keyless
 
 	Features:
 	  - Auto Farm Wins (touch replication, no course running)
@@ -27,6 +27,42 @@ local GuiService = game:GetService("GuiService")
 local VirtualUser = game:GetService("VirtualUser")
 local InputService = game:GetService("UserInputService")
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ================= DEVICE DETECTION =================
+-- Do not infer the device only from viewport width. Mobile executors/tablets can
+-- report unusual resolutions, so platform + touch capability are checked first.
+local function detectHexaDevice()
+	local platformName = ""
+	pcall(function()
+		platformName = tostring(InputService:GetPlatform())
+	end)
+
+	local mobilePlatform = platformName:find("Android", 1, true)
+		or platformName:find("IOS", 1, true)
+		or platformName:find("iOS", 1, true)
+
+	if mobilePlatform then
+		return "Mobile"
+	end
+
+	-- Strong fallback for executors where GetPlatform is unavailable/obfuscated.
+	if InputService.TouchEnabled and not InputService.KeyboardEnabled then
+		return "Mobile"
+	end
+
+	-- A mobile device can expose a software/virtual keyboard as KeyboardEnabled.
+	-- In that case touch + a phone/tablet-sized viewport is the safest fallback.
+	local camera = workspace.CurrentCamera
+	local vp = camera and camera.ViewportSize or Vector2.new(1000, 700)
+	if InputService.TouchEnabled and math.min(vp.X, vp.Y) <= 700 then
+		return "Mobile"
+	end
+
+	return "PC"
+end
+
+local HEXA_DEVICE = detectHexaDevice()
+local HEXA_MOBILE = HEXA_DEVICE == "Mobile"
 
 -- ================= LANGUAGE -> PLACE ID PREFLIGHT =================
 -- Language is resolved before loading any +1 Speed Monkey Escape-only objects.
@@ -148,9 +184,9 @@ local function showPreflightLanguagePicker()
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
-	local compact = vp.X < 620
-	local w = math.min(compact and 360 or 430, math.max(290, vp.X - 28))
-	local h = math.min(compact and 340 or 320, math.max(280, vp.Y - 60))
+	local compact = HEXA_MOBILE
+	local w = compact and math.min(326, math.max(270, vp.X - 42)) or math.min(430, math.max(290, vp.X - 28))
+	local h = compact and math.min(312, math.max(270, vp.Y - 92)) or math.min(320, math.max(280, vp.Y - 60))
 
 	local frame = Instance.new("Frame")
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -354,9 +390,9 @@ local function showWrongGame(languageCode)
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(900, 600)
-	local compact = vp.X < 620
-	local w = math.min(compact and 310 or 420, math.max(270, vp.X - 34))
-	local h = compact and 220 or 265
+	local compact = HEXA_MOBILE
+	local w = compact and math.min(282, math.max(250, vp.X - 54)) or math.min(420, math.max(300, vp.X - 34))
+	local h = compact and 214 or 265
 
 	local frame = Instance.new("Frame")
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -370,7 +406,7 @@ local function showWrongGame(languageCode)
 	preflightStroke(frame, PREFLIGHT_THEME.BrownNeon, 0.20, 1.4)
 
 	local scale = Instance.new("UIScale")
-	scale.Scale = compact and 0.78 or 0.82
+	scale.Scale = compact and 0.86 or 0.82
 	scale.Parent = frame
 
 	-- Close button for the wrong-game panel (works on touch and mouse).
@@ -480,36 +516,81 @@ local function showWrongGame(languageCode)
 		preflightTween(go, 0.14, { BackgroundColor3 = PREFLIGHT_THEME.Brown2 })
 	end)
 	local teleportBusy = false
+	local lastTeleportError = nil
+
+	-- Listen for Roblox teleport failures instead of silently resetting the button.
+	local teleportFailConnection
+	pcall(function()
+		teleportFailConnection = TeleportService.TeleportInitFailed:Connect(function(player, result, errorMessage, placeId)
+			if player ~= LocalPlayer then return end
+			if tonumber(placeId) and tonumber(placeId) ~= TARGET_PLACE_ID then return end
+			lastTeleportError = tostring(errorMessage or result or "Teleport failed")
+		end)
+	end)
+
+	local function requestTeleport()
+		-- Teleport() is the supported client-side route. TeleportAsync is intentionally
+		-- not used here because it is primarily server-side and fails in many executors.
+		local ok, err = pcall(function()
+			TeleportService:Teleport(TARGET_PLACE_ID, LocalPlayer)
+		end)
+		if not ok then
+			lastTeleportError = tostring(err)
+		end
+		return ok
+	end
+
 	local function goToCorrectGame()
 		if teleportBusy or not go or not go.Parent then return end
 		teleportBusy = true
+		lastTeleportError = nil
 		go.Active = false
 		go.Text = enteringText
 
-		-- Teleport() is the most compatible client path, including mobile executors.
-		-- If the first request is silently ignored, retry once with TeleportAsync.
 		task.spawn(function()
-			pcall(function()
-				TeleportService:Teleport(TARGET_PLACE_ID, LocalPlayer)
-			end)
+			-- First request immediately from the user gesture.
+			requestTeleport()
 
-			task.wait(1.35)
-			if game.PlaceId ~= TARGET_PLACE_ID and gui and gui.Parent then
-				pcall(function()
-					TeleportService:TeleportAsync(TARGET_PLACE_ID, { LocalPlayer })
-				end)
+			-- Mobile executors occasionally swallow the first teleport request. Retry
+			-- using the same supported client method while the current PlaceId remains.
+			if HEXA_MOBILE then
+				task.wait(1.1)
+				if game.PlaceId ~= TARGET_PLACE_ID and gui and gui.Parent then
+					requestTeleport()
+				end
+				task.wait(1.6)
+				if game.PlaceId ~= TARGET_PLACE_ID and gui and gui.Parent then
+					requestTeleport()
+				end
+			else
+				task.wait(1.8)
+				if game.PlaceId ~= TARGET_PLACE_ID and gui and gui.Parent then
+					requestTeleport()
+				end
 			end
 
-			task.wait(2.15)
+			-- Do not leave the panel permanently stuck on JOINING if Roblox rejected it.
+			task.wait(2.6)
 			if game.PlaceId ~= TARGET_PLACE_ID and go and go.Parent then
 				teleportBusy = false
 				go.Active = true
-				go.Text = goText
+				if lastTeleportError and lastTeleportError ~= "" then
+					go.Text = english and "RETRY" or "REINTENTAR"
+				else
+					go.Text = goText
+				end
 			end
 		end)
 	end
 
+	-- Activated is touch-native and also works with mouse/gamepad.
 	go.Activated:Connect(goToCorrectGame)
+
+	gui.Destroying:Connect(function()
+		if teleportFailConnection then
+			pcall(function() teleportFailConnection:Disconnect() end)
+		end
+	end)
 
 	preflightTween(scale, 0.38, { Scale = 1 }, Enum.EasingStyle.Back)
 	preflightTween(dim, 0.28, { BackgroundTransparency = 0.12 })
@@ -2255,10 +2336,10 @@ local function buildUI(T, languageCode)
 
 	local camera = workspace.CurrentCamera
 	local vp = camera and camera.ViewportSize or Vector2.new(1000, 700)
-	local compact = vp.X < 760
-	local windowW = compact and math.floor(math.min(305, math.max(270, vp.X - 34))) or math.floor(math.min(700, math.max(590, vp.X - 170)))
-	local windowH = compact and math.floor(math.min(445, math.max(360, vp.Y - 76))) or math.floor(math.min(470, math.max(400, vp.Y - 130)))
-	local sideW = compact and math.max(104, math.floor(windowW * 0.31)) or 168
+	local compact = HEXA_MOBILE
+	local windowW = compact and math.floor(math.min(282, math.max(248, vp.X - 58))) or math.floor(math.min(700, math.max(590, vp.X - 170)))
+	local windowH = compact and math.floor(math.min(410, math.max(340, vp.Y - 108))) or math.floor(math.min(470, math.max(400, vp.Y - 130)))
+	local sideW = compact and math.max(94, math.floor(windowW * 0.30)) or 168
 	local headerH = compact and 64 or 70
 
 	local shadow = Instance.new("Frame")
