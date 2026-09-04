@@ -668,7 +668,7 @@ local overlay = new("Frame", {
 local main = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(420, 335),
+    Size = UDim2.fromOffset(1180, 760),
     BackgroundColor3 = Color3.new(0, 0, 0),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
@@ -735,6 +735,21 @@ for i = 1, 105 do
     })
     round(star, 999)
     animateStar(star)
+end
+
+
+for i = 1, 18 do
+    local line = new("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale((i % 6) / 5, (math.floor((i - 1) / 6) + 0.5) / 3),
+        Size = UDim2.fromScale(0.38, 0.0012),
+        Rotation = (i * 17) % 38 - 19,
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        BackgroundTransparency = 0.92,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = galaxy,
+    })
 end
 
 for i = 1, 12 do
@@ -954,49 +969,50 @@ end
 
 local keyGlowOuter = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(376, 306),
-    BackgroundColor3 = Color3.fromRGB(235, 245, 255),
-    BackgroundTransparency = 0.93,
+    Position = UDim2.new(0.5, 0, 0.5, 5),
+    Size = UDim2.fromOffset(364, 276),
+    BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+    BackgroundTransparency = 0.28,
     BorderSizePixel = 0,
     ZIndex = 61,
     Parent = keyScreen,
 })
-round(keyGlowOuter, 24)
-local keyGlowOuterStroke = stroke(keyGlowOuter, 0.45)
+round(keyGlowOuter, 22)
+local keyGlowOuterStroke = stroke(keyGlowOuter, 0.72)
 keyGlowOuterStroke.Thickness = 2
-keyGlowOuterStroke.Color = Color3.fromRGB(195, 225, 255)
+keyGlowOuterStroke.Color = Color3.fromRGB(255, 255, 255)
 
 local keyPanel = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(360, 292),
-    BackgroundColor3 = Color3.fromRGB(4, 5, 8),
+    Size = UDim2.fromOffset(350, 262),
+    BackgroundColor3 = Color3.fromRGB(7, 7, 8),
     BackgroundTransparency = 0.02,
     BorderSizePixel = 0,
     ClipsDescendants = true,
     ZIndex = 62,
     Parent = keyScreen,
 })
-round(keyPanel, 20)
-local keyPanelStroke = stroke(keyPanel, 0.12)
-keyPanelStroke.Thickness = 1.5
-keyPanelStroke.Color = Color3.fromRGB(218, 235, 255)
+round(keyPanel, 18)
+local keyPanelStroke = stroke(keyPanel, 0.28)
+keyPanelStroke.Thickness = 1.2
+keyPanelStroke.Color = Color3.fromRGB(255, 255, 255)
 
 local keyPanelGradient = Instance.new("UIGradient")
-keyPanelGradient.Rotation = 115
+keyPanelGradient.Rotation = 90
 keyPanelGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(4, 5, 8)),
-    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(10, 12, 18)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 5, 8)),
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 14, 15)),
+    ColorSequenceKeypoint.new(0.45, Color3.fromRGB(8, 8, 9)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 4, 5)),
 })
 keyPanelGradient.Parent = keyPanel
 
 local topGlow = new("Frame", {
-    Position = UDim2.fromOffset(22, 8),
-    Size = UDim2.new(1, -44, 0, 2),
-    BackgroundColor3 = Color3.fromRGB(205, 230, 255),
-    BackgroundTransparency = 0.1,
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 0, 0),
+    Size = UDim2.new(0.64, 0, 0, 1),
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundTransparency = 0.12,
     BorderSizePixel = 0,
     ZIndex = 63,
     Parent = keyPanel,
@@ -1010,23 +1026,23 @@ local keyPanelScale = new("UIScale", {
 
 local keyLogoGlow = new("Frame", {
     AnchorPoint = Vector2.new(0.5, 0),
-    Position = UDim2.new(0.5, 0, 0, 18),
-    Size = UDim2.fromOffset(94, 62),
-    BackgroundColor3 = Color3.fromRGB(205, 230, 255),
-    BackgroundTransparency = 0.91,
+    Position = UDim2.new(0.5, 0, 0, 13),
+    Size = UDim2.fromOffset(136, 58),
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundTransparency = 0.96,
     BorderSizePixel = 0,
     ZIndex = 63,
     Parent = keyPanel,
 })
-round(keyLogoGlow, 18)
-local keyLogoGlowStroke = stroke(keyLogoGlow, 0.62)
-keyLogoGlowStroke.Color = Color3.fromRGB(205, 230, 255)
-keyLogoGlowStroke.Thickness = 1.3
+round(keyLogoGlow, 14)
+local keyLogoGlowStroke = stroke(keyLogoGlow, 0.86)
+keyLogoGlowStroke.Color = Color3.fromRGB(255, 255, 255)
+keyLogoGlowStroke.Thickness = 1
 
 local keyLogo = new("ImageLabel", {
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(74, 48),
+    Size = UDim2.fromOffset(116, 50),
     BackgroundTransparency = 1,
     Image = "rbxassetid://85728959011477",
     ScaleType = Enum.ScaleType.Fit,
@@ -1034,122 +1050,126 @@ local keyLogo = new("ImageLabel", {
     Parent = keyLogoGlow,
 })
 
+local keyInputGlow = new("Frame", {
+    Position = UDim2.fromOffset(18, 82),
+    Size = UDim2.new(1, -36, 0, 46),
+    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundTransparency = 0.95,
+    BorderSizePixel = 0,
+    ZIndex = 62,
+    Parent = keyPanel,
+})
+round(keyInputGlow, 12)
+
 local keyInputFrame = new("Frame", {
-    Position = UDim2.fromOffset(22, 92),
-    Size = UDim2.new(1, -44, 0, 52),
-    BackgroundColor3 = Color3.fromRGB(8, 10, 15),
-    BackgroundTransparency = 0.01,
+    Position = UDim2.fromOffset(19, 83),
+    Size = UDim2.new(1, -38, 0, 44),
+    BackgroundColor3 = Color3.fromRGB(12, 12, 13),
+    BackgroundTransparency = 0,
     BorderSizePixel = 0,
     ClipsDescendants = true,
     ZIndex = 63,
     Parent = keyPanel,
 })
-round(keyInputFrame, 14)
-local keyInputStroke = stroke(keyInputFrame, 0.28)
-keyInputStroke.Thickness = 1.35
-keyInputStroke.Color = Color3.fromRGB(178, 215, 255)
-
-local inputAccent = new("Frame", {
-    Position = UDim2.fromOffset(0, 0),
-    Size = UDim2.fromOffset(3, 52),
-    BackgroundColor3 = Color3.fromRGB(210, 235, 255),
-    BackgroundTransparency = 0.06,
-    BorderSizePixel = 0,
-    ZIndex = 64,
-    Parent = keyInputFrame,
-})
-round(inputAccent, 999)
+round(keyInputFrame, 11)
+local keyInputStroke = stroke(keyInputFrame, 0.44)
+keyInputStroke.Thickness = 1
+keyInputStroke.Color = Color3.fromRGB(255, 255, 255)
 
 local keyInput = new("TextBox", {
-    Position = UDim2.fromOffset(15, 0),
-    Size = UDim2.new(1, -30, 1, 0),
+    Position = UDim2.fromOffset(14, 0),
+    Size = UDim2.new(1, -28, 1, 0),
     BackgroundTransparency = 1,
     PlaceholderText = T("keyPlaceholder"),
-    PlaceholderColor3 = Color3.fromRGB(115, 130, 150),
+    PlaceholderColor3 = Color3.fromRGB(145, 145, 150),
     Text = "",
-    TextColor3 = Color3.fromRGB(245, 248, 255),
+    TextColor3 = Color3.fromRGB(255, 255, 255),
     TextSize = 13,
     Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Center,
+    TextXAlignment = Enum.TextXAlignment.Left,
     ClearTextOnFocus = false,
+    TextStrokeTransparency = 1,
     ZIndex = 65,
     Parent = keyInputFrame,
 })
 
 keyInput.Focused:Connect(function()
-    TweenService:Create(keyInputStroke, TweenInfo.new(0.14), {Transparency = 0.04, Thickness = 2}):Play()
-    TweenService:Create(keyInputFrame, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(12, 16, 24)}):Play()
+    TweenService:Create(keyInputStroke, TweenInfo.new(0.14), {Transparency = 0.05, Thickness = 1.5}):Play()
+    TweenService:Create(keyInputFrame, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(17, 17, 18)}):Play()
+    TweenService:Create(keyInputGlow, TweenInfo.new(0.14), {BackgroundTransparency = 0.89}):Play()
 end)
 
 keyInput.FocusLost:Connect(function()
-    TweenService:Create(keyInputStroke, TweenInfo.new(0.14), {Transparency = 0.28, Thickness = 1.35}):Play()
-    TweenService:Create(keyInputFrame, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(8, 10, 15)}):Play()
+    TweenService:Create(keyInputStroke, TweenInfo.new(0.14), {Transparency = 0.44, Thickness = 1}):Play()
+    TweenService:Create(keyInputFrame, TweenInfo.new(0.14), {BackgroundColor3 = Color3.fromRGB(12, 12, 13)}):Play()
+    TweenService:Create(keyInputGlow, TweenInfo.new(0.14), {BackgroundTransparency = 0.95}):Play()
 end)
 
 local rememberKeyChoice = false
 
 local verifyKeyButton = new("TextButton", {
-    Position = UDim2.fromOffset(22, 154),
-    Size = UDim2.new(0.5, -27, 0, 40),
-    BackgroundColor3 = Color3.fromRGB(225, 238, 255),
-    BackgroundTransparency = 0.02,
+    Position = UDim2.fromOffset(19, 140),
+    Size = UDim2.new(0.5, -24, 0, 38),
+    BackgroundColor3 = Color3.fromRGB(245, 245, 245),
+    BackgroundTransparency = 0,
     BorderSizePixel = 0,
     Text = T("verifyKey"),
-    TextColor3 = Color3.fromRGB(5, 8, 14),
-    TextSize = 10,
+    TextColor3 = Color3.fromRGB(5, 5, 6),
+    TextStrokeTransparency = 1,
+    TextSize = 11,
     Font = Enum.Font.Gotham,
     AutoButtonColor = false,
     ZIndex = 63,
     Parent = keyPanel,
 })
-round(verifyKeyButton, 12)
-local verifyStroke = stroke(verifyKeyButton, 0.5)
-verifyStroke.Color = Color3.fromRGB(225, 238, 255)
-verifyStroke.Thickness = 1.2
+round(verifyKeyButton, 10)
+local verifyStroke = stroke(verifyKeyButton, 0.72)
+verifyStroke.Color = Color3.fromRGB(255, 255, 255)
+verifyStroke.Thickness = 1
 
 local getKeyButton = new("TextButton", {
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -22, 0, 154),
-    Size = UDim2.new(0.5, -27, 0, 40),
-    BackgroundColor3 = Color3.fromRGB(14, 17, 24),
-    BackgroundTransparency = 0.01,
+    Position = UDim2.new(1, -19, 0, 140),
+    Size = UDim2.new(0.5, -24, 0, 38),
+    BackgroundColor3 = Color3.fromRGB(14, 14, 15),
+    BackgroundTransparency = 0,
     BorderSizePixel = 0,
     Text = T("getKeyDiscord"),
-    TextColor3 = Color3.fromRGB(240, 246, 255),
+    TextColor3 = Color3.fromRGB(255, 255, 255),
     TextStrokeTransparency = 1,
-    TextSize = 10,
+    TextSize = 11,
     Font = Enum.Font.Gotham,
     AutoButtonColor = false,
     ZIndex = 63,
     Parent = keyPanel,
 })
-round(getKeyButton, 12)
-local getKeyStroke = stroke(getKeyButton, 0.24)
-getKeyStroke.Color = Color3.fromRGB(176, 214, 255)
-getKeyStroke.Thickness = 1.15
+round(getKeyButton, 10)
+local getKeyStroke = stroke(getKeyButton, 0.35)
+getKeyStroke.Color = Color3.fromRGB(255, 255, 255)
+getKeyStroke.Thickness = 1
 
 local rememberKeyButton = new("TextButton", {
-    Position = UDim2.fromOffset(22, 204),
-    Size = UDim2.new(1, -44, 0, 42),
-    BackgroundColor3 = Color3.fromRGB(9, 11, 16),
-    BackgroundTransparency = 0.01,
+    Position = UDim2.fromOffset(19, 190),
+    Size = UDim2.new(1, -38, 0, 40),
+    BackgroundColor3 = Color3.fromRGB(11, 11, 12),
+    BackgroundTransparency = 0,
     BorderSizePixel = 0,
     Text = "",
     AutoButtonColor = false,
     ZIndex = 63,
     Parent = keyPanel,
 })
-round(rememberKeyButton, 12)
-local rememberKeyStroke = stroke(rememberKeyButton, 0.46)
-rememberKeyStroke.Thickness = 1.15
-rememberKeyStroke.Color = Color3.fromRGB(145, 175, 210)
+round(rememberKeyButton, 10)
+local rememberKeyStroke = stroke(rememberKeyButton, 0.58)
+rememberKeyStroke.Thickness = 1
+rememberKeyStroke.Color = Color3.fromRGB(255, 255, 255)
 
 local rememberKeyLabel = new("TextLabel", {
     Position = UDim2.fromOffset(13, 0),
     Size = UDim2.new(1, -72, 1, 0),
     BackgroundTransparency = 1,
     Text = T("rememberKey"),
-    TextColor3 = Color3.fromRGB(220, 228, 240),
+    TextColor3 = Color3.fromRGB(218, 218, 222),
     TextSize = 10,
     Font = Enum.Font.Gotham,
     TextXAlignment = Enum.TextXAlignment.Left,
@@ -1161,19 +1181,22 @@ local rememberKeyLabel = new("TextLabel", {
 local rememberKeyTrack = new("Frame", {
     AnchorPoint = Vector2.new(1, 0.5),
     Position = UDim2.new(1, -10, 0.5, 0),
-    Size = UDim2.fromOffset(44, 23),
-    BackgroundColor3 = Color3.fromRGB(42, 48, 58),
+    Size = UDim2.fromOffset(42, 22),
+    BackgroundColor3 = Color3.fromRGB(43, 43, 46),
     BorderSizePixel = 0,
     ZIndex = 64,
     Parent = rememberKeyButton,
 })
 round(rememberKeyTrack, 999)
+local rememberTrackStroke = stroke(rememberKeyTrack, 0.74)
+rememberTrackStroke.Color = Color3.fromRGB(255, 255, 255)
+rememberTrackStroke.Thickness = 1
 
 local rememberKeyKnob = new("Frame", {
     AnchorPoint = Vector2.new(0, 0.5),
     Position = UDim2.new(0, 3, 0.5, 0),
-    Size = UDim2.fromOffset(17, 17),
-    BackgroundColor3 = Color3.fromRGB(238, 245, 255),
+    Size = UDim2.fromOffset(16, 16),
+    BackgroundColor3 = Color3.fromRGB(245, 245, 245),
     BorderSizePixel = 0,
     ZIndex = 65,
     Parent = rememberKeyTrack,
@@ -1181,41 +1204,42 @@ local rememberKeyKnob = new("Frame", {
 round(rememberKeyKnob, 999)
 
 local keyStatusLabel = new("TextLabel", {
-    Position = UDim2.fromOffset(22, 253),
-    Size = UDim2.new(1, -44, 0, 26),
+    Position = UDim2.fromOffset(19, 232),
+    Size = UDim2.new(1, -38, 0, 16),
     BackgroundTransparency = 1,
     Text = "",
-    TextColor3 = Color3.fromRGB(170, 190, 215),
+    TextColor3 = Color3.fromRGB(188, 188, 192),
     TextSize = 9,
     Font = Enum.Font.Gotham,
     TextXAlignment = Enum.TextXAlignment.Center,
     TextWrapped = true,
+    TextStrokeTransparency = 1,
     ZIndex = 63,
     Parent = keyPanel,
 })
 
 local function updateRememberKeyButton()
     rememberKeyLabel.Text = T("rememberKey")
-    rememberKeyLabel.TextColor3 = rememberKeyChoice and Color3.fromRGB(245, 248, 255) or Color3.fromRGB(190, 198, 210)
+    rememberKeyLabel.TextColor3 = rememberKeyChoice and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(190, 190, 194)
 
     TweenService:Create(
         rememberKeyTrack,
         TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {BackgroundColor3 = rememberKeyChoice and Color3.fromRGB(210, 232, 255) or Color3.fromRGB(42, 48, 58)}
+        {BackgroundColor3 = rememberKeyChoice and Color3.fromRGB(235, 235, 235) or Color3.fromRGB(43, 43, 46)}
     ):Play()
 
     TweenService:Create(
         rememberKeyKnob,
         TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         {
-            Position = rememberKeyChoice and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
-            BackgroundColor3 = rememberKeyChoice and Color3.fromRGB(8, 12, 18) or Color3.fromRGB(238, 245, 255),
+            Position = rememberKeyChoice and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+            BackgroundColor3 = rememberKeyChoice and Color3.fromRGB(12, 12, 13) or Color3.fromRGB(245, 245, 245),
         }
     ):Play()
 
-    rememberKeyButton.BackgroundColor3 = rememberKeyChoice and Color3.fromRGB(13, 17, 24) or Color3.fromRGB(9, 11, 16)
-    rememberKeyStroke.Transparency = rememberKeyChoice and 0.18 or 0.46
-    rememberKeyStroke.Thickness = rememberKeyChoice and 1.45 or 1.15
+    rememberKeyButton.BackgroundColor3 = rememberKeyChoice and Color3.fromRGB(17, 17, 18) or Color3.fromRGB(11, 11, 12)
+    rememberKeyStroke.Transparency = rememberKeyChoice and 0.28 or 0.58
+    rememberKeyStroke.Thickness = rememberKeyChoice and 1.2 or 1
 end
 
 local function updateKeyLanguage()
@@ -1234,16 +1258,30 @@ rememberKeyButton.MouseButton1Click:Connect(function()
 end)
 
 verifyKeyButton.MouseEnter:Connect(function()
-    TweenService:Create(verifyKeyButton, TweenInfo.new(0.12), {BackgroundTransparency = 0.12}):Play()
+    TweenService:Create(verifyKeyButton, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(220, 220, 222)}):Play()
 end)
 verifyKeyButton.MouseLeave:Connect(function()
-    TweenService:Create(verifyKeyButton, TweenInfo.new(0.12), {BackgroundTransparency = 0.02}):Play()
+    TweenService:Create(verifyKeyButton, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(245, 245, 245)}):Play()
+end)
+verifyKeyButton.MouseButton1Down:Connect(function()
+    TweenService:Create(verifyKeyButton, TweenInfo.new(0.07), {BackgroundColor3 = Color3.fromRGB(195, 195, 198)}):Play()
+end)
+verifyKeyButton.MouseButton1Up:Connect(function()
+    TweenService:Create(verifyKeyButton, TweenInfo.new(0.09), {BackgroundColor3 = Color3.fromRGB(245, 245, 245)}):Play()
 end)
 getKeyButton.MouseEnter:Connect(function()
-    TweenService:Create(getKeyStroke, TweenInfo.new(0.12), {Transparency = 0.06, Thickness = 1.6}):Play()
+    TweenService:Create(getKeyButton, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(24, 24, 26)}):Play()
+    TweenService:Create(getKeyStroke, TweenInfo.new(0.12), {Transparency = 0.08, Thickness = 1.3}):Play()
 end)
 getKeyButton.MouseLeave:Connect(function()
-    TweenService:Create(getKeyStroke, TweenInfo.new(0.12), {Transparency = 0.24, Thickness = 1.15}):Play()
+    TweenService:Create(getKeyButton, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(14, 14, 15)}):Play()
+    TweenService:Create(getKeyStroke, TweenInfo.new(0.12), {Transparency = 0.35, Thickness = 1}):Play()
+end)
+getKeyButton.MouseButton1Down:Connect(function()
+    TweenService:Create(getKeyButton, TweenInfo.new(0.07), {BackgroundColor3 = Color3.fromRGB(32, 32, 34)}):Play()
+end)
+getKeyButton.MouseButton1Up:Connect(function()
+    TweenService:Create(getKeyButton, TweenInfo.new(0.09), {BackgroundColor3 = Color3.fromRGB(14, 14, 15)}):Play()
 end)
 
 getKeyButton.MouseButton1Click:Connect(function()
@@ -1259,180 +1297,220 @@ getKeyButton.MouseButton1Click:Connect(function()
     end
 end)
 
+
+local updateCardOrder
+local updateSearch
+local sortRecentFirst = true
+local closing = false
+
 local content = new("Frame", {
     Size = UDim2.fromScale(1, 1),
     BackgroundTransparency = 1,
     ZIndex = 5,
     Parent = main,
 })
-new("UIPadding", {
-    PaddingTop = UDim.new(0, 8),
-    PaddingBottom = UDim.new(0, 7),
-    PaddingLeft = UDim.new(0, 8),
-    PaddingRight = UDim.new(0, 8),
-    Parent = content,
-})
 
 local header = new("Frame", {
-    Size = UDim2.new(1, 0, 0, 30),
+    Position = UDim2.fromOffset(22, 18),
+    Size = UDim2.new(1, -44, 0, 76),
     BackgroundTransparency = 1,
     ZIndex = 6,
     Parent = content,
 })
 
-new("TextLabel", {
-    Size = UDim2.new(1, -220, 0, 18),
+local headerLogo = new("ImageLabel", {
+    Position = UDim2.fromOffset(0, 0),
+    Size = UDim2.fromOffset(155, 42),
     BackgroundTransparency = 1,
-    Text = "H3X4",
-    TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 15,
-    Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Left,
+    Image = "rbxassetid://85728959011477",
+    ScaleType = Enum.ScaleType.Fit,
     ZIndex = 7,
     Parent = header,
 })
 
 local subtitleLabel = new("TextLabel", {
-    Position = UDim2.fromOffset(0, 16),
-    Size = UDim2.new(1, -220, 0, 12),
+    Position = UDim2.fromOffset(0, 46),
+    Size = UDim2.fromOffset(230, 22),
     BackgroundTransparency = 1,
     Text = T("loaderSubtitle"),
-    TextColor3 = Color3.fromRGB(145, 145, 145),
-    TextSize = 8,
+    TextColor3 = Color3.fromRGB(220, 220, 220),
+    TextSize = 13,
     Font = Enum.Font.Gotham,
     TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 7,
     Parent = header,
 })
 
-local countBadge = new("TextLabel", {
+local close = new("TextButton", {
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -67, 0, 1),
-    Size = UDim2.fromOffset(74, 22),
-    BackgroundColor3 = Color3.new(1, 1, 1),
-    BackgroundTransparency = 0.9,
+    Position = UDim2.new(1, 0, 0, 8),
+    Size = UDim2.fromOffset(54, 54),
+    BackgroundColor3 = Color3.fromRGB(8, 8, 9),
+    BackgroundTransparency = 0.02,
     BorderSizePixel = 0,
-    Text = "0 " .. T("scripts"),
+    Text = "×",
     TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 8,
-    Font = Enum.Font.Gotham,
-    ZIndex = 7,
-    Parent = header,
-})
-round(countBadge, 8)
-stroke(countBadge, 0.86)
-
-local discordButton = new("TextButton", {
-    AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -147, 0, 1),
-    Size = UDim2.fromOffset(66, 22),
-    BackgroundColor3 = Color3.new(1, 1, 1),
-    BackgroundTransparency = 0.03,
-    BorderSizePixel = 0,
-    Text = "Discord",
-    TextColor3 = Color3.new(0, 0, 0),
-    TextSize = 9,
+    TextSize = 30,
     Font = Enum.Font.Gotham,
     AutoButtonColor = false,
     ZIndex = 8,
     Parent = header,
 })
-round(discordButton, 8)
-local discordStroke = stroke(discordButton, 0.02)
-discordStroke.Thickness = 1.5
-
-discordButton.MouseEnter:Connect(function()
-    TweenService:Create(discordButton, TweenInfo.new(0.12), {BackgroundTransparency = 0.12}):Play()
-    TweenService:Create(discordStroke, TweenInfo.new(0.12), {Thickness = 2.2, Transparency = 0}):Play()
-end)
-
-discordButton.MouseLeave:Connect(function()
-    TweenService:Create(discordButton, TweenInfo.new(0.12), {BackgroundTransparency = 0.03}):Play()
-    TweenService:Create(discordStroke, TweenInfo.new(0.12), {Thickness = 1.5, Transparency = 0.02}):Play()
-end)
+round(close, 13)
+local closeStroke = stroke(close, 0.72)
+closeStroke.Thickness = 1.1
 
 local languageButton = new("TextButton", {
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, -31, 0, 0),
-    Size = UDim2.fromOffset(30, 24),
-    BackgroundColor3 = Color3.new(1, 1, 1),
-    BackgroundTransparency = 0.92,
+    Position = UDim2.new(1, -76, 0, 8),
+    Size = UDim2.fromOffset(132, 54),
+    BackgroundColor3 = Color3.fromRGB(8, 8, 9),
+    BackgroundTransparency = 0.02,
     BorderSizePixel = 0,
-    Text = string.upper(currentLanguage),
+    Text = "◎  " .. string.upper(currentLanguage) .. "  ˅",
     TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 8,
+    TextSize = 13,
     Font = Enum.Font.Gotham,
     AutoButtonColor = false,
-    ZIndex = 7,
+    ZIndex = 8,
     Parent = header,
 })
-round(languageButton, 9)
-stroke(languageButton, 0.82)
+round(languageButton, 13)
+stroke(languageButton, 0.76).Thickness = 1.05
 
-local close = new("TextButton", {
+local countBadge = new("TextLabel", {
     AnchorPoint = Vector2.new(1, 0),
-    Position = UDim2.new(1, 0, 0, 0),
-    Size = UDim2.fromOffset(24, 24),
-    BackgroundColor3 = Color3.new(1, 1, 1),
-    BackgroundTransparency = 0.92,
+    Position = UDim2.new(1, -224, 0, 8),
+    Size = UDim2.fromOffset(142, 54),
+    BackgroundColor3 = Color3.fromRGB(8, 8, 9),
+    BackgroundTransparency = 0.02,
     BorderSizePixel = 0,
-    Text = "×",
+    Text = "0 " .. T("scripts"),
     TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 15,
+    TextSize = 13,
     Font = Enum.Font.Gotham,
-    AutoButtonColor = false,
     ZIndex = 7,
     Parent = header,
 })
-round(close, 9)
+round(countBadge, 13)
+stroke(countBadge, 0.8).Thickness = 1
 
-local closing = false
-local function closeLoader(callback)
-    if closing then
-        return
-    end
-    closing = true
+local discordButton = new("TextButton", {
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -374, 0, 8),
+    Size = UDim2.fromOffset(138, 54),
+    BackgroundColor3 = Color3.fromRGB(8, 8, 9),
+    BackgroundTransparency = 0.02,
+    BorderSizePixel = 0,
+    Text = "◉  Discord",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 13,
+    Font = Enum.Font.Gotham,
+    AutoButtonColor = false,
+    ZIndex = 8,
+    Parent = header,
+})
+round(discordButton, 13)
+local discordStroke = stroke(discordButton, 0.72)
+discordStroke.Thickness = 1.1
 
-    TweenService:Create(scale, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = 0.88}):Play()
-    TweenService:Create(main, TweenInfo.new(0.18), {BackgroundTransparency = 1}):Play()
-    TweenService:Create(overlay, TweenInfo.new(0.18), {BackgroundTransparency = 1}):Play()
+local sidebar = new("Frame", {
+    Position = UDim2.fromOffset(22, 116),
+    Size = UDim2.fromOffset(56, 0),
+    BackgroundColor3 = Color3.fromRGB(8, 8, 9),
+    BackgroundTransparency = 0.04,
+    BorderSizePixel = 0,
+    ZIndex = 7,
+    Parent = content,
+})
+round(sidebar, 18)
+stroke(sidebar, 0.74).Thickness = 1
 
-    task.delay(0.19, function()
-        if gui and gui.Parent then
-            gui:Destroy()
-        end
-        if callback then
-            callback()
-        end
-    end)
+local sideLayout = new("UIListLayout", {
+    Padding = UDim.new(0, 10),
+    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Parent = sidebar,
+})
+new("UIPadding", {
+    PaddingTop = UDim.new(0, 12),
+    PaddingBottom = UDim.new(0, 12),
+    Parent = sidebar,
+})
+
+local currentView = "all"
+
+local function createSideButton(icon, order)
+    local b = new("TextButton", {
+        Size = UDim2.fromOffset(40, 40),
+        BackgroundColor3 = Color3.fromRGB(14, 14, 15),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = icon,
+        TextColor3 = Color3.fromRGB(210, 210, 212),
+        TextSize = 20,
+        Font = Enum.Font.Gotham,
+        AutoButtonColor = false,
+        LayoutOrder = order,
+        ZIndex = 8,
+        Parent = sidebar,
+    })
+    round(b, 12)
+    local s = stroke(b, 1)
+    s.Thickness = 1
+    return b, s
 end
 
-close.MouseButton1Click:Connect(function()
-    closeLoader()
-end)
+local homeButton, homeStroke = createSideButton("⌂", 1)
+local favoritesViewButton, favoritesStroke = createSideButton("☆", 2)
+local searchSideButton, searchSideStroke = createSideButton("⌕", 3)
+local discordSideButton, discordSideStroke = createSideButton("◉", 4)
+
+local function setSideActive(button, line, active)
+    TweenService:Create(button, TweenInfo.new(0.15), {
+        BackgroundTransparency = active and 0.18 or 1,
+        TextColor3 = active and Color3.new(1,1,1) or Color3.fromRGB(210,210,212),
+    }):Play()
+    TweenService:Create(line, TweenInfo.new(0.15), {
+        Transparency = active and 0.35 or 1,
+        Thickness = active and 1.35 or 1,
+    }):Play()
+end
 
 local searchFrame = new("Frame", {
-    Position = UDim2.fromOffset(0, 34),
-    Size = UDim2.new(1, 0, 0, 30),
-    BackgroundColor3 = Color3.fromRGB(22, 22, 22),
-    BackgroundTransparency = 0.04,
+    Position = UDim2.fromOffset(100, 104),
+    Size = UDim2.new(1, -372, 0, 62),
+    BackgroundColor3 = Color3.fromRGB(10, 10, 11),
+    BackgroundTransparency = 0.03,
     BorderSizePixel = 0,
     ZIndex = 6,
     Parent = content,
 })
-round(searchFrame, 10)
-local searchStroke = stroke(searchFrame, 0.28)
-searchStroke.Thickness = 1.5
+round(searchFrame, 16)
+local searchStroke = stroke(searchFrame, 0.78)
+searchStroke.Thickness = 1.05
+
+local searchIcon = new("TextLabel", {
+    Position = UDim2.fromOffset(18, 0),
+    Size = UDim2.fromOffset(30, 62),
+    BackgroundTransparency = 1,
+    Text = "⌕",
+    TextColor3 = Color3.fromRGB(220,220,220),
+    TextSize = 24,
+    Font = Enum.Font.Gotham,
+    ZIndex = 7,
+    Parent = searchFrame,
+})
 
 local search = new("TextBox", {
-    Position = UDim2.fromOffset(10, 0),
-    Size = UDim2.new(1, -20, 1, 0),
+    Position = UDim2.fromOffset(58, 0),
+    Size = UDim2.new(1, -72, 1, 0),
     BackgroundTransparency = 1,
     PlaceholderText = T("search"),
-    PlaceholderColor3 = Color3.fromRGB(205, 205, 205),
+    PlaceholderColor3 = Color3.fromRGB(170, 170, 174),
     Text = "",
     TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 11,
+    TextSize = 15,
     Font = Enum.Font.Gotham,
     TextXAlignment = Enum.TextXAlignment.Left,
     ClearTextOnFocus = false,
@@ -1440,81 +1518,128 @@ local search = new("TextBox", {
     Parent = searchFrame,
 })
 
-search.Focused:Connect(function()
-    TweenService:Create(searchFrame, TweenInfo.new(0.14), {
-        BackgroundColor3 = Color3.fromRGB(32, 32, 32),
-        BackgroundTransparency = 0
-    }):Play()
-    TweenService:Create(searchStroke, TweenInfo.new(0.14), {
-        Transparency = 0.05,
-        Thickness = 2
-    }):Play()
-end)
-
-search.FocusLost:Connect(function()
-    TweenService:Create(searchFrame, TweenInfo.new(0.14), {
-        BackgroundColor3 = Color3.fromRGB(22, 22, 22),
-        BackgroundTransparency = 0.04
-    }):Play()
-    TweenService:Create(searchStroke, TweenInfo.new(0.14), {
-        Transparency = 0.28,
-        Thickness = 1.5
-    }):Play()
-end)
+local orderButton = new("TextButton", {
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -22, 0, 104),
+    Size = UDim2.fromOffset(238, 62),
+    BackgroundColor3 = Color3.fromRGB(10, 10, 11),
+    BackgroundTransparency = 0.03,
+    BorderSizePixel = 0,
+    Text = "⇅   " .. (currentLanguage == "en" and "Order" or "Ordenar") .. "   ˅",
+    TextColor3 = Color3.new(1, 1, 1),
+    TextSize = 15,
+    Font = Enum.Font.Gotham,
+    AutoButtonColor = false,
+    ZIndex = 7,
+    Parent = content,
+})
+round(orderButton, 16)
+stroke(orderButton, 0.78).Thickness = 1.05
 
 local list = new("ScrollingFrame", {
-    Position = UDim2.fromOffset(0, 70),
-    Size = UDim2.new(1, 0, 1, -90),
+    Position = UDim2.fromOffset(100, 190),
+    Size = UDim2.new(1, -122, 1, -246),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     ScrollBarThickness = 2,
-    ScrollBarImageColor3 = Color3.fromRGB(210, 210, 210),
+    ScrollBarImageColor3 = Color3.fromRGB(220, 220, 220),
     CanvasSize = UDim2.new(),
-    AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ScrollingDirection = Enum.ScrollingDirection.Y,
+    AutomaticCanvasSize = Enum.AutomaticSize.X,
+    ScrollingDirection = Enum.ScrollingDirection.X,
+    ClipsDescendants = false,
     ZIndex = 6,
     Parent = content,
 })
 
-local grid = new("UIGridLayout", {
-    CellPadding = UDim2.fromOffset(6, 6),
-    CellSize = UDim2.fromOffset(181, 190),
+local cardLayout = new("UIListLayout", {
+    Padding = UDim.new(0, 18),
     FillDirection = Enum.FillDirection.Horizontal,
-    FillDirectionMaxCells = 2,
-    HorizontalAlignment = Enum.HorizontalAlignment.Center,
+    VerticalAlignment = Enum.VerticalAlignment.Center,
+    HorizontalAlignment = Enum.HorizontalAlignment.Left,
     SortOrder = Enum.SortOrder.LayoutOrder,
     Parent = list,
 })
 
+
 new("UIPadding", {
-    PaddingTop = UDim.new(0, 5),
-    PaddingBottom = UDim.new(0, 8),
-    PaddingLeft = UDim.new(0, 2),
-    PaddingRight = UDim.new(0, 2),
+    PaddingLeft = UDim.new(0, 18),
+    PaddingRight = UDim.new(0, 18),
+    PaddingTop = UDim.new(0, 12),
+    PaddingBottom = UDim.new(0, 12),
     Parent = list,
 })
 
+local carouselLeft = new("TextButton", {
+    AnchorPoint = Vector2.new(0, 0.5),
+    Position = UDim2.new(0, 90, 0.5, 40),
+    Size = UDim2.fromOffset(48, 48),
+    BackgroundColor3 = Color3.fromRGB(8,8,9),
+    BackgroundTransparency = 0.1,
+    BorderSizePixel = 0,
+    Text = "‹",
+    TextColor3 = Color3.new(1,1,1),
+    TextSize = 32,
+    Font = Enum.Font.Gotham,
+    AutoButtonColor = false,
+    ZIndex = 12,
+    Parent = content,
+})
+round(carouselLeft, 999)
+stroke(carouselLeft, 0.65)
+
+local carouselRight = new("TextButton", {
+    AnchorPoint = Vector2.new(1, 0.5),
+    Position = UDim2.new(1, -20, 0.5, 40),
+    Size = UDim2.fromOffset(48, 48),
+    BackgroundColor3 = Color3.fromRGB(8,8,9),
+    BackgroundTransparency = 0.1,
+    BorderSizePixel = 0,
+    Text = "›",
+    TextColor3 = Color3.new(1,1,1),
+    TextSize = 32,
+    Font = Enum.Font.Gotham,
+    AutoButtonColor = false,
+    ZIndex = 12,
+    Parent = content,
+})
+round(carouselRight, 999)
+stroke(carouselRight, 0.65)
+
+local function moveCarousel(direction)
+    local maxX = math.max(0, list.AbsoluteCanvasSize.X - list.AbsoluteSize.X)
+    local target = math.clamp(list.CanvasPosition.X + (direction * math.floor(list.AbsoluteSize.X * 0.72)), 0, maxX)
+    TweenService:Create(list, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        CanvasPosition = Vector2.new(target, 0),
+    }):Play()
+end
+
+carouselLeft.MouseButton1Click:Connect(function()
+    moveCarousel(-1)
+end)
+carouselRight.MouseButton1Click:Connect(function()
+    moveCarousel(1)
+end)
+
 local status = new("TextLabel", {
-    AnchorPoint = Vector2.new(0, 1),
-    Position = UDim2.new(0, 0, 1, 0),
-    Size = UDim2.new(1, 0, 0, 14),
+    Position = UDim2.fromOffset(100, 1),
+    Size = UDim2.fromOffset(0, 0),
     BackgroundTransparency = 1,
     Text = T("loadingScripts"),
-    TextColor3 = Color3.fromRGB(130, 130, 130),
-    TextSize = 8,
+    TextColor3 = Color3.fromRGB(145, 145, 148),
+    TextSize = 0,
     Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Left,
+    Visible = false,
     ZIndex = 7,
     Parent = content,
 })
 
 local noResults = new("TextLabel", {
-    Position = UDim2.fromOffset(0, 68),
-    Size = UDim2.new(1, 0, 1, -88),
+    Position = UDim2.new(0, 100, 0, 185),
+    Size = UDim2.new(1, -122, 1, -246),
     BackgroundTransparency = 1,
     Text = T("noResults"),
-    TextColor3 = Color3.fromRGB(180, 180, 180),
-    TextSize = 12,
+    TextColor3 = Color3.fromRGB(190, 190, 194),
+    TextSize = 16,
     Font = Enum.Font.Gotham,
     TextXAlignment = Enum.TextXAlignment.Center,
     TextYAlignment = Enum.TextYAlignment.Center,
@@ -1522,6 +1647,174 @@ local noResults = new("TextLabel", {
     ZIndex = 8,
     Parent = content,
 })
+
+orderButton.MouseButton1Click:Connect(function()
+    sortRecentFirst = not sortRecentFirst
+    orderButton.Text = sortRecentFirst
+        and ("⇅   " .. (currentLanguage == "en" and "Order: Recent" or "Ordenar: Recientes") .. "   ˅")
+        or ("⇅   " .. (currentLanguage == "en" and "Order: Oldest" or "Ordenar: Antiguos") .. "   ˅")
+    if updateCardOrder then
+        updateCardOrder()
+    end
+end)
+
+search.Focused:Connect(function()
+    TweenService:Create(searchFrame, TweenInfo.new(0.15), {
+        BackgroundColor3 = Color3.fromRGB(18, 18, 20),
+        BackgroundTransparency = 0,
+    }):Play()
+    TweenService:Create(searchStroke, TweenInfo.new(0.15), {
+        Transparency = 0.32,
+        Thickness = 1.6,
+    }):Play()
+end)
+
+search.FocusLost:Connect(function()
+    TweenService:Create(searchFrame, TweenInfo.new(0.15), {
+        BackgroundColor3 = Color3.fromRGB(10, 10, 11),
+        BackgroundTransparency = 0.03,
+    }):Play()
+    TweenService:Create(searchStroke, TweenInfo.new(0.15), {
+        Transparency = 0.78,
+        Thickness = 1.05,
+    }):Play()
+end)
+
+searchSideButton.MouseButton1Click:Connect(function()
+    search:CaptureFocus()
+end)
+
+discordSideButton.MouseButton1Click:Connect(function()
+    local copied = false
+    if type(setclipboard) == "function" then
+        copied = pcall(setclipboard, DISCORD_URL)
+    elseif type(toclipboard) == "function" then
+        copied = pcall(toclipboard, DISCORD_URL)
+    end
+    if copied then
+        showNotice(T("discordCopied"))
+    else
+        showNotice(T("discordCopyFailed"))
+    end
+end)
+
+local function updateSideState()
+    setSideActive(homeButton, homeStroke, currentView == "all")
+    setSideActive(favoritesViewButton, favoritesStroke, currentView == "favorites")
+    setSideActive(searchSideButton, searchSideStroke, false)
+    setSideActive(discordSideButton, discordSideStroke, false)
+end
+
+updateSideState()
+
+local function resizeMainInterface()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local viewport = cam.ViewportSize
+    local mobile = UIS.TouchEnabled and not (UIS.KeyboardEnabled and UIS.MouseEnabled)
+
+    local width
+    local height
+    if mobile then
+        width = math.floor(math.clamp(viewport.X * 0.94, 320, 560))
+        height = math.floor(math.clamp(viewport.Y * 0.86, 500, 760))
+    else
+        width = math.floor(math.clamp(viewport.X * 0.94, 760, 1450))
+        height = math.floor(math.clamp(viewport.Y * 0.90, 560, 900))
+    end
+
+    main.Size = UDim2.fromOffset(width, height)
+
+    local sideW = mobile and 48 or 56
+    local outer = mobile and 12 or 22
+    local headerH = mobile and 66 or 76
+    local searchY = mobile and 90 or 104
+    local searchH = mobile and 50 or 62
+    local sideY = mobile and 90 or 116
+    local listY = mobile and 154 or 190
+    local listBottom = mobile and 20 or 26
+    local mainContentLeft = outer + sideW + (mobile and 12 or 22)
+    local orderW = mobile and 118 or 238
+
+    header.Position = UDim2.fromOffset(outer, mobile and 12 or 18)
+    header.Size = UDim2.new(1, -(outer*2), 0, headerH)
+
+    headerLogo.Size = UDim2.fromOffset(mobile and 108 or 155, mobile and 30 or 42)
+    subtitleLabel.Position = UDim2.fromOffset(0, mobile and 32 or 46)
+    subtitleLabel.Size = UDim2.fromOffset(mobile and 150 or 230, mobile and 18 or 22)
+    subtitleLabel.TextSize = mobile and 10 or 13
+
+    close.Size = UDim2.fromOffset(mobile and 40 or 54, mobile and 40 or 54)
+    close.Position = UDim2.new(1, 0, 0, mobile and 0 or 8)
+    close.TextSize = mobile and 24 or 30
+
+    languageButton.Size = UDim2.fromOffset(mobile and 74 or 132, mobile and 40 or 54)
+    languageButton.Position = UDim2.new(1, -(mobile and 50 or 76), 0, mobile and 0 or 8)
+    languageButton.TextSize = mobile and 10 or 13
+
+    countBadge.Size = UDim2.fromOffset(mobile and 78 or 142, mobile and 40 or 54)
+    countBadge.Position = UDim2.new(1, -(mobile and 132 or 224), 0, mobile and 0 or 8)
+    countBadge.TextSize = mobile and 9 or 13
+
+    discordButton.Size = UDim2.fromOffset(mobile and 86 or 138, mobile and 40 or 54)
+    discordButton.Position = UDim2.new(1, -(mobile and 220 or 374), 0, mobile and 0 or 8)
+    discordButton.Text = mobile and "◉" or "◉  Discord"
+    discordButton.TextSize = mobile and 12 or 13
+
+    sidebar.Position = UDim2.fromOffset(outer, sideY)
+    sidebar.Size = UDim2.fromOffset(sideW, math.max(210, height - sideY - outer))
+    for _, child in ipairs(sidebar:GetChildren()) do
+        if child:IsA("TextButton") then
+            child.Size = UDim2.fromOffset(mobile and 34 or 40, mobile and 34 or 40)
+            child.TextSize = mobile and 17 or 20
+        end
+    end
+
+    if mobile then
+        searchFrame.Position = UDim2.fromOffset(mainContentLeft, searchY)
+        searchFrame.Size = UDim2.new(1, -(mainContentLeft + outer), 0, searchH)
+        orderButton.Position = UDim2.fromOffset(mainContentLeft, searchY + searchH + 8)
+        orderButton.AnchorPoint = Vector2.new(0, 0)
+        orderButton.Size = UDim2.new(1, -(mainContentLeft + outer), 0, 42)
+        listY = searchY + searchH + 62
+        listBottom = 16
+    else
+        searchFrame.Position = UDim2.fromOffset(mainContentLeft, searchY)
+        searchFrame.Size = UDim2.new(1, -(mainContentLeft + outer + orderW + 12), 0, searchH)
+        orderButton.Position = UDim2.new(1, -outer, 0, searchY)
+        orderButton.AnchorPoint = Vector2.new(1, 0)
+        orderButton.Size = UDim2.fromOffset(orderW, searchH)
+    end
+
+    searchIcon.Size = UDim2.fromOffset(mobile and 26 or 30, searchH)
+    searchIcon.Position = UDim2.fromOffset(mobile and 12 or 18, 0)
+    searchIcon.TextSize = mobile and 20 or 24
+    search.Position = UDim2.fromOffset(mobile and 46 or 58, 0)
+    search.Size = UDim2.new(1, -(mobile and 56 or 72), 1, 0)
+    search.TextSize = mobile and 12 or 15
+    orderButton.TextSize = mobile and 11 or 15
+
+    list.Position = UDim2.fromOffset(mainContentLeft, listY)
+    list.Size = UDim2.new(1, -(mainContentLeft + outer), 1, -(listY + listBottom))
+
+    noResults.Position = UDim2.fromOffset(mainContentLeft, listY)
+    noResults.Size = UDim2.new(1, -(mainContentLeft + outer), 1, -(listY + listBottom))
+    noResults.TextSize = mobile and 13 or 16
+
+    carouselLeft.Position = UDim2.new(0, mainContentLeft - (mobile and 18 or 10), 0.5, mobile and 65 or 40)
+    carouselLeft.Size = UDim2.fromOffset(mobile and 34 or 48, mobile and 34 or 48)
+    carouselLeft.TextSize = mobile and 24 or 32
+    carouselRight.Position = UDim2.new(1, -outer + (mobile and 8 or 2), 0.5, mobile and 65 or 40)
+    carouselRight.Size = UDim2.fromOffset(mobile and 34 or 48, mobile and 34 or 48)
+    carouselRight.TextSize = mobile and 24 or 32
+end
+
+resizeMainInterface()
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        resizeMainInterface()
+    end)
+end
 
 local detailsShade = new("Frame", {
     Size = UDim2.fromScale(1, 1),
@@ -1862,14 +2155,15 @@ end)
 local cards = {}
 local userIsVip = false
 
-local function updateCardOrder()
+updateCardOrder = function()
     for _, c in ipairs(cards) do
         if c.Frame and c.Frame.Parent then
             local rawIndex = tonumber(c.RawIndex) or 0
+            local orderIndex = sortRecentFirst and -rawIndex or rawIndex
             if isFavorite(c.Data) then
-                c.Frame.LayoutOrder = 100000 - rawIndex
+                c.Frame.LayoutOrder = -100000 + orderIndex
             else
-                c.Frame.LayoutOrder = 200000 - rawIndex
+                c.Frame.LayoutOrder = 100000 + orderIndex
             end
         end
     end
@@ -1877,6 +2171,35 @@ end
 
 local function cardIsMobile()
     return UIS.TouchEnabled and not (UIS.KeyboardEnabled and UIS.MouseEnabled)
+end
+
+
+local selectedCard = nil
+
+local function setSelectedCard(entry)
+    if selectedCard and selectedCard ~= entry and selectedCard.Stroke and selectedCard.Stroke.Parent then
+        TweenService:Create(selectedCard.Stroke, TweenInfo.new(0.16), {
+            Transparency = 0.82,
+            Thickness = 1,
+        }):Play()
+        if selectedCard.Frame then
+            TweenService:Create(selectedCard.Frame, TweenInfo.new(0.16), {
+                BackgroundTransparency = 0.08,
+            }):Play()
+        end
+    end
+
+    selectedCard = entry
+
+    if entry and entry.Stroke and entry.Stroke.Parent then
+        TweenService:Create(entry.Stroke, TweenInfo.new(0.16), {
+            Transparency = 0.18,
+            Thickness = 1.65,
+        }):Play()
+        TweenService:Create(entry.Frame, TweenInfo.new(0.16), {
+            BackgroundTransparency = 0.01,
+        }):Play()
+    end
 end
 
 local function createCard(data, index)
@@ -1888,33 +2211,36 @@ local function createCard(data, index)
     local description = localizedDescription(data)
     local tag = getTag(data)
 
+    local mobileCard = cardIsMobile()
+    local cardWidth = mobileCard and 215 or 260
+    local cardHeight = mobileCard and 330 or 420
+    local imageHeight = mobileCard and 126 or 176
+
     local card = new("Frame", {
-        BackgroundColor3 = Color3.fromRGB(10, 10, 10),
-        BackgroundTransparency = 0.12,
+        Size = UDim2.fromOffset(cardWidth, cardHeight),
+        BackgroundColor3 = Color3.fromRGB(8, 8, 9),
+        BackgroundTransparency = 0.08,
         BorderSizePixel = 0,
-        LayoutOrder = (isFavorite(data) and 100000 or 200000) - index,
-        ClipsDescendants = true,
+        LayoutOrder = 0,
+        ClipsDescendants = false,
+        Active = true,
         ZIndex = 7,
         Parent = list,
     })
-    round(card, 12)
-    stroke(card, 0.82)
-
-    local mobileCard = cardIsMobile()
-    local imageHeight = mobileCard and 84 or 145
-    local titleY = mobileCard and 98 or 159
-    local descriptionY = mobileCard and 117 or 178
+    round(card, 18)
+    local cardStroke = stroke(card, 0.82)
+    cardStroke.Thickness = 1
 
     local imageHolder = new("Frame", {
-        Position = UDim2.fromOffset(6, 6),
-        Size = UDim2.new(1, -12, 0, imageHeight),
-        BackgroundColor3 = Color3.fromRGB(4, 4, 4),
+        Position = UDim2.fromOffset(10, 10),
+        Size = UDim2.new(1, -20, 0, imageHeight),
+        BackgroundColor3 = Color3.fromRGB(4, 4, 5),
         BorderSizePixel = 0,
         ClipsDescendants = true,
         ZIndex = 8,
         Parent = card,
     })
-    round(imageHolder, 9)
+    round(imageHolder, 14)
     stroke(imageHolder, 0.9)
 
     local cardImage = new("ImageLabel", {
@@ -1922,71 +2248,94 @@ local function createCard(data, index)
         BackgroundTransparency = 1,
         Image = tostring(data.Image or ""),
         ImageTransparency = 0,
-        ScaleType = mobileCard and Enum.ScaleType.Fit or Enum.ScaleType.Crop,
+        ScaleType = Enum.ScaleType.Crop,
         ZIndex = 9,
         Parent = imageHolder,
     })
 
-
     local tagLabel
     if tag then
-        local tagWidth = math.clamp(26 + (#tag.Title * 6), 58, 118)
+        local tagWidth = math.clamp(32 + (#tag.Title * 7), 72, 155)
         tagLabel = new("TextLabel", {
-            Position = UDim2.fromOffset(8, 8),
-            Size = UDim2.fromOffset(tagWidth, 20),
-            BackgroundColor3 = tag.Color,
-            BackgroundTransparency = 0.03,
+            Position = UDim2.fromOffset(10, 10),
+            Size = UDim2.fromOffset(tagWidth, 28),
+            BackgroundColor3 = Color3.fromRGB(12, 12, 13),
+            BackgroundTransparency = 0.08,
             BorderSizePixel = 0,
             Text = tag.Title,
-            TextSize = 8,
+            TextColor3 = Color3.new(1,1,1),
+            TextSize = mobileCard and 9 or 11,
             Font = Enum.Font.Gotham,
-            ZIndex = 11,
+            ZIndex = 12,
             Parent = imageHolder,
         })
-        local luminance = (tag.Color.R * 0.299) + (tag.Color.G * 0.587) + (tag.Color.B * 0.114)
-        tagLabel.TextColor3 = luminance > 0.62 and Color3.new(0, 0, 0) or Color3.new(1, 1, 1)
-        round(tagLabel, 7)
+        round(tagLabel, 9)
+        local tagStroke = stroke(tagLabel, 0.76)
+        tagStroke.Color = tag.Color
+        tagStroke.Thickness = 1.1
     end
 
     local favoriteButton = new("TextButton", {
         AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -8, 0, 8),
-        Size = UDim2.fromOffset(26, 26),
-        BackgroundColor3 = Color3.fromRGB(8, 8, 8),
+        Position = UDim2.new(1, -10, 0, 10),
+        Size = UDim2.fromOffset(36, 36),
+        BackgroundColor3 = Color3.fromRGB(9, 9, 10),
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
         Text = isFavorite(data) and "★" or "☆",
         TextColor3 = Color3.new(1, 1, 1),
-        TextSize = 18,
+        TextSize = 23,
         Font = Enum.Font.Gotham,
         AutoButtonColor = false,
-        ZIndex = 12,
+        ZIndex = 13,
         Parent = imageHolder,
     })
-    round(favoriteButton, 8)
-    stroke(favoriteButton, 0.7)
+    round(favoriteButton, 12)
+    stroke(favoriteButton, 0.72)
 
+    local detailsButton = new("TextButton", {
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -52, 0, 10),
+        Size = UDim2.fromOffset(36, 36),
+        BackgroundColor3 = Color3.fromRGB(9, 9, 10),
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        Text = "i",
+        TextColor3 = Color3.new(1,1,1),
+        TextSize = 19,
+        Font = Enum.Font.Gotham,
+        AutoButtonColor = false,
+        ZIndex = 13,
+        Parent = imageHolder,
+    })
+    round(detailsButton, 12)
+    stroke(detailsButton, 0.72)
+
+    local titleY = 20 + imageHeight
     local titleLabel = new("TextLabel", {
-        Position = UDim2.fromOffset(9, titleY),
-        Size = UDim2.new(1, -18, 0, 16),
+        Position = UDim2.fromOffset(16, titleY),
+        Size = UDim2.new(1, -32, 0, mobileCard and 44 or 52),
         BackgroundTransparency = 1,
         Text = title,
         TextColor3 = Color3.new(1, 1, 1),
-        TextSize = 11,
+        TextSize = mobileCard and 15 or 19,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        TextWrapped = true,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 8,
         Parent = card,
     })
 
+    local descriptionY = titleY + (mobileCard and 48 or 58)
     local descriptionLabel = new("TextLabel", {
-        Position = UDim2.fromOffset(9, descriptionY),
-        Size = UDim2.new(1, -18, 0, mobileCard and 38 or 50),
+        Position = UDim2.fromOffset(16, descriptionY),
+        Size = UDim2.new(1, -32, 0, mobileCard and 92 or 104),
         BackgroundTransparency = 1,
         Text = description,
-        TextColor3 = Color3.fromRGB(155, 155, 155),
-        TextSize = 13,
+        TextColor3 = Color3.fromRGB(190, 190, 194),
+        TextSize = mobileCard and 12 or 14,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
@@ -1996,38 +2345,37 @@ local function createCard(data, index)
     })
 
     local button = new("TextButton", {
-        AnchorPoint = Vector2.new(0, 1),
-        Position = UDim2.new(0, 9, 1, -7),
-        Size = UDim2.new(0.5, -13, 0, 25),
-        BackgroundColor3 = Color3.new(1, 1, 1),
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 1, -14),
+        Size = UDim2.new(1, -32, 0, mobileCard and 42 or 52),
+        BackgroundColor3 = Color3.fromRGB(244, 244, 246),
         BorderSizePixel = 0,
-        Text = T("execute"),
-        TextColor3 = Color3.new(0, 0, 0),
-        TextSize = mobileCard and 7 or 8,
+        Text = T("execute") .. "     ▶",
+        TextColor3 = Color3.fromRGB(8, 8, 9),
+        TextSize = mobileCard and 11 or 14,
         Font = Enum.Font.Gotham,
         AutoButtonColor = false,
-        ZIndex = 8,
+        ZIndex = 9,
         Parent = card,
     })
-    round(button, 8)
+    round(button, 12)
 
-    local detailsButton = new("TextButton", {
-        AnchorPoint = Vector2.new(1, 1),
-        Position = UDim2.new(1, -9, 1, -7),
-        Size = UDim2.new(0.5, -13, 0, 25),
-        BackgroundColor3 = Color3.fromRGB(126, 96, 28),
-        BackgroundTransparency = 0.03,
-        BorderSizePixel = 0,
-        Text = T("details"),
-        TextColor3 = Color3.new(1, 1, 1),
-        TextStrokeTransparency = 1,
-        TextSize = mobileCard and 7 or 9,
-        Font = Enum.Font.Gotham,
-        AutoButtonColor = false,
-        ZIndex = 8,
-        Parent = card,
-    })
-    round(detailsButton, 8)
+    local entry = {
+        Frame = card,
+        Data = data,
+        TitleLabel = titleLabel,
+        DescriptionLabel = descriptionLabel,
+        Button = button,
+        DetailsButton = detailsButton,
+        FavoriteButton = favoriteButton,
+        TagLabel = tagLabel,
+        RawIndex = index,
+        Title = title:lower(),
+        Description = description:lower(),
+        Tag = tag and tag.Title:lower() or "",
+        SearchText = buildSearchText(data) .. " " .. normalizeSearchText(tag and tag.Title or ""),
+        Stroke = cardStroke,
+    }
 
     favoriteButton.MouseButton1Click:Connect(function()
         local newValue = not isFavorite(data)
@@ -2035,28 +2383,48 @@ local function createCard(data, index)
         favoriteButton.Text = newValue and "★" or "☆"
         updateCardOrder()
         status.Text = newValue and T("favoriteAdded") or T("favoriteRemoved")
+        if currentView == "favorites" then
+            updateSearch()
+        end
     end)
 
     detailsButton.MouseButton1Click:Connect(function()
+        setSelectedCard(entry)
         openDetails(data)
     end)
 
+    card.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            setSelectedCard(entry)
+        end
+    end)
+
     button.MouseEnter:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.12), {BackgroundTransparency = 0.12}):Play()
+        TweenService:Create(button, TweenInfo.new(0.12), {
+            BackgroundColor3 = Color3.new(1,1,1),
+        }):Play()
+        setSelectedCard(entry)
     end)
     button.MouseLeave:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.12), {BackgroundTransparency = 0}):Play()
+        TweenService:Create(button, TweenInfo.new(0.12), {
+            BackgroundColor3 = Color3.fromRGB(244,244,246),
+        }):Play()
     end)
-    detailsButton.MouseEnter:Connect(function()
-        TweenService:Create(detailsButton, TweenInfo.new(0.12), {BackgroundTransparency = 0}):Play()
+    button.MouseButton1Down:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.08), {
+            BackgroundColor3 = Color3.fromRGB(210,210,212),
+        }):Play()
     end)
-    detailsButton.MouseLeave:Connect(function()
-        TweenService:Create(detailsButton, TweenInfo.new(0.12), {BackgroundTransparency = 0.03}):Play()
+    button.MouseButton1Up:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.1), {
+            BackgroundColor3 = Color3.fromRGB(244,244,246),
+        }):Play()
     end)
+
     button.MouseButton1Click:Connect(function()
         if closing then return end
 
-
+        setSelectedCard(entry)
         local activeTitle = localizedTitle(data)
         button.Text = T("loading")
         status.Text = string.format(T("preparing"), activeTitle)
@@ -2074,7 +2442,7 @@ local function createCard(data, index)
                 status.Text = string.format(T("loadError"), activeTitle)
                 warn("[H3X4 Loader] " .. tostring(result))
                 task.wait(1.1)
-                if button and button.Parent then button.Text = T("execute") end
+                if button and button.Parent then button.Text = T("execute") .. "     ▶" end
                 return
             end
 
@@ -2092,30 +2460,23 @@ local function createCard(data, index)
         end)
     end)
 
-    table.insert(cards, {
-        Frame = card,
-        Data = data,
-        TitleLabel = titleLabel,
-        DescriptionLabel = descriptionLabel,
-        Button = button,
-        DetailsButton = detailsButton,
-        FavoriteButton = favoriteButton,
-        TagLabel = tagLabel,
-        RawIndex = index,
-        Title = title:lower(),
-        Description = description:lower(),
-        Tag = tag and tag.Title:lower() or "",
-        SearchText = buildSearchText(data) .. " " .. normalizeSearchText(tag and tag.Title or ""),
-    })
+    table.insert(cards, entry)
+    updateCardOrder()
+
+    if not selectedCard then
+        setSelectedCard(entry)
+    end
 end
 
-local function updateSearch()
+updateSearch = function()
     local q = normalizeSearchText(search.Text)
     local found = 0
 
     for _, c in ipairs(cards) do
         local haystack = c.SearchText or normalizeSearchText((c.Title or "") .. " " .. (c.Description or "") .. " " .. (c.Tag or ""))
-        local visible = q == "" or string.find(haystack, q, 1, true) ~= nil
+        local matchesText = q == "" or string.find(haystack, q, 1, true) ~= nil
+        local matchesView = currentView ~= "favorites" or isFavorite(c.Data)
+        local visible = matchesText and matchesView
 
         c.Frame.Visible = visible
         if visible then
@@ -2123,14 +2484,27 @@ local function updateSearch()
         end
     end
 
-    if q == "" then
-        noResults.Visible = false
+    noResults.Visible = found == 0
+    if q == "" and currentView == "all" then
         status.Text = (#cards == 1) and T("oneAvailable") or string.format(T("available"), #cards)
+    elseif q == "" and currentView == "favorites" then
+        status.Text = currentLanguage == "en" and (tostring(found) .. " favorites") or (tostring(found) .. " favoritos")
     else
-        noResults.Visible = found == 0
         status.Text = (found == 1) and T("oneResult") or string.format(T("results"), found)
     end
 end
+
+homeButton.MouseButton1Click:Connect(function()
+    currentView = "all"
+    updateSideState()
+    updateSearch()
+end)
+
+favoritesViewButton.MouseButton1Click:Connect(function()
+    currentView = "favorites"
+    updateSideState()
+    updateSearch()
+end)
 
 search:GetPropertyChangedSignal("Text"):Connect(updateSearch)
 
@@ -2232,7 +2606,7 @@ local function refreshCardsLanguage()
                 c.Button.Text = T("execute")
             end
             if c.DetailsButton and c.DetailsButton.Parent then
-                c.DetailsButton.Text = T("details")
+                c.DetailsButton.Text = "i"
             end
             local tag = getTag(c.Data)
             c.Tag = tag and tag.Title:lower() or ""
@@ -2241,12 +2615,15 @@ local function refreshCardsLanguage()
             if c.TagLabel and c.TagLabel.Parent then
                 if tag then
                     local tagWidth = math.clamp(26 + (#tag.Title * 6), 58, 118)
-                    c.TagLabel.Size = UDim2.fromOffset(tagWidth, 20)
+                    c.TagLabel.Size = UDim2.fromOffset(math.clamp(32 + (#tag.Title * 7), 72, 155), 28)
                     c.TagLabel.Visible = true
                     c.TagLabel.Text = tag.Title
-                    c.TagLabel.BackgroundColor3 = tag.Color
-                    local luminance = (tag.Color.R * 0.299) + (tag.Color.G * 0.587) + (tag.Color.B * 0.114)
-                    c.TagLabel.TextColor3 = luminance > 0.62 and Color3.new(0, 0, 0) or Color3.new(1, 1, 1)
+                    c.TagLabel.BackgroundColor3 = Color3.fromRGB(12, 12, 13)
+                    c.TagLabel.TextColor3 = Color3.new(1, 1, 1)
+                    local tagStroke = c.TagLabel:FindFirstChildOfClass("UIStroke")
+                    if tagStroke then
+                        tagStroke.Color = tag.Color
+                    end
                 else
                     c.TagLabel.Visible = false
                 end
@@ -2260,8 +2637,11 @@ local function applyLanguageToUI()
     subtitleLabel.Text = T("loaderSubtitle")
     search.PlaceholderText = T("search")
     noResults.Text = T("noResults")
-    languageButton.Text = string.upper(currentLanguage)
+    languageButton.Text = (UIS.TouchEnabled and not (UIS.KeyboardEnabled and UIS.MouseEnabled)) and ("◎  " .. string.upper(currentLanguage)) or ("◎  " .. string.upper(currentLanguage) .. "  ˅")
     detailsHeader.Text = T("detailsTitle")
+    orderButton.Text = sortRecentFirst
+        and ("⇅   " .. (currentLanguage == "en" and "Order: Recent" or "Ordenar: Recientes") .. "   ˅")
+        or ("⇅   " .. (currentLanguage == "en" and "Order: Oldest" or "Ordenar: Antiguos") .. "   ˅")
     if detailsShade.Visible and currentDetailsData then
         refreshDetails()
     end
@@ -2277,6 +2657,7 @@ local function applyLanguageToUI()
 end
 
 local function openMainLoader()
+    resizeMainInterface()
     applyLanguageToUI()
     main.Visible = true
     scale.Scale = 0.82
@@ -2487,64 +2868,42 @@ end)
 
 local cam = workspace.CurrentCamera
 
-local function isMobileDevice()
-    return cardIsMobile()
-end
-
-local function resize()
-    if not cam then
+close.MouseButton1Click:Connect(function()
+    if closing then
         return
     end
+    closing = true
+    TweenService:Create(scale, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = 0.94}):Play()
+    TweenService:Create(overlay, TweenInfo.new(0.18), {BackgroundTransparency = 1}):Play()
+    task.delay(0.19, function()
+        if gui and gui.Parent then
+            gui:Destroy()
+        end
+    end)
+end)
 
-    local v = cam.ViewportSize
-    local mobile = isMobileDevice()
-    local width
-    local height
-
-    if mobile then
-        width = math.clamp(v.X - 24, 306, 420)
-        height = math.clamp(v.Y - 38, 304, 335)
-    else
-        width = math.min(math.clamp(v.X * 0.55, 500, 610), math.max(306, v.X - 36))
-        height = math.min(math.clamp(v.Y * 0.56, 370, 430), math.max(304, v.Y - 46))
-    end
-
-    main.Size = UDim2.fromOffset(width, height)
-    noticeFrame.Size = UDim2.fromOffset(mobile and math.clamp(v.X - 28, 240, 310) or 310, mobile and 82 or 68)
-
-    if mobile then
-        local keyW = math.clamp(v.X - 50, 276, 336)
-        keyPanel.Size = UDim2.fromOffset(keyW, 288)
-        keyGlowOuter.Size = UDim2.fromOffset(keyW + 14, 302)
-        languagePanel.Size = UDim2.fromOffset(math.clamp(v.X - 42, 286, 340), 232)
-    else
-        keyPanel.Size = UDim2.fromOffset(360, 292)
-        keyGlowOuter.Size = UDim2.fromOffset(376, 306)
-        languagePanel.Size = UDim2.fromOffset(360, 232)
-    end
-
-    if width < 350 then
-        grid.FillDirectionMaxCells = 1
-        grid.CellSize = UDim2.new(1, -8, 0, 190)
-    else
-        grid.FillDirectionMaxCells = 2
-        grid.CellSize = UDim2.new(0.5, -6, 0, mobile and 190 or 270)
-    end
-end
-
-resize()
-if cam then
-    cam:GetPropertyChangedSignal("ViewportSize"):Connect(resize)
-    cam:GetPropertyChangedSignal("ViewportSize"):Connect(resizeDetailsPanel)
-end
+resizeMainInterface()
 resizeDetailsPanel()
 
-UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(resize)
-UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(resize)
-UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(resize)
-UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(resizeDetailsPanel)
-UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(resizeDetailsPanel)
-UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(resizeDetailsPanel)
+if cam then
+    cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        resizeMainInterface()
+        resizeDetailsPanel()
+    end)
+end
+
+UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(function()
+    resizeMainInterface()
+    resizeDetailsPanel()
+end)
+UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(function()
+    resizeMainInterface()
+    resizeDetailsPanel()
+end)
+UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(function()
+    resizeMainInterface()
+    resizeDetailsPanel()
+end)
 
 if rememberedLanguage ~= nil then
     beginKeyFlow()
