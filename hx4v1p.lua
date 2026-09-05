@@ -10,7 +10,7 @@ return {
     },
 
     ["3693598316"] = { --fenix
-        vip = true,
+        vip = false,
         expires = "permanent"
     },    
         
