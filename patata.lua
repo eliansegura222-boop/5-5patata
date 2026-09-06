@@ -3117,49 +3117,49 @@ local function resize()
     local height
 
     if mobile then
-        -- almost full width; safe clamps so min never exceeds max on small screens
-        width = math.max(260, math.min(v.X - 12, v.X - 8))
-        height = math.max(320, math.min(math.floor(v.Y * 0.78), v.Y - 24))
+        -- narrower main panel only on phones
+        width = math.max(220, math.min(math.floor(v.X * 0.72), v.X - 56))
+        height = math.max(300, math.min(math.floor(v.Y * 0.72), v.Y - 36))
 
-        local chrome = 120 -- header + search + action bar approx
-        local availH = math.max(140, height - chrome)
-        CARD_HEIGHT = math.max(150, math.min(math.floor(availH * 0.82), 210))
-        CARD_WIDTH = math.max(110, math.min(math.floor(CARD_HEIGHT * 0.74), 160))
-        CARD_GAP = 14
+        local chrome = 112
+        local availH = math.max(130, height - chrome)
+        CARD_HEIGHT = math.max(140, math.min(math.floor(availH * 0.8), 190))
+        CARD_WIDTH = math.max(100, math.min(math.floor(CARD_HEIGHT * 0.72), 140))
+        CARD_GAP = 12
 
-        header.Size = UDim2.new(1, 0, 0, 44)
-        mainLogo.Size = UDim2.fromOffset(48, 48)
-        mainLogo.Position = UDim2.fromOffset(-2, -2)
+        header.Size = UDim2.new(1, 0, 0, 40)
+        mainLogo.Size = UDim2.fromOffset(42, 42)
+        mainLogo.Position = UDim2.fromOffset(-1, -1)
 
-        searchRow.Position = UDim2.fromOffset(0, 46)
-        searchRow.Size = UDim2.new(1, 0, 0, 28)
+        searchRow.Position = UDim2.fromOffset(0, 42)
+        searchRow.Size = UDim2.new(1, 0, 0, 26)
 
         searchFrame.AnchorPoint = Vector2.new(0, 0.5)
         searchFrame.Position = UDim2.new(0, 0, 0.5, 0)
-        searchFrame.Size = UDim2.new(1, -100, 0, 26)
+        searchFrame.Size = UDim2.new(1, -88, 0, 24)
 
         categoryButton.AnchorPoint = Vector2.new(1, 0.5)
         categoryButton.Position = UDim2.new(1, 0, 0.5, 0)
-        categoryButton.Size = UDim2.fromOffset(94, 26)
+        categoryButton.Size = UDim2.fromOffset(82, 24)
 
-        carouselArea.Position = UDim2.fromOffset(0, 78)
-        carouselArea.Size = UDim2.new(1, 0, 1, -118)
+        carouselArea.Position = UDim2.fromOffset(0, 72)
+        carouselArea.Size = UDim2.new(1, 0, 1, -108)
 
-        noResults.Position = UDim2.fromOffset(0, 78)
-        noResults.Size = UDim2.new(1, 0, 1, -118)
+        noResults.Position = UDim2.fromOffset(0, 72)
+        noResults.Size = UDim2.new(1, 0, 1, -108)
 
-        actionBar.Position = UDim2.new(0.5, 0, 1, -14)
-        leftArrow.Position = UDim2.new(0, 4, 0.45, 0)
-        rightArrow.Position = UDim2.new(1, -4, 0.45, 0)
-        leftArrow.Size = UDim2.fromOffset(26, 26)
-        rightArrow.Size = UDim2.fromOffset(26, 26)
+        actionBar.Position = UDim2.new(0.5, 0, 1, -12)
+        leftArrow.Position = UDim2.new(0, 2, 0.45, 0)
+        rightArrow.Position = UDim2.new(1, -2, 0.45, 0)
+        leftArrow.Size = UDim2.fromOffset(24, 24)
+        rightArrow.Size = UDim2.fromOffset(24, 24)
 
-        discordButton.Position = UDim2.new(1, -72, 0.5, 0)
-        discordButton.Size = UDim2.fromOffset(64, 24)
-        languageButton.Position = UDim2.new(1, -36, 0.5, 0)
-        languageButton.Size = UDim2.fromOffset(24, 24)
+        discordButton.Position = UDim2.new(1, -64, 0.5, 0)
+        discordButton.Size = UDim2.fromOffset(56, 22)
+        languageButton.Position = UDim2.new(1, -32, 0.5, 0)
+        languageButton.Size = UDim2.fromOffset(22, 22)
         close.Position = UDim2.new(1, 0, 0.5, 0)
-        close.Size = UDim2.fromOffset(24, 24)
+        close.Size = UDim2.fromOffset(22, 22)
     else
         width = math.max(340, math.min(math.floor(v.X * 0.64), 700, v.X - 36))
         height = math.max(360, math.min(math.floor(v.Y * 0.62), 500, v.Y - 46))
