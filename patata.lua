@@ -3117,8 +3117,8 @@ local function resize()
     local height
 
     if mobile then
-        -- narrower on mobile with side margins; safe clamps
-        width = math.max(260, math.min(math.floor(v.X * 0.86), v.X - 40, 380))
+        -- almost full width; safe clamps so min never exceeds max on small screens
+        width = math.max(260, math.min(v.X - 12, v.X - 8))
         height = math.max(320, math.min(math.floor(v.Y * 0.78), v.Y - 24))
 
         local chrome = 120 -- header + search + action bar approx
