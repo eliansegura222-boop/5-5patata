@@ -1481,31 +1481,17 @@ categoryBtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 categoryBtnStroke.Parent = categoryButton
 
 local categoryLabel = new("TextLabel", {
-    Position = UDim2.fromOffset(8, 0),
-    Size = UDim2.new(1, -24, 1, 0),
+    Position = UDim2.fromOffset(6, 0),
+    Size = UDim2.new(1, -12, 1, 0),
     BackgroundTransparency = 1,
     Text = (currentLanguage == "en" and "Category: All" or "Categoría: Todas"),
     TextColor3 = Color3.new(1, 1, 1),
     TextSize = 8,
     Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Left,
+    TextXAlignment = Enum.TextXAlignment.Center,
     TextYAlignment = Enum.TextYAlignment.Center,
     TextStrokeTransparency = 1,
     TextTruncate = Enum.TextTruncate.AtEnd,
-    ZIndex = 7,
-    Parent = categoryButton,
-})
-
-local categoryChevron = new("TextLabel", {
-    AnchorPoint = Vector2.new(1, 0.5),
-    Position = UDim2.new(1, -4, 0.5, 0),
-    Size = UDim2.fromOffset(12, 12),
-    BackgroundTransparency = 1,
-    Text = "▾",
-    TextColor3 = Color3.new(1, 1, 1),
-    TextSize = 11,
-    Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Center,
     ZIndex = 7,
     Parent = categoryButton,
 })
@@ -1582,14 +1568,12 @@ local function setCategoryDropOpen(open)
     if categoryDropOpen then
         positionCategoryDrop()
         categoryDrop.Visible = true
-        categoryChevron.Text = "▴"
         TweenService:Create(categoryDrop, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(math.max(categoryButton.AbsoluteSize.X, 118), 68),
+            Size = UDim2.fromOffset(math.max(categoryButton.AbsoluteSize.X, 100), 68),
         }):Play()
     else
-        categoryChevron.Text = "▾"
         local t = TweenService:Create(categoryDrop, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Size = UDim2.fromOffset(math.max(categoryButton.AbsoluteSize.X, 118), 0),
+            Size = UDim2.fromOffset(math.max(categoryButton.AbsoluteSize.X, 100), 0),
         })
         t:Play()
         t.Completed:Connect(function()
@@ -2314,8 +2298,8 @@ local function applyCarouselVisuals(animate)
     local centerX = areaW * 0.5
 
     local mobile = cardIsMobile()
-    local selectedScale = mobile and 1.02 or 1.05
-    local otherScale = mobile and 0.9 or 0.92
+    local selectedScale = mobile and 1.0 or 1.05
+    local otherScale = mobile and 0.88 or 0.92
     local step = CARD_WIDTH + CARD_GAP
 
     local info = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -3117,49 +3101,51 @@ local function resize()
     local height
 
     if mobile then
-        -- narrower main panel only on phones
-        width = math.max(220, math.min(math.floor(v.X * 0.72), v.X - 56))
-        height = math.max(300, math.min(math.floor(v.Y * 0.72), v.Y - 36))
+        -- taller panel + larger cards, no overflow
+        width = math.max(260, math.min(v.X - 12, v.X - 8))
+        height = math.max(380, math.min(math.floor(v.Y * 0.88), v.Y - 12))
 
-        local chrome = 112
-        local availH = math.max(130, height - chrome)
-        CARD_HEIGHT = math.max(140, math.min(math.floor(availH * 0.8), 190))
-        CARD_WIDTH = math.max(100, math.min(math.floor(CARD_HEIGHT * 0.72), 140))
-        CARD_GAP = 12
+        local chrome = 108 -- header + search + action bar
+        local availH = math.max(160, height - chrome)
+        -- keep cards fully inside carousel (scale 1.0 on mobile)
+        CARD_HEIGHT = math.max(170, math.min(math.floor(availH * 0.92), 250))
+        CARD_WIDTH = math.max(120, math.min(math.floor(CARD_HEIGHT * 0.72), 175))
+        CARD_GAP = 16
 
-        header.Size = UDim2.new(1, 0, 0, 40)
-        mainLogo.Size = UDim2.fromOffset(42, 42)
-        mainLogo.Position = UDim2.fromOffset(-1, -1)
+        header.Size = UDim2.new(1, 0, 0, 42)
+        mainLogo.Size = UDim2.fromOffset(46, 46)
+        mainLogo.Position = UDim2.fromOffset(-2, -2)
 
-        searchRow.Position = UDim2.fromOffset(0, 42)
-        searchRow.Size = UDim2.new(1, 0, 0, 26)
+        searchRow.Position = UDim2.fromOffset(0, 44)
+        searchRow.Size = UDim2.new(1, 0, 0, 28)
 
-        searchFrame.AnchorPoint = Vector2.new(0, 0.5)
-        searchFrame.Position = UDim2.new(0, 0, 0.5, 0)
-        searchFrame.Size = UDim2.new(1, -88, 0, 24)
+        -- shorter search + category, centered as a pair
+        searchFrame.AnchorPoint = Vector2.new(1, 0.5)
+        searchFrame.Position = UDim2.new(0.5, -3, 0.5, 0)
+        searchFrame.Size = UDim2.fromOffset(138, 24)
 
-        categoryButton.AnchorPoint = Vector2.new(1, 0.5)
-        categoryButton.Position = UDim2.new(1, 0, 0.5, 0)
-        categoryButton.Size = UDim2.fromOffset(82, 24)
+        categoryButton.AnchorPoint = Vector2.new(0, 0.5)
+        categoryButton.Position = UDim2.new(0.5, 3, 0.5, 0)
+        categoryButton.Size = UDim2.fromOffset(86, 24)
 
-        carouselArea.Position = UDim2.fromOffset(0, 72)
-        carouselArea.Size = UDim2.new(1, 0, 1, -108)
+        carouselArea.Position = UDim2.fromOffset(0, 76)
+        carouselArea.Size = UDim2.new(1, 0, 1, -110)
 
-        noResults.Position = UDim2.fromOffset(0, 72)
-        noResults.Size = UDim2.new(1, 0, 1, -108)
+        noResults.Position = UDim2.fromOffset(0, 76)
+        noResults.Size = UDim2.new(1, 0, 1, -110)
 
         actionBar.Position = UDim2.new(0.5, 0, 1, -12)
-        leftArrow.Position = UDim2.new(0, 2, 0.45, 0)
-        rightArrow.Position = UDim2.new(1, -2, 0.45, 0)
-        leftArrow.Size = UDim2.fromOffset(24, 24)
-        rightArrow.Size = UDim2.fromOffset(24, 24)
+        leftArrow.Position = UDim2.new(0, 4, 0.45, 0)
+        rightArrow.Position = UDim2.new(1, -4, 0.45, 0)
+        leftArrow.Size = UDim2.fromOffset(26, 26)
+        rightArrow.Size = UDim2.fromOffset(26, 26)
 
-        discordButton.Position = UDim2.new(1, -64, 0.5, 0)
-        discordButton.Size = UDim2.fromOffset(56, 22)
-        languageButton.Position = UDim2.new(1, -32, 0.5, 0)
-        languageButton.Size = UDim2.fromOffset(22, 22)
+        discordButton.Position = UDim2.new(1, -72, 0.5, 0)
+        discordButton.Size = UDim2.fromOffset(64, 24)
+        languageButton.Position = UDim2.new(1, -36, 0.5, 0)
+        languageButton.Size = UDim2.fromOffset(24, 24)
         close.Position = UDim2.new(1, 0, 0.5, 0)
-        close.Size = UDim2.fromOffset(22, 22)
+        close.Size = UDim2.fromOffset(24, 24)
     else
         width = math.max(340, math.min(math.floor(v.X * 0.64), 700, v.X - 36))
         height = math.max(360, math.min(math.floor(v.Y * 0.62), 500, v.Y - 46))
