@@ -2077,13 +2077,13 @@ local function resizeDetailsPanel()
     local imageHeight
 
     if mobile then
-        panelWidth = math.min(math.clamp(viewport.X * 0.58, 205, 270), viewport.X - 90)
-        panelHeight = math.min(math.clamp(viewport.Y * 0.45, 245, 330), viewport.Y - 150)
-        imageHeight = math.clamp(math.floor(panelWidth * 0.27), 56, 74)
+        panelWidth = math.max(180, math.min(math.floor(viewport.X * 0.72), 280, viewport.X - 40))
+        panelHeight = math.max(220, math.min(math.floor(viewport.Y * 0.55), 360, viewport.Y - 60))
+        imageHeight = math.max(50, math.min(math.floor(panelWidth * 0.3), 80))
     else
-        panelWidth = math.min(math.clamp(viewport.X * 0.52, 520, 680), viewport.X - 50)
-        panelHeight = math.min(math.clamp(viewport.Y * 0.76, 520, 700), viewport.Y - 50)
-        imageHeight = math.clamp(math.floor(panelWidth * 0.34), 165, 220)
+        panelWidth = math.max(320, math.min(math.floor(viewport.X * 0.52), 680, viewport.X - 50))
+        panelHeight = math.max(360, math.min(math.floor(viewport.Y * 0.76), 700, viewport.Y - 50))
+        imageHeight = math.max(120, math.min(math.floor(panelWidth * 0.34), 220))
     end
 
     detailsPanel.Size = UDim2.fromOffset(panelWidth, panelHeight)
@@ -3117,14 +3117,14 @@ local function resize()
     local height
 
     if mobile then
-        -- almost full width, taller panel so cards fit without clipping
-        width = math.clamp(v.X - 14, 300, v.X - 10)
-        height = math.clamp(math.floor(v.Y * 0.78), 400, math.min(560, v.Y - 28))
+        -- almost full width; safe clamps so min never exceeds max on small screens
+        width = math.max(260, math.min(v.X - 12, v.X - 8))
+        height = math.max(320, math.min(math.floor(v.Y * 0.78), v.Y - 24))
 
-        local chrome = 128 -- header + search + action bar approx
-        local availH = math.max(160, height - chrome)
-        CARD_HEIGHT = math.clamp(math.floor(availH * 0.82), 160, 210)
-        CARD_WIDTH = math.clamp(math.floor(CARD_HEIGHT * 0.74), 120, 160)
+        local chrome = 120 -- header + search + action bar approx
+        local availH = math.max(140, height - chrome)
+        CARD_HEIGHT = math.max(150, math.min(math.floor(availH * 0.82), 210))
+        CARD_WIDTH = math.max(110, math.min(math.floor(CARD_HEIGHT * 0.74), 160))
         CARD_GAP = 14
 
         header.Size = UDim2.new(1, 0, 0, 44)
@@ -3161,8 +3161,8 @@ local function resize()
         close.Position = UDim2.new(1, 0, 0.5, 0)
         close.Size = UDim2.fromOffset(24, 24)
     else
-        width = math.min(math.clamp(v.X * 0.64, 560, 700), math.max(340, v.X - 36))
-        height = math.min(math.clamp(v.Y * 0.62, 420, 500), math.max(360, v.Y - 46))
+        width = math.max(340, math.min(math.floor(v.X * 0.64), 700, v.X - 36))
+        height = math.max(360, math.min(math.floor(v.Y * 0.62), 500, v.Y - 46))
         CARD_WIDTH = 236
         CARD_HEIGHT = 280
         CARD_GAP = 36
@@ -3203,11 +3203,12 @@ local function resize()
     end
 
     main.Size = UDim2.fromOffset(width, height)
-    noticeFrame.Size = UDim2.fromOffset(mobile and math.clamp(v.X - 28, 240, 310) or 310, mobile and 82 or 68)
+    noticeFrame.Size = UDim2.fromOffset(mobile and math.max(200, math.min(v.X - 28, 310)) or 310, mobile and 82 or 68)
 
     if mobile then
-        keyPanel.Size = UDim2.fromOffset(math.clamp(v.X - 32, 280, 360), 280)
-        languagePanel.Size = UDim2.fromOffset(math.clamp(v.X - 32, 280, 360), 232)
+        local panelW = math.max(260, math.min(v.X - 32, 360))
+        keyPanel.Size = UDim2.fromOffset(panelW, 280)
+        languagePanel.Size = UDim2.fromOffset(panelW, 232)
     else
         keyPanel.Size = UDim2.fromOffset(360, 280)
         languagePanel.Size = UDim2.fromOffset(360, 232)
@@ -3225,19 +3226,33 @@ local function resize()
     end)
 end
 
-resize()
-if cam then
-    cam:GetPropertyChangedSignal("ViewportSize"):Connect(resize)
-    cam:GetPropertyChangedSignal("ViewportSize"):Connect(resizeDetailsPanel)
+local function safeResize()
+    local ok, err = pcall(resize)
+    if not ok then
+        warn("[H3X4 Loader] resize error: " .. tostring(err))
+    end
 end
-resizeDetailsPanel()
 
-UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(resize)
-UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(resize)
-UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(resize)
-UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(resizeDetailsPanel)
-UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(resizeDetailsPanel)
-UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(resizeDetailsPanel)
+local function safeResizeDetails()
+    local ok, err = pcall(resizeDetailsPanel)
+    if not ok then
+        warn("[H3X4 Loader] resizeDetails error: " .. tostring(err))
+    end
+end
+
+safeResize()
+if cam then
+    cam:GetPropertyChangedSignal("ViewportSize"):Connect(safeResize)
+    cam:GetPropertyChangedSignal("ViewportSize"):Connect(safeResizeDetails)
+end
+safeResizeDetails()
+
+UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(safeResize)
+UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(safeResize)
+UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(safeResize)
+UIS:GetPropertyChangedSignal("TouchEnabled"):Connect(safeResizeDetails)
+UIS:GetPropertyChangedSignal("KeyboardEnabled"):Connect(safeResizeDetails)
+UIS:GetPropertyChangedSignal("MouseEnabled"):Connect(safeResizeDetails)
 
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or not main.Visible or closing then return end
