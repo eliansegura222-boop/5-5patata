@@ -641,6 +641,245 @@ do
 	env.H3XA_MM2_DEVICE = H3XA_MM2_DEVICE
 end
 
+-- Not MM2 gate (after language so UI text respects preference)
+local function H3XA_showNotMM2Panel()
+	local env = (getgenv and getgenv()) or _G
+	local lang = env.H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
+	local isES = (lang == "ES")
+	local TweenService = game:GetService("TweenService")
+	local TeleportService = game:GetService("TeleportService")
+	local Players = game:GetService("Players")
+
+	local parent = game:GetService("CoreGui")
+	pcall(function()
+		if gethui then
+			parent = gethui()
+		elseif get_hidden_gui then
+			parent = get_hidden_gui()
+		end
+	end)
+
+	pcall(function()
+		local old = parent:FindFirstChild("H3XA_MM2_NotMM2")
+		if old then old:Destroy() end
+	end)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "H3XA_MM2_NotMM2"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 2147483647
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local parented = pcall(function()
+		gui.Parent = parent
+	end)
+	if not parented then
+		gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local dim = Instance.new("Frame")
+	dim.Name = "Dim"
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	-- Mismo fondo que el panel principal del hub
+	local panel = Instance.new("Frame")
+	panel.Name = "NotMM2Panel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(420, 300)
+	panel.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+	panel.BackgroundTransparency = 0
+	panel.BorderSizePixel = 0
+	panel.ClipsDescendants = true
+	panel.Parent = dim
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 28)
+	corner.Parent = panel
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	panelStroke.LineJoinMode = Enum.LineJoinMode.Round
+	panelStroke.Color = Color3.fromRGB(255, 255, 255)
+	panelStroke.Thickness = 1.15
+	panelStroke.Transparency = 0.55
+	panelStroke.Parent = panel
+
+	local logo = Instance.new("ImageLabel")
+	logo.Name = "Logo"
+	logo.AnchorPoint = Vector2.new(0.5, 0)
+	logo.Position = UDim2.new(0.5, 0, 0, 24)
+	logo.Size = UDim2.fromOffset(52, 52)
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://72742584610344"
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.Parent = panel
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Name = "CloseX"
+	closeBtn.AnchorPoint = Vector2.new(1, 0)
+	closeBtn.Position = UDim2.new(1, -10, 0, 10)
+	closeBtn.Size = UDim2.fromOffset(32, 32)
+	closeBtn.BackgroundTransparency = 1
+	closeBtn.BorderSizePixel = 0
+	closeBtn.AutoButtonColor = false
+	closeBtn.Font = Enum.Font.GothamBold
+	closeBtn.Text = "X"
+	closeBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+	closeBtn.TextSize = 20
+	closeBtn.TextStrokeTransparency = 1
+	closeBtn.ZIndex = 10
+	closeBtn.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.new(0, 28, 0, 90)
+	title.Size = UDim2.new(1, -56, 0, 70)
+	title.Font = Enum.Font.GothamMedium
+	title.Text = isES
+		and "Este hub es específico de MM2,\n¿aún así deseas abrir la interfaz?"
+		or "This hub is specific to MM2.\nDo you still want to open the interface?"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 16
+	title.TextWrapped = true
+	title.TextStrokeTransparency = 1
+	title.Parent = panel
+
+	local buttons = Instance.new("Frame")
+	buttons.Name = "Buttons"
+	buttons.BackgroundTransparency = 1
+	buttons.Position = UDim2.new(0, 28, 0, 190)
+	buttons.Size = UDim2.new(1, -56, 0, 52)
+	buttons.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 14)
+	layout.Parent = buttons
+
+	local decision = Instance.new("BindableEvent")
+
+	local function makeBtn(name, label)
+		local btn = Instance.new("TextButton")
+		btn.Name = name
+		btn.Size = UDim2.new(0.5, -7, 1, 0)
+		btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BackgroundTransparency = 1
+		btn.BorderSizePixel = 0
+		btn.AutoButtonColor = false
+		btn.Font = Enum.Font.GothamBold
+		btn.Text = label
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.TextSize = 15
+		btn.TextStrokeTransparency = 1
+		btn.Parent = buttons
+
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 14)
+		c.Parent = btn
+
+		local s = Instance.new("UIStroke")
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		s.Color = Color3.fromRGB(255, 255, 255)
+		s.Thickness = 1.2
+		s.Transparency = 0
+		s.Parent = btn
+
+		btn.MouseEnter:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+		end)
+		btn.MouseLeave:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 1,
+				TextColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+		end)
+		return btn
+	end
+
+	local yesBtn = makeBtn("Yes", isES and "SÍ" or "YES")
+	local goBtn = makeBtn("GoMM2", isES and "IR A MM2" or "GO TO MM2")
+
+	closeBtn.MouseEnter:Connect(function()
+		TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+			TextColor3 = Color3.fromRGB(255, 255, 255)
+		}):Play()
+	end)
+	closeBtn.MouseLeave:Connect(function()
+		TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+			TextColor3 = Color3.fromRGB(220, 220, 220)
+		}):Play()
+	end)
+	closeBtn.MouseButton1Click:Connect(function()
+		decision:Fire("close")
+	end)
+
+	yesBtn.MouseButton1Click:Connect(function()
+		decision:Fire("yes")
+	end)
+
+	goBtn.MouseButton1Click:Connect(function()
+		decision:Fire("goto")
+	end)
+
+	panel.Size = UDim2.fromOffset(400, 280)
+	panel.BackgroundTransparency = 1
+	panelStroke.Transparency = 1
+	TweenService:Create(panel, TweenInfo.new(0.22, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(420, 300),
+		BackgroundTransparency = 0
+	}):Play()
+	TweenService:Create(panelStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quint), { Transparency = 0.55 }):Play()
+
+	local choice = decision.Event:Wait()
+	gui:Destroy()
+	decision:Destroy()
+
+	if choice == "goto" then
+		pcall(function()
+			TeleportService:Teleport(142823291, Players.LocalPlayer)
+		end)
+		return false
+	end
+	if choice == "yes" then
+		return true -- continuar y abrir el hub
+	end
+	return false -- X / cerrar: no cargar
+end
+
+do
+	local isMM2 = false
+	local gid = game.GameId
+	local pid = game.PlaceId
+	if gid == 66654135 or pid == 142823291 or pid == 1428232910 or pid == 5956782898 or pid == 7074860883 then
+		isMM2 = true
+	end
+	if not isMM2 then
+		local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+		if remotes and remotes:FindFirstChild("Gameplay") then
+			isMM2 = true
+		end
+	end
+	if not isMM2 then
+		local openAnyway = H3XA_showNotMM2Panel()
+		if not openAnyway then
+			return -- no abrir interfaz
+		end
+		-- SÍ: sigue cargando el hub normalmente
+	end
+end
+
 local H3XA_MM2_ES = {
     ["Triple-click this region to open MM2."] = "Toca tres veces esta zona para abrir MM2.",
     ["This can fit a lot of text, probably."] = "Aquí puede caber bastante texto.",
@@ -662,7 +901,7 @@ local H3XA_MM2_ES = {
     ["Drag the button around to resize!"] = "¡Arrastra el botón para cambiar su tamaño!",
 
     ["ESPs"] = "ESP",
-    ["Players"] = "Jugadores",
+    ["Players"] = "Rol ESP",
     ["Dropped Gun"] = "Arma caída",
     ["Traps"] = "Trampas",
     ["Hide my own ESP"] = "Ocultar mi propio ESP",
@@ -678,7 +917,6 @@ local H3XA_MM2_ES = {
     ["Offset-to-ping multiplier"] = "Multiplicador de desfase según ping",
     ["Shoot offset re-aims the gun/knife shoot/throw to the character's predicted position. Recommended is 2.8"] = "El desfase reajusta el disparo/lanzamiento hacia la posición predicha del personaje. Recomendado: 2.8",
     ["Offset-to-ping multiplier allows the offset to change dynamically with latency/ping. The default is 1 (aka no adjustment)"] = "El multiplicador permite ajustar dinámicamente el desfase según la latencia/ping. El valor predeterminado es 1 (sin ajuste).",
-    ["Round timer"] = "Temporizador de ronda",
     ["<font color='#FF0000'>Detectables</font>"] = "Detectables",
     ["Instakill murderer as sheriff"] = "Matar instantáneamente al asesino como sheriff",
     ["Spawn knife throw near player"] = "Generar lanzamiento de cuchillo cerca del jugador",
@@ -1693,13 +1931,13 @@ Converted["_UIGradient5"].Offset = Vector2.new(0, 0.3)
 Converted["_UIGradient5"].Rotation = 110
 Converted["_UIGradient5"].Parent = Converted["_Menu"]
 
-Converted["_Area"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
 Converted["_Area"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_Area"].BackgroundTransparency = 1
 Converted["_Area"].BorderColor3 = Color3.fromRGB(0, 0, 0)
 Converted["_Area"].BorderSizePixel = 0
-Converted["_Area"].Position = UDim2.new(0.67, 0, 0.58, 0)
-Converted["_Area"].Size = UDim2.new(0.62, -12, 0.74, 0)
+Converted["_Area"].Position = UDim2.new(0.32, 8, 0, 78)
+Converted["_Area"].Size = UDim2.new(0.66, -22, 1, -92)
 Converted["_Area"].Name = "Area"
 Converted["_Area"].Parent = Converted["_Menu"]
 
@@ -1747,12 +1985,12 @@ Converted["_TextLabel7"].Parent = Converted["_Area1"]
 
 Converted["_UICorner18"].Parent = Converted["_Area"]
 
-Converted["_List"].AnchorPoint = Vector2.new(0, 0.5)
+Converted["_List"].AnchorPoint = Vector2.new(0, 0)
 Converted["_List"].BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 Converted["_List"].BorderColor3 = Color3.fromRGB(0, 0, 0)
 Converted["_List"].BorderSizePixel = 0
-Converted["_List"].Position = UDim2.new(0, 14, 0.16, 0)
-Converted["_List"].Size = UDim2.new(0.28, 0, 0.80, 0)
+Converted["_List"].Position = UDim2.new(0, 14, 0, 78)
+Converted["_List"].Size = UDim2.new(0.28, 0, 1, -92)
 Converted["_List"].Name = "List"
 Converted["_List"].Parent = Converted["_Menu"]
 
@@ -2731,23 +2969,23 @@ do
         listStroke.Parent = Converted["_List"]
     end
 
-    -- Brand logo
+    -- Brand logo (header zone — List/Area empiezan debajo, Y>=76)
     local brandLogo = Instance.new("ImageLabel")
     brandLogo.Name = "BrandLogo"
     brandLogo.BackgroundTransparency = 1
-    brandLogo.Position = UDim2.fromOffset(24, 18)
-    brandLogo.Size = UDim2.fromOffset(48, 48)
+    brandLogo.Position = UDim2.fromOffset(24, 16)
+    brandLogo.Size = UDim2.fromOffset(44, 44)
     brandLogo.Image = "rbxassetid://72742584610344"
     brandLogo.ScaleType = Enum.ScaleType.Fit
-    brandLogo.ZIndex = 15
+    brandLogo.ZIndex = 40
     brandLogo.Parent = menu
 
     -- Title next to logo
     local brandTitle = Instance.new("TextLabel")
     brandTitle.Name = "BrandTitle"
     brandTitle.BackgroundTransparency = 1
-    brandTitle.Position = UDim2.fromOffset(80, 22)
-    brandTitle.Size = UDim2.fromOffset(180, 40)
+    brandTitle.Position = UDim2.fromOffset(76, 18)
+    brandTitle.Size = UDim2.fromOffset(200, 40)
     brandTitle.Font = Enum.Font.GothamBold
     brandTitle.Text = "HX MM2"
     brandTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -2755,7 +2993,7 @@ do
     brandTitle.TextXAlignment = Enum.TextXAlignment.Left
     brandTitle.TextYAlignment = Enum.TextYAlignment.Center
     brandTitle.TextStrokeTransparency = 1
-    brandTitle.ZIndex = 15
+    brandTitle.ZIndex = 40
     brandTitle.Parent = menu
 
     -- Thin white top glow
@@ -3879,7 +4117,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				end
 			end
 		end
-		function FUNCTIONSmodule.loader(module)
+		function FUNCTIONSmodule.loader(module, animateSwitch)
 			--local unloadtween = ts:Create(AREA, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 			--	Position = UDim2.fromScale(1.55, 0.606)
 			--})
@@ -3888,35 +4126,24 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 			--unloadtween.Completed:Wait()
 		
 		
-			-- Salida rápida sin mover Position (evita cuadros negros residuales)
-			local AREAframes = {}
-			for _, i in ipairs(AREA:GetChildren()) do
-				if i:IsA("GuiObject") then table.insert(AREAframes, i) end
+			-- Transición suave al cambiar categoría / funciones
+			local animatedSwitch = animateSwitch == true
+			if animatedSwitch and AREACONTAINER and AREACONTAINER:IsA("CanvasGroup") then
+				local fadeOut = ts:Create(AREACONTAINER, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					GroupTransparency = 1
+				})
+				fadeOut:Play()
+				fadeOut.Completed:Wait()
 			end
-			if #AREAframes > 0 then
-				pcall(function()
-					ts:Create(AREA, TweenInfo.new(0.06), { CanvasPosition = Vector2.zero }):Play()
-				end)
-				for _, child in ipairs(AREAframes) do
-					local sc = child:FindFirstChildOfClass("UIScale")
-					if not sc then
-						sc = Instance.new("UIScale")
-						sc.Scale = 1
-						sc.Parent = child
-					end
-					ts:Create(sc, TweenInfo.new(0.12, Enum.EasingStyle.Quint, Enum.EasingDirection.In), { Scale = 0.92 }):Play()
-					pcall(function()
-						if child:IsA("CanvasGroup") then
-							ts:Create(child, TweenInfo.new(0.12), { GroupTransparency = 1 }):Play()
-						elseif child:IsA("GuiObject") then
-							ts:Create(child, TweenInfo.new(0.12), { BackgroundTransparency = 1 }):Play()
-						end
-					end)
+			pcall(function()
+				if AREA:IsA("ScrollingFrame") then
+					AREA.CanvasPosition = Vector2.zero
 				end
-				task.wait(0.13)
-			end
-
+			end)
 			AREA:ClearAllChildren()
+			if AREACONTAINER and AREACONTAINER:IsA("CanvasGroup") then
+				AREACONTAINER.GroupTransparency = 1
+			end
 
 			-- Categorías reales para MM2: el nombre del juego ya no se usa como categoría.
 			local categoryNames = {"ESPs", "Tools", "Detectables", "Fun"}
@@ -3964,9 +4191,10 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 					local b = Instance.new("TextButton")
 					b.Name = category
 					b.LayoutOrder = index
-					b.Size = UDim2.new(1, -8, 0, 34)
+					b.Size = UDim2.new(1, -8, 0, selected and 40 or 34)
 					b.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-					b.BackgroundTransparency = 1
+					-- Seleccionada: relleno blanco suave; resto transparentes
+					b.BackgroundTransparency = selected and 0.88 or 1
 					b.Text = ""
 					b.AutoButtonColor = false
 					b.ClipsDescendants = true
@@ -3977,19 +4205,19 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 
 					local st = Instance.new("UIStroke", b)
 					st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-					st.Color = Color3.fromRGB(255, 255, 255)
-					st.Transparency = 0
-					st.Thickness = selected and 1.6 or 1.15
+					st.Color = selected and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
+					st.Transparency = selected and 0 or 0.35
+					st.Thickness = selected and 2.2 or 1.05
 
 					local icon = Instance.new("ImageLabel")
 					icon.Name = "Icon"
 					icon.BackgroundTransparency = 1
 					icon.AnchorPoint = Vector2.new(0, 0.5)
 					icon.Position = UDim2.new(0, 12, 0.5, 0)
-					icon.Size = UDim2.fromOffset(15, 15)
+					icon.Size = UDim2.fromOffset(selected and 17 or 15, selected and 17 or 15)
 					icon.Image = categoryIcons[category] or "rbxassetid://10734966248"
 					icon.ImageColor3 = Color3.fromRGB(255, 255, 255)
-					icon.ImageTransparency = selected and 0 or 0.15
+					icon.ImageTransparency = selected and 0 or 0.35
 					icon.ScaleType = Enum.ScaleType.Fit
 					icon.ZIndex = 2
 					icon.Parent = b
@@ -3998,31 +4226,46 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 					label.Name = "Label"
 					label.BackgroundTransparency = 1
 					label.AnchorPoint = Vector2.new(0, 0.5)
-					label.Position = UDim2.new(0, 34, 0.5, 0)
-					label.Size = UDim2.new(1, -42, 1, 0)
-					label.Font = Enum.Font.GothamMedium
+					label.Position = UDim2.new(0, selected and 36 or 34, 0.5, 0)
+					label.Size = UDim2.new(1, -44, 1, 0)
+					label.Font = selected and Enum.Font.GothamBold or Enum.Font.GothamMedium
 					label.Text = categoryAliases[category]
-					label.TextSize = 12
+					label.TextSize = selected and 13 or 12
 					label.TextXAlignment = Enum.TextXAlignment.Left
 					label.TextColor3 = Color3.fromRGB(255, 255, 255)
-					label.TextTransparency = selected and 0 or 0.1
+					label.TextTransparency = selected and 0 or 0.28
 					label.TextStrokeTransparency = 1
 					label.ZIndex = 2
 					label.Parent = b
 
 					b.MouseEnter:Connect(function()
 						if category ~= getgenv().H3XA_MM2_SELECTED_CATEGORY then
-							ts:Create(st, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Thickness = 1.55}):Play()
+							ts:Create(st, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+								Thickness = 1.45,
+								Transparency = 0.15
+							}):Play()
+							ts:Create(b, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
+								BackgroundTransparency = 0.94
+							}):Play()
 						end
 					end)
 					b.MouseLeave:Connect(function()
 						if category ~= getgenv().H3XA_MM2_SELECTED_CATEGORY then
-							ts:Create(st, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Thickness = 1.15}):Play()
+							ts:Create(st, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+								Thickness = 1.05,
+								Transparency = 0.35
+							}):Play()
+							ts:Create(b, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
+								BackgroundTransparency = 1
+							}):Play()
 						end
 					end)
 					b.MouseButton1Click:Connect(function()
+						if getgenv().H3XA_MM2_SELECTED_CATEGORY == category then
+							return
+						end
 						getgenv().H3XA_MM2_SELECTED_CATEGORY = category
-						FUNCTIONSmodule.loader(module)
+						FUNCTIONSmodule.loader(module, true)
 					end)
 				end
 			end
@@ -4030,10 +4273,17 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 			local visibleItems = categories[getgenv().H3XA_MM2_SELECTED_CATEGORY] or {}
 			local listlayout = Instance.new("UIListLayout")
 			listlayout.Parent = AREA
-			listlayout.Padding = UDim.new(0, 12)
+			listlayout.Padding = UDim.new(0, 10)
 			listlayout.FillDirection = Enum.FillDirection.Vertical
 			listlayout.SortOrder = Enum.SortOrder.LayoutOrder
 			listlayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+			local areaPad = Instance.new("UIPadding")
+			areaPad.PaddingTop = UDim.new(0, 6)
+			areaPad.PaddingBottom = UDim.new(0, 10)
+			areaPad.PaddingLeft = UDim.new(0, 2)
+			areaPad.PaddingRight = UDim.new(0, 2)
+			areaPad.Parent = AREA
 
 			-- Agrupar items bajo headers Text en tarjetas grandes
 			local sections = {}
@@ -4052,26 +4302,55 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				table.insert(sections, currentSection)
 			end
 
+			-- Animación suave de entrada (sin escala que deforme textos)
 			local function playEnter(obj, delay)
-				local sc = Instance.new("UIScale")
-				sc.Scale = 0.92
-				sc.Parent = obj
-				obj.BackgroundTransparency = 1
+				delay = delay or 0
 				local stroke = obj:FindFirstChildOfClass("UIStroke")
-				if stroke then
-					stroke.Transparency = 1
-				end
-				task.delay(delay, function()
-					if not obj.Parent then return end
-					ts:Create(sc, TweenInfo.new(0.55, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-					obj.BackgroundTransparency = 1
-					if stroke and stroke.Parent then
-						ts:Create(stroke, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-							Transparency = 0,
-							Thickness = 1.4
-						}):Play()
+				local labels = {}
+				for _, d in ipairs(obj:GetDescendants()) do
+					if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+						table.insert(labels, d)
+					elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+						table.insert(labels, d)
 					end
-				end)
+				end
+				if obj:IsA("GuiObject") then
+					-- no forzar BackgroundTransparency en toggles/botones ya estilizados
+				end
+				if stroke then
+					local targetT = stroke.Transparency
+					stroke.Transparency = 1
+					task.delay(delay, function()
+						if stroke and stroke.Parent then
+							ts:Create(stroke, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+								Transparency = targetT
+							}):Play()
+						end
+					end)
+				end
+				for _, d in ipairs(labels) do
+					if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+						local tt = d.TextTransparency
+						d.TextTransparency = 1
+						task.delay(delay, function()
+							if d and d.Parent then
+								ts:Create(d, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+									TextTransparency = tt
+								}):Play()
+							end
+						end)
+					elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+						local it = d.ImageTransparency
+						d.ImageTransparency = 1
+						task.delay(delay, function()
+							if d and d.Parent then
+								ts:Create(d, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+									ImageTransparency = it
+								}):Play()
+							end
+						end)
+					end
+				end
 			end
 
 			-- Evitar cuadro negro residual en el área de contenido
@@ -4085,13 +4364,13 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				end
 			end)
 
-			local function styleActionButton(button, labelText, floatItem, floatName)
+			local function styleActionButton(button, labelText, floatItem, floatName, opts)
+				opts = opts or {}
 				button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 				button.BackgroundTransparency = 1
 				button.Text = ""
 				button.AutoButtonColor = false
 				button.ClipsDescendants = true
-				button.Size = UDim2.new(1, 0, 0, 40)
 				local corner = Instance.new("UICorner", button)
 				corner.CornerRadius = UDim.new(0, 16)
 				local stroke = Instance.new("UIStroke", button)
@@ -4101,8 +4380,18 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				stroke.Transparency = 0
 
 				local hasFloat = floatItem ~= nil and floatName ~= nil
-				-- Espacio fijo a la derecha para FLOAT (o flecha). El texto NUNCA entra ahí.
-				local rightGutter = hasFloat and 78 or 28
+				local textLen = #(tostring(labelText or ""))
+				-- Compacto en grillas (Fling Murderer, etc.) o textos medianos/largos
+				local compactFloat = opts.compactFloat == true or textLen >= 12
+				local floatW = compactFloat and 28 or 52
+				local floatH = compactFloat and 18 or 24
+				local floatLabel = compactFloat and "F" or "FLOAT"
+				local floatTextSize = compactFloat and 10 or 11
+				local rightGutter = hasFloat and (floatW + 12) or 28
+
+				-- Altura: más espacio si el texto es largo o está en grilla
+				local rowH = opts.rowHeight or ((textLen >= 18) and 44 or 40)
+				button.Size = UDim2.new(1, 0, 0, rowH)
 
 				local label = Instance.new("TextLabel")
 				label.Name = "ActionLabel"
@@ -4115,8 +4404,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				label.TextYAlignment = Enum.TextYAlignment.Center
 				label.TextColor3 = Color3.fromRGB(255, 255, 255)
 				label.Text = labelText
-				label.TextTruncate = Enum.TextTruncate.AtEnd
-				label.TextWrapped = false
+				label.TextTruncate = Enum.TextTruncate.None
+				label.TextWrapped = true
 				label.ZIndex = 1
 				label.Parent = button
 
@@ -4138,20 +4427,20 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				floatBtn.Name = "FloatBtn"
 				floatBtn.AnchorPoint = Vector2.new(1, 0.5)
 				floatBtn.Position = UDim2.new(1, -8, 0.5, 0)
-				floatBtn.Size = UDim2.fromOffset(58, 26)
+				floatBtn.Size = UDim2.fromOffset(floatW, floatH)
 				floatBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 				floatBtn.BackgroundTransparency = 1
 				floatBtn.BorderSizePixel = 0
 				floatBtn.AutoButtonColor = false
 				floatBtn.Font = Enum.Font.GothamBold
-				floatBtn.TextSize = 11
+				floatBtn.TextSize = floatTextSize
 				floatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-				floatBtn.Text = "FLOAT"
+				floatBtn.Text = floatLabel
 				floatBtn.ZIndex = 4
 				floatBtn.Visible = hasFloat
 				floatBtn.Parent = button
 				local floatCorner = Instance.new("UICorner", floatBtn)
-				floatCorner.CornerRadius = UDim.new(0, 8)
+				floatCorner.CornerRadius = UDim.new(0, 7)
 				local floatStroke = Instance.new("UIStroke", floatBtn)
 				floatStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 				floatStroke.Color = Color3.fromRGB(255, 255, 255)
@@ -4189,48 +4478,39 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				return stroke
 			end
 
-			local sectionIndex = 0
+			-- Sin tarjeta grande envolvente (evita bordes cortados arriba/abajo del scroll)
+			local globalOrder = 0
+			local enterIndex = 0
 			for _, section in ipairs(sections) do
 				if not section.title and #section.items == 0 then
 					continue
 				end
 				if #section.items == 0 then
-					-- solo título suelto: no crear tarjeta vacía (evita bloque negro)
 					continue
 				end
-				sectionIndex = sectionIndex + 1
+
+				-- Contenedor plano sin stroke (solo layout), no se recorta visualmente
 				local card = Instance.new("Frame")
-				card.Name = "SectionCard"
-				card.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				card.Name = "SectionFlat"
 				card.BackgroundTransparency = 1
 				card.BorderSizePixel = 0
-				card.Size = UDim2.new(1, -4, 0, 0)
+				card.Size = UDim2.new(1, -2, 0, 0)
 				card.AutomaticSize = Enum.AutomaticSize.Y
 				card.ClipsDescendants = false
-				card.LayoutOrder = sectionIndex
+				globalOrder = globalOrder + 1
+				card.LayoutOrder = globalOrder
 				card.Parent = AREA
 
-				local cardCorner = Instance.new("UICorner", card)
-				cardCorner.CornerRadius = UDim.new(0, 22)
-				local cardStroke = Instance.new("UIStroke", card)
-				cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-				cardStroke.LineJoinMode = Enum.LineJoinMode.Round
-				cardStroke.Color = Color3.fromRGB(255, 255, 255)
-				cardStroke.Thickness = 1.4
-				cardStroke.Transparency = 0
-
 				local cardPad = Instance.new("UIPadding", card)
-				cardPad.PaddingTop = UDim.new(0, 14)
-				cardPad.PaddingBottom = UDim.new(0, 14)
-				cardPad.PaddingLeft = UDim.new(0, 14)
-				cardPad.PaddingRight = UDim.new(0, 14)
+				cardPad.PaddingTop = UDim.new(0, 4)
+				cardPad.PaddingBottom = UDim.new(0, 8)
+				cardPad.PaddingLeft = UDim.new(0, 2)
+				cardPad.PaddingRight = UDim.new(0, 2)
 
 				local cardLayout = Instance.new("UIListLayout", card)
 				cardLayout.Padding = UDim.new(0, 10)
 				cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
 				cardLayout.FillDirection = Enum.FillDirection.Vertical
-
-				playEnter(card, math.min((sectionIndex - 1) * 0.07, 0.35))
 
 				if section.title then
 					local title = Instance.new("TextLabel")
@@ -4243,9 +4523,12 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 					title.Text = H3XA_MM2_T(section.title["Args"][1])
 					title.LayoutOrder = 0
 					title.Parent = card
+					enterIndex = enterIndex + 1
+					playEnter(title, math.min(enterIndex * 0.045, 0.28))
 				end
 
 				local order = 1
+				local toggleIndexInCategory = 0
 				for _, item in ipairs(section.items) do
 					order = order + 1
 					if item["Type"] == "Button" then
@@ -4259,6 +4542,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						local allowFloat = string.find(string.lower(rawName), "copy") == nil
 						styleActionButton(button, H3XA_MM2_T(item["Args"][1]), allowFloat and item or nil, allowFloat and item["Args"][1] or nil)
 						button.MouseButton1Click:Connect(activate)
+						enterIndex = enterIndex + 1
+						playEnter(button, math.min(enterIndex * 0.045, 0.28))
 
 					elseif item["Type"] == "ButtonGrid" then
 						local frame = Instance.new("Frame")
@@ -4269,7 +4554,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						frame.BackgroundTransparency = 1
 						local gridlayout = Instance.new("UIGridLayout")
 						gridlayout.Parent = frame
-						gridlayout.CellSize = UDim2.new((1 / item["Args"][1]) - 0.02, 0, 0, 36)
+						-- Celdas más altas: texto completo + FLOAT compacto (ej. Fling Murderer)
+						gridlayout.CellSize = UDim2.new((1 / item["Args"][1]) - 0.02, 0, 0, 46)
 						gridlayout.CellPadding = UDim2.new(0.02, 0, 0, 6)
 						for buttonname, args in item["Args"][2] do
 							local button = Instance.new("TextButton")
@@ -4302,7 +4588,13 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 								end
 							end
 							local allowFloat = string.find(string.lower(tostring(buttonname)), "copy") == nil
-							styleActionButton(button, H3XA_MM2_T(string.gsub(buttonname, "_", " ")), allowFloat and item or nil, allowFloat and buttonname or nil)
+							styleActionButton(
+								button,
+								H3XA_MM2_T(string.gsub(buttonname, "_", " ")),
+								allowFloat and item or nil,
+								allowFloat and buttonname or nil,
+								{ compactFloat = true, rowHeight = 46 }
+							)
 							if States[buttonname .. module.Name] then
 								button.BackgroundTransparency = 1
 								local st = button:FindFirstChildOfClass("UIStroke")
@@ -4404,11 +4696,20 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						end)
 
 					elseif item["Type"] == "Toggle" then
+						toggleIndexInCategory = toggleIndexInCategory + 1
+						-- EXTRAS (Detectables): primeros 2 toggles con switch más pequeño
+						local isExtras = getgenv().H3XA_MM2_SELECTED_CATEGORY == "Detectables"
+						local compactToggle = isExtras and toggleIndexInCategory <= 2
+						local trackW = compactToggle and 34 or 42
+						local trackH = compactToggle and 18 or 22
+						local knobSize = compactToggle and 13 or 16
+						local labelRightPad = compactToggle and 56 or 70
+
 						-- Toda la fila es clickeable (no solo el círculo)
 						local row = Instance.new("TextButton")
 						row.Name = "ToggleRow"
 						row.LayoutOrder = order
-						row.Size = UDim2.new(1, 0, 0, 34)
+						row.Size = UDim2.new(1, 0, 0, compactToggle and 32 or 34)
 						row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 						row.BackgroundTransparency = 1
 						row.Text = ""
@@ -4425,10 +4726,12 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						local tLabel = Instance.new("TextLabel")
 						tLabel.BackgroundTransparency = 1
 						tLabel.Position = UDim2.fromOffset(12, 0)
-						tLabel.Size = UDim2.new(1, -70, 1, 0)
+						tLabel.Size = UDim2.new(1, -labelRightPad, 1, 0)
 						tLabel.Font = Enum.Font.GothamMedium
-						tLabel.TextSize = 12
+						tLabel.TextSize = compactToggle and 11 or 12
 						tLabel.TextXAlignment = Enum.TextXAlignment.Left
+						tLabel.TextYAlignment = Enum.TextYAlignment.Center
+						tLabel.TextWrapped = true
 						tLabel.TextColor3 = Color3.fromRGB(230, 230, 235)
 						tLabel.Text = H3XA_MM2_T(item["Args"][1])
 						tLabel.ZIndex = 2
@@ -4438,7 +4741,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						track.Name = "Track"
 						track.AnchorPoint = Vector2.new(1, 0.5)
 						track.Position = UDim2.new(1, -10, 0.5, 0)
-						track.Size = UDim2.fromOffset(42, 22)
+						track.Size = UDim2.fromOffset(trackW, trackH)
 						track.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
 						track.ZIndex = 2
 						track.Parent = row
@@ -4452,7 +4755,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						local knob = Instance.new("Frame")
 						knob.Name = "Toggler"
 						knob.AnchorPoint = Vector2.new(0.5, 0.5)
-						knob.Size = UDim2.fromOffset(16, 16)
+						knob.Size = UDim2.fromOffset(knobSize, knobSize)
 						knob.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
 						knob.Position = toggleStates[item["Args"][1] .. module.Name] and UDim2.fromScale(0.72, 0.5) or UDim2.fromScale(0.28, 0.5)
 						knob.ZIndex = 3
@@ -4555,6 +4858,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 								end)
 							end
 						end)
+						enterIndex = enterIndex + 1
+						playEnter(clonedropdown, math.min(enterIndex * 0.045, 0.28))
 
 					elseif item["Type"] == "Range" then
 						local clonerange = getgenv().H3XA_MM2.Range:Clone()
@@ -4600,6 +4905,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						slider.DragEnded = function()
 							relativeSlide = nil
 						end
+						enterIndex = enterIndex + 1
+						playEnter(clonerange, math.min(enterIndex * 0.045, 0.28))
 					end
 				end
 			end
@@ -4608,6 +4915,11 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 			pcall(function()
 				AREACONTAINER.Area.Position = UDim2.fromScale(0.5, 0.5)
 			end)
+			if AREACONTAINER and AREACONTAINER:IsA("CanvasGroup") then
+				ts:Create(AREACONTAINER, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+					GroupTransparency = 0
+				}):Play()
+			end
 		end
 		
 		
@@ -6293,11 +6605,11 @@ local function DSZIHQM_routine() -- Routine: StarterGui.H3XA_MM2.Init
 	script.Parent.ResetOnSpawn = false
 	
 	
-	-- Start off-screen scaled down, will appear CENTER with pop animation
+	-- Abrir siempre a tamaño normal (sin pop de escala que achica textos)
 	script.Parent.Menu.AnchorPoint = Vector2.new(0.5, 0.5)
 	script.Parent.Menu.Position = UDim2.fromScale(0.5, 0.5)
-	script.Parent.Menu.UIScale.Scale = 0.4
-	script.Parent.Menu.BackgroundTransparency = 1
+	script.Parent.Menu.UIScale.Scale = 1
+	script.Parent.Menu.BackgroundTransparency = 0.32
 	
 	script.Parent.Dialog.Size = UDim2.fromOffset(0, 147)
 	script.Parent.Dialog.UIScale.Scale = 0
@@ -6311,15 +6623,7 @@ local function DSZIHQM_routine() -- Routine: StarterGui.H3XA_MM2.Init
 		game.Loaded:Wait()
 	end
 	
-	-- CENTER pop-in animation (scale + fade)
-	ts:Create(script.Parent.Menu, TweenInfo.new(0.75, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		BackgroundTransparency = 0.32
-	}):Play()
-	ts:Create(script.Parent.Menu.UIScale, TweenInfo.new(0.85, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		Scale = 1
-	}):Play()
-	
-	task.wait(0.7)
+	task.wait(0.15)
 	-- Wait until MM2 module is registered to avoid empty/flash state
 	local waited = 0
 	while (not getgenv().Modules or not getgenv().Modules[3]) and waited < 5 do
@@ -6544,23 +6848,22 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 	
 	
 	
-	if not game.ReplicatedStorage:WaitForChild("Remotes", 5) then
-		fu.dialog("Not MM2", "Looks like this game isn't MM2. Do you want to load the module anyway?", {"Load", "No"})
-	
-		if fu.waitfordialog() == "No" then
-			fu.closedialog()
-			fu.notification("MM2 will not be loaded until you rejoin.", Color3.fromRGB(255, 255, 255), "x")
-			return
-		end	
-		fu.closedialog()
-	else
-		game.ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay"):WaitForChild("PlayerDataChanged", 5).OnClientEvent:Connect(function(data)
-			playerData = data
-			if playerESP then
-				reloadESP()
+	local remotesRoot = game.ReplicatedStorage:FindFirstChild("Remotes")
+	if remotesRoot then
+		local gameplay = remotesRoot:FindFirstChild("Gameplay")
+		if gameplay then
+			local pdc = gameplay:FindFirstChild("PlayerDataChanged")
+			if pdc then
+				pdc.OnClientEvent:Connect(function(data)
+					playerData = data
+					if playerESP then
+						reloadESP()
+					end
+				end)
 			end
-		end)
+		end
 	end
+	-- Si no es MM2 pero el usuario eligió SÍ, el módulo/UI sigue cargando igual
 	
 	
 	local onTesting = game.GameId == 119460199
@@ -7338,47 +7641,6 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 	--		end,
 	--	}}
 	--})
-	
-	local function secondsToMinutes(seconds)
-		if seconds == -1 then return "" end
-		local minutes = math.floor(seconds / 60)
-		local remainingSeconds = seconds % 60
-		return string.format("%dm %ds", minutes, remainingSeconds)
-	end
-	local timertask = nil
-	local timertext = nil
-	table.insert(module, {
-		Type = "Toggle",
-		Args = {"Round timer", function(Self, state)
-			if state then
-				timertext = Instance.new("TextLabel")
-				timertext.Parent = script.Parent
-				timertext.BackgroundTransparency = 1
-				timertext.TextColor3 = Color3.fromRGB(255, 255, 255)
-				timertext.TextScaled = true
-				timertext.AnchorPoint = Vector2.new(0.5, 0.5)
-	
-				timertext.Position = UDim2.fromScale(0.5, 0.15)
-				timertext.Size = UDim2.fromOffset(200, 35)
-	
-				timertext.Font = Enum.Font.Montserrat
-	
-				timertask = task.spawn(function()
-					while task.wait(0.5) do
-						local timeLeft = game.Workspace:FindFirstChild("RoundTimerPart"):GetAttribute("Time")
-						timertext.Text = secondsToMinutes(timeLeft)
-					end
-				end)
-			else
-				if timertext then
-					timertext:Destroy()
-				end
-				task.cancel(timertask)
-			end
-		end,}
-	})
-	
-	table.insert(module, {Type="Text", Args={""}})
 	
 	table.insert(module, {
 		Type = "Text",
@@ -8617,19 +8879,20 @@ do
 
     if isMobile then
         -- MOBILE: MISMO layout HORIZONTAL que PC (lista izq + contenido der), solo más compacto
+        -- Top fijo en px para NO atravesar logo + título (BrandLogo ~ y18-66)
         menu.Size = UDim2.fromOffset(560, 380)
         menu.Position = UDim2.fromScale(0.5, 0.5)
         menu.AnchorPoint = Vector2.new(0.5, 0.5)
 
         Converted["_List"].AnchorPoint = Vector2.new(0, 0)
-        Converted["_List"].Position = UDim2.new(0, 10, 0.14, 0)
-        Converted["_List"].Size = UDim2.new(0.30, 0, 0.82, 0)
+        Converted["_List"].Position = UDim2.new(0, 10, 0, 76)
+        Converted["_List"].Size = UDim2.new(0.30, 0, 1, -88)
         Converted["_List"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         Converted["_List"].BackgroundTransparency = 1
 
         Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
-        Converted["_Area"].Position = UDim2.new(0.32, 6, 0.14, 0)
-        Converted["_Area"].Size = UDim2.new(0.66, -16, 0.82, 0)
+        Converted["_Area"].Position = UDim2.new(0.32, 6, 0, 76)
+        Converted["_Area"].Size = UDim2.new(0.66, -16, 1, -88)
 
         local listSF = Converted["_List"]:FindFirstChildOfClass("ScrollingFrame")
         if listSF then
@@ -8706,14 +8969,14 @@ do
         local menuCorner = menu:FindFirstChildOfClass("UICorner")
         if menuCorner then menuCorner.CornerRadius = UDim.new(0, 24) end
     else
-        -- PC: original layout
+        -- PC: horizontal layout, List/Area DEBAJO del logo+título (no atraviesan)
         menu.Size = UDim2.fromOffset(720, 470)
         Converted["_List"].AnchorPoint = Vector2.new(0, 0)
-        Converted["_List"].Position = UDim2.new(0, 14, 0.16, 0)
-        Converted["_List"].Size = UDim2.new(0.28, 0, 0.80, 0)
+        Converted["_List"].Position = UDim2.new(0, 14, 0, 78)
+        Converted["_List"].Size = UDim2.new(0.28, 0, 1, -92)
         Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
-        Converted["_Area"].Position = UDim2.new(0.32, 8, 0.16, 0)
-        Converted["_Area"].Size = UDim2.new(0.66, -22, 0.80, 0)
+        Converted["_Area"].Position = UDim2.new(0.32, 8, 0, 78)
+        Converted["_Area"].Size = UDim2.new(0.66, -22, 1, -92)
 
         local menuCorner = menu:FindFirstChildOfClass("UICorner")
         if menuCorner then menuCorner.CornerRadius = UDim.new(0, 32) end
@@ -8775,7 +9038,7 @@ do
             local parent = obj.Parent
             local keepSolid = parent and (
                 parent.Name == "List"
-                or parent.Name == "SectionCard"
+                or parent.Name == "SectionFlat"
                 or parent.Name == "Menu"
                 or parent.Name == "ToggleRow"
                 or parent:IsA("TextButton")
@@ -8787,10 +9050,8 @@ do
                 obj.Transparency = 0
                 obj.Thickness = isMobile and 1.1 or 1.2
             end
-            if parent and parent.Name == "SectionCard" then
-                obj.Transparency = 0
-                obj.Thickness = 1.4
-                obj.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            if parent and parent.Name == "SectionFlat" then
+                -- flat sections: no forced stroke
             end
             if parent and (parent.Name == "ToggleRow" or parent:IsA("TextButton")) then
                 obj.Transparency = 0
