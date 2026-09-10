@@ -36,13 +36,13 @@ local function H3XA_saveLangPrefs(remember, lang)
 	end)
 end
 
-local function createLanguageSelector()
+local function createLanguageSelector(forceOpen)
 	local env = (getgenv and getgenv()) or _G
 	local TweenService = game:GetService("TweenService")
 
-	-- Si "Recordar" está activo y hay idioma guardado, saltar el selector
+	-- Si "Recordar" está activo y hay idioma guardado, saltar el selector (salvo forceOpen)
 	local prefs = H3XA_loadLangPrefs()
-	if prefs.remember and (prefs.lang == "ES" or prefs.lang == "EN") then
+	if (not forceOpen) and prefs.remember and (prefs.lang == "ES" or prefs.lang == "EN") then
 		env.H3XA_MM2_LANGUAGE = prefs.lang
 		return prefs.lang
 	end
@@ -352,12 +352,12 @@ local function H3XA_saveDevicePrefs(remember, device)
 	end)
 end
 
-local function createDeviceSelector()
+local function createDeviceSelector(forceOpen)
 	local env = (getgenv and getgenv()) or _G
 	local TweenService = game:GetService("TweenService")
 
 	local prefs = H3XA_loadDevicePrefs()
-	if prefs.remember and (prefs.device == "MOBILE" or prefs.device == "PC") then
+	if (not forceOpen) and prefs.remember and (prefs.device == "MOBILE" or prefs.device == "PC") then
 		env.H3XA_MM2_DEVICE = prefs.device
 		return prefs.device
 	end
@@ -635,7 +635,35 @@ local function createDeviceSelector()
 	return choice
 end
 
-local H3XA_MM2_DEVICE = createDeviceSelector()
+-- Auto-detect device (no selector panel)
+local function H3XA_detectDevice()
+	local UIS = game:GetService("UserInputService")
+	local ok, platform = pcall(function()
+		return UIS:GetPlatform()
+	end)
+	if ok and platform then
+		if platform == Enum.Platform.IOS or platform == Enum.Platform.Android then
+			return "MOBILE"
+		end
+		if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.Linux then
+			-- algunos emuladores/touch en PC: preferir teclado/ratón si existen
+			if UIS.TouchEnabled and not UIS.KeyboardEnabled and not UIS.MouseEnabled then
+				return "MOBILE"
+			end
+			return "PC"
+		end
+	end
+	-- Fallback robusto
+	if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+		return "MOBILE"
+	end
+	if UIS.TouchEnabled and UIS.GyroscopeEnabled and not UIS.MouseEnabled then
+		return "MOBILE"
+	end
+	return "PC"
+end
+
+local H3XA_MM2_DEVICE = H3XA_detectDevice()
 do
 	local env = (getgenv and getgenv()) or _G
 	env.H3XA_MM2_DEVICE = H3XA_MM2_DEVICE
@@ -649,6 +677,7 @@ local function H3XA_showNotMM2Panel()
 	local TweenService = game:GetService("TweenService")
 	local TeleportService = game:GetService("TeleportService")
 	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
 
 	local parent = game:GetService("CoreGui")
 	pcall(function()
@@ -686,7 +715,6 @@ local function H3XA_showNotMM2Panel()
 	dim.BorderSizePixel = 0
 	dim.Parent = gui
 
-	-- Mismo fondo que el panel principal del hub
 	local panel = Instance.new("Frame")
 	panel.Name = "NotMM2Panel"
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -710,6 +738,200 @@ local function H3XA_showNotMM2Panel()
 	panelStroke.Transparency = 0.55
 	panelStroke.Parent = panel
 
+	-- Mismo fondo galaxia del panel principal: estrellas blancas cayendo
+	local galaxy = Instance.new("Frame")
+	galaxy.Name = "GalaxyBG"
+	galaxy.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+	galaxy.BackgroundTransparency = 0
+	galaxy.Size = UDim2.fromScale(1, 1)
+	galaxy.Position = UDim2.fromScale(0, 0)
+	galaxy.ZIndex = 0
+	galaxy.ClipsDescendants = true
+	galaxy.Parent = panel
+	local galaxyCorner = Instance.new("UICorner", galaxy)
+	galaxyCorner.CornerRadius = UDim.new(0, 28)
+
+	local rng = Random.new()
+	local starsFolder = Instance.new("Folder")
+	starsFolder.Name = "Stars"
+	starsFolder.Parent = galaxy
+
+	local staticStars = {}
+	for i = 1, 70 do
+		local star = Instance.new("Frame")
+		local size = rng:NextNumber(1, 2.6)
+		star.Name = "StaticStar"
+		star.BorderSizePixel = 0
+		star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		star.BackgroundTransparency = rng:NextNumber(0.15, 0.7)
+		star.Size = UDim2.fromOffset(size, size)
+		star.AnchorPoint = Vector2.new(0.5, 0.5)
+		star.Position = UDim2.new(rng:NextNumber(0, 1), 0, rng:NextNumber(0, 1), 0)
+		star.ZIndex = 1
+		local c = Instance.new("UICorner", star)
+		c.CornerRadius = UDim.new(1, 0)
+		star.Parent = starsFolder
+		table.insert(staticStars, {
+			inst = star,
+			twinkle = rng:NextNumber(1.2, 5),
+			phase = rng:NextNumber(0, math.pi * 2),
+			baseT = star.BackgroundTransparency
+		})
+	end
+
+	local fallingStars = {}
+	local STAR_COUNT = 90
+
+	local function spawnStar(initial)
+		local star = Instance.new("Frame")
+		local size = rng:NextNumber(1.1, 3.8)
+		star.Name = "Star"
+		star.BorderSizePixel = 0
+		star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		star.BackgroundTransparency = rng:NextNumber(0.02, 0.5)
+		star.Size = UDim2.fromOffset(size, size)
+		star.AnchorPoint = Vector2.new(0.5, 0.5)
+		star.ZIndex = 2
+		local x = rng:NextNumber(0, 1)
+		local y = initial and rng:NextNumber(-0.05, 1.05) or rng:NextNumber(-0.18, -0.02)
+		star.Position = UDim2.new(x, 0, y, 0)
+		local c = Instance.new("UICorner", star)
+		c.CornerRadius = UDim.new(1, 0)
+		star.Parent = starsFolder
+		if rng:NextNumber() < 0.38 then
+			local trail = Instance.new("Frame")
+			trail.Name = "Trail"
+			trail.AnchorPoint = Vector2.new(0.5, 0)
+			trail.Position = UDim2.new(0.5, 0, 0, 0)
+			trail.Size = UDim2.fromOffset(math.max(1, size * 0.55), rng:NextNumber(12, 28))
+			trail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			trail.BackgroundTransparency = 0.45
+			trail.BorderSizePixel = 0
+			trail.ZIndex = 1
+			trail.Parent = star
+			local tc = Instance.new("UICorner", trail)
+			tc.CornerRadius = UDim.new(1, 0)
+			local tg = Instance.new("UIGradient", trail)
+			tg.Rotation = 90
+			tg.Transparency = NumberSequence.new{
+				NumberSequenceKeypoint.new(0, 0.15),
+				NumberSequenceKeypoint.new(1, 1)
+			}
+		end
+		table.insert(fallingStars, {
+			inst = star,
+			speed = rng:NextNumber(0.035, 0.22),
+			drift = rng:NextNumber(-0.035, 0.035),
+			twinkle = rng:NextNumber(1.5, 5),
+			phase = rng:NextNumber(0, math.pi * 2),
+			baseT = star.BackgroundTransparency
+		})
+	end
+
+	for i = 1, STAR_COUNT do
+		spawnStar(true)
+	end
+
+	local function spawnShootingStar()
+		local ss = Instance.new("Frame")
+		ss.Name = "ShootingStar"
+		ss.BorderSizePixel = 0
+		ss.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		ss.BackgroundTransparency = 0.05
+		ss.Size = UDim2.fromOffset(2.5, 2.5)
+		ss.AnchorPoint = Vector2.new(0.5, 0.5)
+		ss.ZIndex = 3
+		local startX = rng:NextNumber(0.02, 0.98)
+		ss.Position = UDim2.new(startX, 0, -0.06, 0)
+		local c = Instance.new("UICorner", ss)
+		c.CornerRadius = UDim.new(1, 0)
+		local trail = Instance.new("Frame")
+		trail.AnchorPoint = Vector2.new(0.5, 0)
+		trail.Position = UDim2.new(0.5, 0, 0, 0)
+		trail.Size = UDim2.fromOffset(2, rng:NextNumber(26, 48))
+		trail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		trail.BackgroundTransparency = 0.25
+		trail.BorderSizePixel = 0
+		trail.Parent = ss
+		local tc = Instance.new("UICorner", trail)
+		tc.CornerRadius = UDim.new(1, 0)
+		local tg = Instance.new("UIGradient", trail)
+		tg.Rotation = 90
+		tg.Transparency = NumberSequence.new{
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(1, 1)
+		}
+		ss.Parent = starsFolder
+		local dur = rng:NextNumber(0.4, 0.95)
+		local endX = startX + rng:NextNumber(-0.22, 0.22)
+		TweenService:Create(ss, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(endX, 0, 1.12, 0),
+			BackgroundTransparency = 1
+		}):Play()
+		TweenService:Create(trail, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		}):Play()
+		task.delay(dur + 0.05, function()
+			if ss then ss:Destroy() end
+		end)
+	end
+
+	task.spawn(function()
+		while galaxy and galaxy.Parent do
+			task.wait(rng:NextNumber(0.45, 1.4))
+			if galaxy and galaxy.Parent then
+				local burst = rng:NextInteger(1, 3)
+				for _ = 1, burst do
+					spawnShootingStar()
+					task.wait(rng:NextNumber(0.05, 0.18))
+				end
+			end
+		end
+	end)
+
+	local galaxyConn = RunService.RenderStepped:Connect(function(dt)
+		if not galaxy or not galaxy.Parent then return end
+		local t = os.clock()
+		for _, st in ipairs(staticStars) do
+			local inst = st.inst
+			if inst and inst.Parent then
+				local tw = (math.sin(t * st.twinkle + st.phase) + 1) * 0.5
+				inst.BackgroundTransparency = math.clamp(st.baseT + tw * 0.4, 0.05, 0.9)
+			end
+		end
+		for i = #fallingStars, 1, -1 do
+			local st = fallingStars[i]
+			local inst = st.inst
+			if not inst or not inst.Parent then
+				table.remove(fallingStars, i)
+			else
+				local p = inst.Position
+				local ny = p.Y.Scale + st.speed * dt
+				local nx = p.X.Scale + st.drift * dt
+				if ny > 1.08 then
+					ny = rng:NextNumber(-0.14, -0.02)
+					nx = rng:NextNumber(0, 1)
+					st.speed = rng:NextNumber(0.035, 0.22)
+					st.drift = rng:NextNumber(-0.035, 0.035)
+				end
+				inst.Position = UDim2.new(nx, 0, ny, 0)
+				local tw = (math.sin(t * st.twinkle + st.phase) + 1) * 0.5
+				inst.BackgroundTransparency = math.clamp(st.baseT + tw * 0.35, 0.02, 0.85)
+			end
+		end
+		while #fallingStars < STAR_COUNT do
+			spawnStar(false)
+		end
+	end)
+
+	-- Contenido encima de las estrellas
+	local content = Instance.new("Frame")
+	content.Name = "Content"
+	content.BackgroundTransparency = 1
+	content.Size = UDim2.fromScale(1, 1)
+	content.ZIndex = 5
+	content.Parent = panel
+
 	local logo = Instance.new("ImageLabel")
 	logo.Name = "Logo"
 	logo.AnchorPoint = Vector2.new(0.5, 0)
@@ -718,7 +940,8 @@ local function H3XA_showNotMM2Panel()
 	logo.BackgroundTransparency = 1
 	logo.Image = "rbxassetid://72742584610344"
 	logo.ScaleType = Enum.ScaleType.Fit
-	logo.Parent = panel
+	logo.ZIndex = 6
+	logo.Parent = content
 
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseX"
@@ -734,7 +957,7 @@ local function H3XA_showNotMM2Panel()
 	closeBtn.TextSize = 20
 	closeBtn.TextStrokeTransparency = 1
 	closeBtn.ZIndex = 10
-	closeBtn.Parent = panel
+	closeBtn.Parent = content
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
@@ -749,14 +972,16 @@ local function H3XA_showNotMM2Panel()
 	title.TextSize = 16
 	title.TextWrapped = true
 	title.TextStrokeTransparency = 1
-	title.Parent = panel
+	title.ZIndex = 6
+	title.Parent = content
 
 	local buttons = Instance.new("Frame")
 	buttons.Name = "Buttons"
 	buttons.BackgroundTransparency = 1
 	buttons.Position = UDim2.new(0, 28, 0, 190)
 	buttons.Size = UDim2.new(1, -56, 0, 52)
-	buttons.Parent = panel
+	buttons.ZIndex = 6
+	buttons.Parent = content
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -780,6 +1005,7 @@ local function H3XA_showNotMM2Panel()
 		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 		btn.TextSize = 15
 		btn.TextStrokeTransparency = 1
+		btn.ZIndex = 7
 		btn.Parent = buttons
 
 		local c = Instance.new("UICorner")
@@ -824,11 +1050,9 @@ local function H3XA_showNotMM2Panel()
 	closeBtn.MouseButton1Click:Connect(function()
 		decision:Fire("close")
 	end)
-
 	yesBtn.MouseButton1Click:Connect(function()
 		decision:Fire("yes")
 	end)
-
 	goBtn.MouseButton1Click:Connect(function()
 		decision:Fire("goto")
 	end)
@@ -843,6 +1067,7 @@ local function H3XA_showNotMM2Panel()
 	TweenService:Create(panelStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quint), { Transparency = 0.55 }):Play()
 
 	local choice = decision.Event:Wait()
+	pcall(function() galaxyConn:Disconnect() end)
 	gui:Destroy()
 	decision:Destroy()
 
@@ -853,9 +1078,9 @@ local function H3XA_showNotMM2Panel()
 		return false
 	end
 	if choice == "yes" then
-		return true -- continuar y abrir el hub
+		return true
 	end
-	return false -- X / cerrar: no cargar
+	return false
 end
 
 do
@@ -874,9 +1099,8 @@ do
 	if not isMM2 then
 		local openAnyway = H3XA_showNotMM2Panel()
 		if not openAnyway then
-			return -- no abrir interfaz
+			return
 		end
-		-- SÍ: sigue cargando el hub normalmente
 	end
 end
 
@@ -902,6 +1126,7 @@ local H3XA_MM2_ES = {
 
     ["ESPs"] = "ESP",
     ["Players"] = "Rol ESP",
+    ["Role ESP"] = "Rol ESP",
     ["Dropped Gun"] = "Arma caída",
     ["Traps"] = "Trampas",
     ["Hide my own ESP"] = "Ocultar mi propio ESP",
@@ -981,11 +1206,63 @@ local H3XA_MM2_ES = {
     ["Can't find a proper part of target player to fling."] = "No se encontró una parte válida del jugador objetivo para lanzarlo.",
     ["No valid character of said target player. May have died."] = "El jugador objetivo no tiene un personaje válido; quizá murió.",
     ["Could not find the player's HumanoidRootPart."] = "No se pudo encontrar el HumanoidRootPart del jugador.",
+    ["Teleport to lobby"] = "Teletransportarse al lobby",
+    ["Teleport to map"] = "Teletransportarse al mapa",
+    ["Fling Sheriff"] = "Lanzar al Sheriff",
+    ["Fling Murderer"] = "Lanzar al Asesino",
+    ["Copy murderer username"] = "Copiar usuario del asesino",
+    ["Copy sheriff username"] = "Copiar usuario del sheriff",
+    ["No lobby to teleport to."] = "No hay lobby al que teletransportarse.",
+    ["Teleported to lobby."] = "Teletransportado al lobby.",
+    ["Teleported to map."] = "Teletransportado al mapa.",
+    ["Round timer"] = "Temporizador de ronda",
+    ["Detectables"] = "Detectables",
+    ["Instakill murderer as sheriff"] = "Matar instantáneamente al asesino como sheriff",
+    ["Spawn knife throw near player"] = "Generar lanzamiento de cuchillo cerca del jugador",
+    ["Send Sheriff and Murderer names into chat"] = "Enviar nombres de Sheriff y Asesino al chat",
+    ["Teleport to dropped gun"] = "Teletransportarse al arma caída",
+    ["Automatically get gun on drop"] = "Recoger automáticamente el arma al caer",
+    ["Kill closest player as murderer"] = "Matar al jugador más cercano como asesino",
+    ["Murderer kill aura"] = "Aura de muerte del asesino",
+    ["Kill EVERYONE as murderer"] = "Matar a TODOS como asesino",
+    ["Fun"] = "Diversión",
+    ["Hold everyone hostage"] = "Retener a todos",
+    ["Language"] = "Idioma",
+    ["Device"] = "Dispositivo",
+    ["Couldn't find a place to teleport to."] = "No se encontró un lugar al que teletransportarse.",
+    ["OP Fly"] = "Vuelo OP",
+    ["Fly speed"] = "Velocidad de vuelo",
+    ["Infinite jump"] = "Salto infinito",
+    ["Limit infinite jump to 2 jumps only"] = "Limitar salto infinito a solo 2 saltos",
+    ["CTRL+Click Teleport"] = "Teletransporte con CTRL+clic",
+    ["Teleports"] = "Teletransportes",
+    ["Spectate players"] = "Espectear jugadores",
+    ["Aim locking"] = "Bloqueo de mira",
+    ["Target player"] = "Jugador objetivo",
+    ["Set target"] = "Fijar objetivo",
+    ["Aim lock"] = "Bloquear mira",
+    ["Unaim lock"] = "Quitar bloqueo de mira",
+    ["Fling"] = "Lanzar",
+    ["Target fling player"] = "Jugador a lanzar",
+    ["Anti-fling"] = "Anti-lanzamiento",
+    ["Miscellaneous"] = "Misceláneo",
+    ["Anti AFK detection"] = "Anti detección AFK",
+    ["Hide H3XA_MM2"] = "Ocultar H3XA_MM2",
+    ["FPS Boost"] = "Mejora de FPS",
+    ["Other"] = "Otros",
+    ["Get ping"] = "Ver ping",
+    ["Open developer console (debugging)"] = "Abrir consola de desarrollador",
+    ["Theme"] = "Tema",
+    ["Reload theme"] = "Recargar tema",
+    ["Delete theme from save"] = "Eliminar tema guardado",
+
 }
 
 local function H3XA_MM2_T(value)
     if type(value) ~= "string" then return value end
-    if H3XA_MM2_LANGUAGE ~= "ES" then return value end
+    local env = (getgenv and getgenv()) or _G
+    local lang = env.H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
+    if lang ~= "ES" then return value end
     local exact = H3XA_MM2_ES[value]
     if exact then return exact end
 
@@ -3012,12 +3289,12 @@ do
     topGlowCorner.CornerRadius = UDim.new(1, 0)
     topGlowCorner.Parent = topGlow
 
-    -- Header controls: [–] minimize LEFT of [×] close
+    -- Header controls: [Lang] [–] [×]
     local controlBar = Instance.new("Frame")
     controlBar.Name = "HeaderControls"
     controlBar.AnchorPoint = Vector2.new(1, 0)
     controlBar.Position = UDim2.new(1, -18, 0, 18)
-    controlBar.Size = UDim2.fromOffset(86, 36)
+    controlBar.Size = UDim2.fromOffset(126, 36)
     controlBar.BackgroundTransparency = 1
     controlBar.ZIndex = 50
     controlBar.Parent = menu
@@ -3027,10 +3304,41 @@ do
     controlLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
     controlLayout.VerticalAlignment = Enum.VerticalAlignment.Center
     controlLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    controlLayout.Padding = UDim.new(0, 8)
+    controlLayout.Padding = UDim.new(0, 6)
     controlLayout.Parent = controlBar
 
-    -- Minimize (LEFT of close) — LayoutOrder 1
+    local function makeHeaderIconBtn(name, order, iconText)
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.LayoutOrder = order
+        btn.Size = UDim2.fromOffset(36, 36)
+        btn.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+        btn.BackgroundTransparency = 0.4
+        btn.BorderSizePixel = 0
+        btn.AutoButtonColor = false
+        btn.Font = Enum.Font.GothamBold
+        btn.Text = iconText
+        btn.TextColor3 = Color3.fromRGB(240, 240, 245)
+        btn.TextSize = 16
+        btn.TextStrokeTransparency = 1
+        btn.ZIndex = 51
+        btn.Parent = controlBar
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 16)
+        c.Parent = btn
+        local s = Instance.new("UIStroke")
+        s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        s.Color = Color3.fromRGB(255, 255, 255)
+        s.Thickness = 1
+        s.Transparency = 0.82
+        s.Parent = btn
+        return btn, s
+    end
+
+    -- Language (left) — LayoutOrder 0
+    local langBtn, langStroke = makeHeaderIconBtn("LangBtn", 0, "文")
+
+    -- Minimize (derecha del idioma) — LayoutOrder 1
     local minimizeBtn = Instance.new("TextButton")
     minimizeBtn.Name = "MinimizeBtn"
     minimizeBtn.LayoutOrder = 1
@@ -3106,6 +3414,27 @@ do
     end
     hoverBtn(minimizeBtn, minStroke)
     hoverBtn(closeButton, closeStroke)
+    hoverBtn(langBtn, langStroke)
+
+    -- Reabrir selector de idioma
+    langBtn.MouseButton1Click:Connect(function()
+        task.spawn(function()
+            local env = (getgenv and getgenv()) or _G
+            local choice = createLanguageSelector(true)
+            if choice == "ES" or choice == "EN" then
+                env.H3XA_MM2_LANGUAGE = choice
+                H3XA_MM2_LANGUAGE = choice
+                pcall(function()
+                    if getgenv().H3XA_MM2FUNCTIONS and getgenv().H3XA_MM2FUNCTIONS.refreshlist then
+                        getgenv().H3XA_MM2FUNCTIONS.refreshlist()
+                    end
+                    if getgenv().H3XA_MM2FUNCTIONS and getgenv().H3XA_MM2FUNCTIONS.refresharea then
+                        getgenv().H3XA_MM2FUNCTIONS.refresharea()
+                    end
+                end)
+            end
+        end)
+    end)
 
     -- Solid minimize: dark icon only, no white panel, no spring fight
     local isMinimized = false
@@ -7255,7 +7584,7 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 	
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Players", function(Self, state)
+		Args = {"Role ESP", function(Self, state)
 			playerESP = state and true or false
 			if not playerESP then
 				espcontainer:RemoveGroup("players")
@@ -7686,22 +8015,74 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 		Type = "ButtonGrid",
 		Args = {2, {
 			Teleport_to_lobby = function(Self)
-				local lobby = workspace:FindFirstChild("Lobby") 
-				if lobby then
-					localplayer.Character:MoveTo(lobby.Spawns:FindFirstChildWhichIsA("SpawnLocation").Position)
+				local char = localplayer.Character
+				if not char then
+					fu.notification("You're not a valid character.")
+					return
 				end
-				--localplayer.Character:MoveTo(Vector3.new(-350, 522, -4))
+				local lobby = workspace:FindFirstChild("Lobby")
+				if not lobby then
+					-- fallback común en MM2
+					lobby = workspace:FindFirstChild("Lobby", true)
+				end
+				if not lobby then
+					fu.notification("No lobby to teleport to.")
+					return
+				end
+				local spawnPos = nil
+				local spawns = lobby:FindFirstChild("Spawns")
+				if spawns then
+					local spawn = spawns:FindFirstChildWhichIsA("SpawnLocation") or spawns:FindFirstChildWhichIsA("BasePart")
+					if spawn then spawnPos = spawn.Position end
+				end
+				if not spawnPos then
+					local spawn = lobby:FindFirstChildWhichIsA("SpawnLocation", true)
+					if spawn then spawnPos = spawn.Position end
+				end
+				if not spawnPos then
+					local ok, pivot = pcall(function() return lobby:GetPivot().Position end)
+					if ok and pivot then spawnPos = pivot end
+				end
+				if not spawnPos then
+					fu.notification("No lobby to teleport to.")
+					return
+				end
+				local target = CFrame.new(spawnPos + Vector3.new(0, 4, 0))
+				if char:FindFirstChild("HumanoidRootPart") then
+					char:PivotTo(target)
+				else
+					char:MoveTo(spawnPos + Vector3.new(0, 4, 0))
+				end
+				fu.notification("Teleported to lobby.")
 			end,
 	
 			Teleport_to_map = function(Self)
-				local spawnsFolder = getMap():FindFirstChild("Spawns")
+				local map = getMap()
+				if not map then
+					fu.notification("No map to teleport to.")
+					return
+				end
+				local char = localplayer.Character
+				if not char then
+					fu.notification("You're not a valid character.")
+					return
+				end
+				local spawnsFolder = map:FindFirstChild("Spawns")
 				if spawnsFolder then
 					local spawns = spawnsFolder:GetChildren()
-					local randomSpawn = spawns[math.random(1, #spawns)]
-					localplayer.Character:MoveTo(randomSpawn.Position)
-				else
-					fu.notification("No map to teleport to.")
+					if #spawns > 0 then
+						local randomSpawn = spawns[math.random(1, #spawns)]
+						local pos = randomSpawn.Position
+						if char:FindFirstChild("HumanoidRootPart") then
+							char:PivotTo(CFrame.new(pos + Vector3.new(0, 3, 0)))
+						else
+							char:MoveTo(pos)
+						end
+						fu.notification("Teleported to map.")
+						return
+					end
 				end
+				fu.notification("No map to teleport to.")
 			end,
 		}}
 	}) 
