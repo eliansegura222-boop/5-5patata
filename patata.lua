@@ -324,6 +324,323 @@ end
 
 local H3XA_MM2_LANGUAGE = createLanguageSelector()
 
+-- H3XA MM2 - Device selector (Celular / Computadora) + Remember preference
+local H3XA_DEVICE_FILE = "H3XA_MM2_device.txt"
+
+local function H3XA_loadDevicePrefs()
+	local prefs = { remember = false, device = nil }
+	pcall(function()
+		if isfile and isfile(H3XA_DEVICE_FILE) and readfile then
+			local raw = readfile(H3XA_DEVICE_FILE)
+			if type(raw) == "string" and #raw > 0 then
+				local rem, device = raw:match("^(%d)|(%w+)$")
+				if rem and device then
+					prefs.remember = (rem == "1")
+					prefs.device = device
+				end
+			end
+		end
+	end)
+	return prefs
+end
+
+local function H3XA_saveDevicePrefs(remember, device)
+	pcall(function()
+		if writefile then
+			writefile(H3XA_DEVICE_FILE, (remember and "1" or "0") .. "|" .. tostring(device or "PC"))
+		end
+	end)
+end
+
+local function createDeviceSelector()
+	local env = (getgenv and getgenv()) or _G
+	local TweenService = game:GetService("TweenService")
+
+	local prefs = H3XA_loadDevicePrefs()
+	if prefs.remember and (prefs.device == "MOBILE" or prefs.device == "PC") then
+		env.H3XA_MM2_DEVICE = prefs.device
+		return prefs.device
+	end
+
+	local parent = game:GetService("CoreGui")
+	pcall(function()
+		if gethui then
+			parent = gethui()
+		elseif get_hidden_gui then
+			parent = get_hidden_gui()
+		end
+	end)
+
+	pcall(function()
+		local old = parent:FindFirstChild("H3XA_MM2_DeviceSelector")
+		if old then old:Destroy() end
+	end)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "H3XA_MM2_DeviceSelector"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 2147483647
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local parented = pcall(function()
+		gui.Parent = parent
+	end)
+	if not parented then
+		gui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local dim = Instance.new("Frame")
+	dim.Name = "Dim"
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "DevicePanel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(400, 340)
+	panel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	panel.BackgroundTransparency = 0
+	panel.BorderSizePixel = 0
+	panel.ClipsDescendants = true
+	panel.Parent = dim
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 28)
+	corner.Parent = panel
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	panelStroke.LineJoinMode = Enum.LineJoinMode.Round
+	panelStroke.Color = Color3.fromRGB(255, 255, 255)
+	panelStroke.Thickness = 1.5
+	panelStroke.Transparency = 0
+	panelStroke.Parent = panel
+
+	local logo = Instance.new("ImageLabel")
+	logo.Name = "Logo"
+	logo.AnchorPoint = Vector2.new(0.5, 0)
+	logo.Position = UDim2.new(0.5, 0, 0, 28)
+	logo.Size = UDim2.fromOffset(56, 56)
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://72742584610344"
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.new(0, 28, 0, 98)
+	title.Size = UDim2.new(1, -56, 0, 28)
+	title.Font = Enum.Font.GothamBold
+	title.Text = "SELECT DEVICE"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.TextStrokeTransparency = 1
+	title.Parent = panel
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "Subtitle"
+	subtitle.BackgroundTransparency = 1
+	subtitle.Position = UDim2.new(0, 28, 0, 128)
+	subtitle.Size = UDim2.new(1, -56, 0, 20)
+	subtitle.Font = Enum.Font.Gotham
+	subtitle.Text = "Elige tu dispositivo  •  Choose your device"
+	subtitle.TextColor3 = Color3.fromRGB(180, 180, 180)
+	subtitle.TextSize = 13
+	subtitle.TextStrokeTransparency = 1
+	subtitle.Parent = panel
+
+	local buttons = Instance.new("Frame")
+	buttons.Name = "Buttons"
+	buttons.BackgroundTransparency = 1
+	buttons.Position = UDim2.new(0, 28, 0, 168)
+	buttons.Size = UDim2.new(1, -56, 0, 72)
+	buttons.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 14)
+	layout.Parent = buttons
+
+	local selected = Instance.new("BindableEvent")
+	local rememberOn = false
+
+	local function makeButton(text, code, subtext)
+		local button = Instance.new("TextButton")
+		button.Name = code
+		button.Size = UDim2.new(0.5, -7, 1, 0)
+		button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		button.BackgroundTransparency = 1
+		button.BorderSizePixel = 0
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = text .. "\n" .. subtext
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.TextSize = 15
+		button.TextWrapped = true
+		button.TextStrokeTransparency = 1
+		button.Parent = buttons
+
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 16)
+		c.Parent = button
+
+		local s = Instance.new("UIStroke")
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		s.Color = Color3.fromRGB(255, 255, 255)
+		s.Thickness = 1.2
+		s.Transparency = 0
+		s.Parent = button
+
+		button.MouseEnter:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+		end)
+		button.MouseLeave:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.32, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 1,
+				TextColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+		end)
+		button.MouseButton1Click:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.12), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+			selected:Fire(code)
+		end)
+	end
+
+	makeButton("CELULAR", "MOBILE", "Mobile")
+	makeButton("COMPUTADORA", "PC", "Computer")
+
+	local rememberRow = Instance.new("TextButton")
+	rememberRow.Name = "RememberRow"
+	rememberRow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	rememberRow.BackgroundTransparency = 1
+	rememberRow.BorderSizePixel = 0
+	rememberRow.AutoButtonColor = false
+	rememberRow.Text = ""
+	rememberRow.Position = UDim2.new(0, 28, 0, 260)
+	rememberRow.Size = UDim2.new(1, -56, 0, 42)
+	rememberRow.Parent = panel
+
+	local rrCorner = Instance.new("UICorner")
+	rrCorner.CornerRadius = UDim.new(0, 14)
+	rrCorner.Parent = rememberRow
+
+	local rrStroke = Instance.new("UIStroke")
+	rrStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	rrStroke.Color = Color3.fromRGB(255, 255, 255)
+	rrStroke.Thickness = 1.15
+	rrStroke.Transparency = 0
+	rrStroke.Parent = rememberRow
+
+	local rememberLabel = Instance.new("TextLabel")
+	rememberLabel.BackgroundTransparency = 1
+	rememberLabel.Position = UDim2.fromOffset(14, 0)
+	rememberLabel.Size = UDim2.new(1, -70, 1, 0)
+	rememberLabel.Font = Enum.Font.GothamMedium
+	rememberLabel.TextSize = 13
+	rememberLabel.TextXAlignment = Enum.TextXAlignment.Left
+	rememberLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rememberLabel.Text = "RECORDAR / REMEMBER"
+	rememberLabel.Parent = rememberRow
+
+	local track = Instance.new("Frame")
+	track.Name = "Track"
+	track.AnchorPoint = Vector2.new(1, 0.5)
+	track.Position = UDim2.new(1, -12, 0.5, 0)
+	track.Size = UDim2.fromOffset(44, 22)
+	track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	track.BorderSizePixel = 0
+	track.Parent = rememberRow
+	local trackCorner = Instance.new("UICorner")
+	trackCorner.CornerRadius = UDim.new(1, 0)
+	trackCorner.Parent = track
+	local trackStroke = Instance.new("UIStroke")
+	trackStroke.Color = Color3.fromRGB(255, 255, 255)
+	trackStroke.Thickness = 1
+	trackStroke.Transparency = 0.4
+	trackStroke.Parent = track
+
+	local knob = Instance.new("Frame")
+	knob.Name = "Knob"
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Size = UDim2.fromOffset(16, 16)
+	knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	knob.BorderSizePixel = 0
+	knob.Position = UDim2.fromScale(0.28, 0.5)
+	knob.Parent = track
+	local knobCorner = Instance.new("UICorner")
+	knobCorner.CornerRadius = UDim.new(1, 0)
+	knobCorner.Parent = knob
+
+	local function setRememberVisual(on)
+		if on then
+			TweenService:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Position = UDim2.fromScale(0.72, 0.5),
+				BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+			TweenService:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+			TweenService:Create(rrStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Color = Color3.fromRGB(80, 255, 120),
+				Thickness = 1.4
+			}):Play()
+		else
+			TweenService:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Position = UDim2.fromScale(0.28, 0.5),
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+			TweenService:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			}):Play()
+			TweenService:Create(rrStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Color = Color3.fromRGB(255, 255, 255),
+				Thickness = 1.15
+			}):Play()
+		end
+	end
+
+	rememberRow.MouseButton1Click:Connect(function()
+		rememberOn = not rememberOn
+		setRememberVisual(rememberOn)
+	end)
+
+	panel.Size = UDim2.fromOffset(360, 300)
+	panel.BackgroundTransparency = 1
+	panelStroke.Transparency = 1
+	TweenService:Create(panel, TweenInfo.new(0.45, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(400, 340),
+		BackgroundTransparency = 0
+	}):Play()
+	TweenService:Create(panelStroke, TweenInfo.new(0.45, Enum.EasingStyle.Quint), { Transparency = 0 }):Play()
+
+	local choice = selected.Event:Wait()
+	H3XA_saveDevicePrefs(rememberOn, choice)
+	env.H3XA_MM2_DEVICE = choice
+	gui:Destroy()
+	selected:Destroy()
+	return choice
+end
+
+local H3XA_MM2_DEVICE = createDeviceSelector()
+do
+	local env = (getgenv and getgenv()) or _G
+	env.H3XA_MM2_DEVICE = H3XA_MM2_DEVICE
+end
+
 local H3XA_MM2_ES = {
     ["Triple-click this region to open MM2."] = "Toca tres veces esta zona para abrir MM2.",
     ["This can fit a lot of text, probably."] = "Aquí puede caber bastante texto.",
@@ -356,6 +673,8 @@ local H3XA_MM2_ES = {
     ["Delayed shoot murderer"] = "Disparo retrasado al asesino",
     ["Shoot position offset"] = "Desfase de posición del disparo",
     ["Set"] = "Aplicar",
+    ["Press the key you want to assign. Press Backspace to remove it."] = "Toca la tecla que quieras asignar. Pulsa Backspace para quitarla.",
+    ["Keybind removed."] = "Keybind eliminado.",
     ["Offset-to-ping multiplier"] = "Multiplicador de desfase según ping",
     ["Shoot offset re-aims the gun/knife shoot/throw to the character's predicted position. Recommended is 2.8"] = "El desfase reajusta el disparo/lanzamiento hacia la posición predicha del personaje. Recomendado: 2.8",
     ["Offset-to-ping multiplier allows the offset to change dynamically with latency/ping. The default is 1 (aka no adjustment)"] = "El multiplicador permite ajustar dinámicamente el desfase según la latencia/ping. El valor predeterminado es 1 (sin ajuste).",
@@ -1177,7 +1496,7 @@ Converted["_Menu"].BackgroundColor3 = Color3.fromRGB(6, 6, 8)
 Converted["_Menu"].BorderColor3 = Color3.fromRGB(0, 0, 0)
 Converted["_Menu"].BorderSizePixel = 0
 Converted["_Menu"].Position = UDim2.fromScale(0.5, 0.5)
-Converted["_Menu"].Size = UDim2.new(0, 720, 0, 470)
+Converted["_Menu"].Size = ((H3XA_MM2_DEVICE == "MOBILE") and UDim2.new(0, 560, 0, 380)) or UDim2.new(0, 720, 0, 470)
 Converted["_Menu"].Name = "Menu"
 Converted["_Menu"].Parent = Converted["_H3XA_MM2"]
 
@@ -1432,8 +1751,8 @@ Converted["_List"].AnchorPoint = Vector2.new(0, 0.5)
 Converted["_List"].BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 Converted["_List"].BorderColor3 = Color3.fromRGB(0, 0, 0)
 Converted["_List"].BorderSizePixel = 0
-Converted["_List"].Position = UDim2.new(0, 10, 0.58, 0)
-Converted["_List"].Size = UDim2.new(0.30, 0, 0.78, 0)
+Converted["_List"].Position = UDim2.new(0, 14, 0.16, 0)
+Converted["_List"].Size = UDim2.new(0.28, 0, 0.80, 0)
 Converted["_List"].Name = "List"
 Converted["_List"].Parent = Converted["_Menu"]
 
@@ -2171,7 +2490,11 @@ do
     -- Fondo galaxia neón B&N (sin transparencia)
     menu.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
     menu.BackgroundTransparency = 0
-    menu.Size = UDim2.fromOffset(720, 470)
+    do
+        local envDev = (getgenv and getgenv()) or _G
+        local isMobileUI = (envDev.H3XA_MM2_DEVICE == "MOBILE") or (H3XA_MM2_DEVICE == "MOBILE")
+        menu.Size = isMobileUI and UDim2.fromOffset(560, 380) or UDim2.fromOffset(720, 470)
+    end
     menu.ClipsDescendants = true
     menu.AnchorPoint = Vector2.new(0.5, 0.5)
 
@@ -2549,8 +2872,10 @@ do
     -- Solid minimize: dark icon only, no white panel, no spring fight
     local isMinimized = false
     local savedPos = UDim2.fromScale(0.5, 0.5)
-    local FULL_SIZE = UDim2.fromOffset(720, 470)
-    local ICON_SIZE = UDim2.fromOffset(56, 56)
+    local envDev = (getgenv and getgenv()) or _G
+    local isMobileUI = (envDev.H3XA_MM2_DEVICE == "MOBILE") or (H3XA_MM2_DEVICE == "MOBILE")
+    local FULL_SIZE = isMobileUI and UDim2.fromOffset(560, 380) or UDim2.fromOffset(720, 470)
+    local ICON_SIZE = isMobileUI and UDim2.fromOffset(52, 52) or UDim2.fromOffset(56, 56)
 
     local function hideContent()
         for _, name in ipairs({"List", "Area", "HubName", "HubDesc", "HubCredits", "CloseArea", "Stub", "BrandLogo", "BrandTitle", "TopGlow", "BottomGlow", "GalaxyBG"}) do
@@ -3639,7 +3964,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 					local b = Instance.new("TextButton")
 					b.Name = category
 					b.LayoutOrder = index
-					b.Size = UDim2.new(1, -10, 0, 36)
+					b.Size = UDim2.new(1, -8, 0, 34)
 					b.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					b.BackgroundTransparency = 1
 					b.Text = ""
@@ -3760,12 +4085,13 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				end
 			end)
 
-			local function styleActionButton(button, labelText)
+			local function styleActionButton(button, labelText, floatItem, floatName)
 				button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 				button.BackgroundTransparency = 1
 				button.Text = ""
 				button.AutoButtonColor = false
-				button.Size = UDim2.new(1, 0, 0, 38)
+				button.ClipsDescendants = true
+				button.Size = UDim2.new(1, 0, 0, 40)
 				local corner = Instance.new("UICorner", button)
 				corner.CornerRadius = UDim.new(0, 16)
 				local stroke = Instance.new("UIStroke", button)
@@ -3774,32 +4100,88 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				stroke.Thickness = 1.15
 				stroke.Transparency = 0
 
+				local hasFloat = floatItem ~= nil and floatName ~= nil
+				-- Espacio fijo a la derecha para FLOAT (o flecha). El texto NUNCA entra ahí.
+				local rightGutter = hasFloat and 78 or 28
+
 				local label = Instance.new("TextLabel")
+				label.Name = "ActionLabel"
 				label.BackgroundTransparency = 1
-				label.Size = UDim2.new(1, -36, 1, 0)
 				label.Position = UDim2.fromOffset(12, 0)
+				label.Size = UDim2.new(1, -(12 + rightGutter), 1, 0)
 				label.Font = Enum.Font.GothamMedium
 				label.TextSize = 13
 				label.TextXAlignment = Enum.TextXAlignment.Left
+				label.TextYAlignment = Enum.TextYAlignment.Center
 				label.TextColor3 = Color3.fromRGB(255, 255, 255)
 				label.Text = labelText
+				label.TextTruncate = Enum.TextTruncate.AtEnd
+				label.TextWrapped = false
+				label.ZIndex = 1
 				label.Parent = button
 
 				local arrow = Instance.new("TextLabel")
 				arrow.Name = "GoArrow"
 				arrow.BackgroundTransparency = 1
 				arrow.AnchorPoint = Vector2.new(1, 0.5)
-				arrow.Position = UDim2.new(1, -12, 0.5, 0)
-				arrow.Size = UDim2.fromOffset(16, 16)
+				arrow.Position = UDim2.new(1, -10, 0.5, 0)
+				arrow.Size = UDim2.fromOffset(14, 16)
 				arrow.Font = Enum.Font.GothamBold
-				arrow.TextSize = 16
+				arrow.TextSize = 15
 				arrow.TextColor3 = Color3.fromRGB(255, 255, 255)
 				arrow.Text = ">"
+				arrow.ZIndex = 2
+				arrow.Visible = not hasFloat
 				arrow.Parent = button
+
+				local floatBtn = Instance.new("TextButton")
+				floatBtn.Name = "FloatBtn"
+				floatBtn.AnchorPoint = Vector2.new(1, 0.5)
+				floatBtn.Position = UDim2.new(1, -8, 0.5, 0)
+				floatBtn.Size = UDim2.fromOffset(58, 26)
+				floatBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				floatBtn.BackgroundTransparency = 1
+				floatBtn.BorderSizePixel = 0
+				floatBtn.AutoButtonColor = false
+				floatBtn.Font = Enum.Font.GothamBold
+				floatBtn.TextSize = 11
+				floatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				floatBtn.Text = "FLOAT"
+				floatBtn.ZIndex = 4
+				floatBtn.Visible = hasFloat
+				floatBtn.Parent = button
+				local floatCorner = Instance.new("UICorner", floatBtn)
+				floatCorner.CornerRadius = UDim.new(0, 8)
+				local floatStroke = Instance.new("UIStroke", floatBtn)
+				floatStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				floatStroke.Color = Color3.fromRGB(255, 255, 255)
+				floatStroke.Thickness = 1
+				floatStroke.Transparency = 0
+
+				if hasFloat then
+					floatBtn.MouseButton1Click:Connect(function()
+						FUNCTIONSmodule.createFloatingButton(floatItem, button, floatName)
+						FUNCTIONSmodule.notification(H3XA_MM2_LANGUAGE == "ES" and "Botón flotante creado. Arrástralo por la pantalla." or "Floating button created. Drag it on screen.")
+					end)
+					floatBtn.MouseEnter:Connect(function()
+						ts:Create(floatBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
+							BackgroundTransparency = 0,
+							TextColor3 = Color3.fromRGB(0, 0, 0)
+						}):Play()
+					end)
+					floatBtn.MouseLeave:Connect(function()
+						ts:Create(floatBtn, TweenInfo.new(0.22, Enum.EasingStyle.Quint), {
+							BackgroundTransparency = 1,
+							TextColor3 = Color3.fromRGB(255, 255, 255)
+						}):Play()
+					end)
+				end
 
 				button.MouseEnter:Connect(function()
 					ts:Create(stroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Thickness = 1.65 }):Play()
-					ts:Create(arrow, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { TextColor3 = Color3.fromRGB(255, 255, 255) }):Play()
+					if arrow.Visible then
+						ts:Create(arrow, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { TextColor3 = Color3.fromRGB(255, 255, 255) }):Play()
+					end
 				end)
 				button.MouseLeave:Connect(function()
 					ts:Create(stroke, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Thickness = 1.15 }):Play()
@@ -3870,14 +4252,13 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						local button = Instance.new("TextButton")
 						button.LayoutOrder = order
 						button.Parent = card
-						styleActionButton(button, H3XA_MM2_T(item["Args"][1]))
-						button.MouseButton1Click:Connect(function()
+						local function activate()
 							item["Args"][2](button)
-						end)
-						local cah = ClickAndHold.new(button, 0.5)
-						cah.Holded.Event:Connect(function()
-							FUNCTIONSmodule.createFloatingButton(item, button, item["Args"][1])
-						end)
+						end
+						local rawName = tostring(item["Args"][1])
+						local allowFloat = string.find(string.lower(rawName), "copy") == nil
+						styleActionButton(button, H3XA_MM2_T(item["Args"][1]), allowFloat and item or nil, allowFloat and item["Args"][1] or nil)
+						button.MouseButton1Click:Connect(activate)
 
 					elseif item["Type"] == "ButtonGrid" then
 						local frame = Instance.new("Frame")
@@ -3893,17 +4274,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						for buttonname, args in item["Args"][2] do
 							local button = Instance.new("TextButton")
 							button.Parent = frame
-							styleActionButton(button, H3XA_MM2_T(string.gsub(buttonname, "_", " ")))
-							if States[buttonname .. module.Name] then
-								button.BackgroundTransparency = 1
-								local st = button:FindFirstChildOfClass("UIStroke")
-								if st then
-									st.Color = Color3.fromRGB(80, 255, 120)
-									st.Thickness = 1.5
-									st.Transparency = 0
-								end
-							end
-							button.MouseButton1Click:Connect(function()
+							local function activateGrid()
 								if item["Toggleable"] then
 									item["Args"][2][buttonname](button)
 									local st = button:FindFirstChildOfClass("UIStroke")
@@ -3929,11 +4300,19 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 								else
 									item["Args"][2][buttonname](button)
 								end
-							end)
-							local cah = ClickAndHold.new(button, 0.5)
-							cah.Holded.Event:Connect(function()
-								FUNCTIONSmodule.createFloatingButton(item, button, buttonname)
-							end)
+							end
+							local allowFloat = string.find(string.lower(tostring(buttonname)), "copy") == nil
+							styleActionButton(button, H3XA_MM2_T(string.gsub(buttonname, "_", " ")), allowFloat and item or nil, allowFloat and buttonname or nil)
+							if States[buttonname .. module.Name] then
+								button.BackgroundTransparency = 1
+								local st = button:FindFirstChildOfClass("UIStroke")
+								if st then
+									st.Color = Color3.fromRGB(80, 255, 120)
+									st.Thickness = 1.5
+									st.Transparency = 0
+								end
+							end
+							button.MouseButton1Click:Connect(activateGrid)
 						end
 
 					elseif item["Type"] == "Input" then
@@ -6572,69 +6951,68 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 	
 	
 	table.insert(module, {
-		Type = "ButtonGrid",
-		Toggleable = true,
-		Args = {2, {
-			Players = function()
-				if playerESP then
-					playerESP = false
-					espcontainer:RemoveGroup("players")
-				else
-					playerESP = true
-					if not findMurderer() or not findSheriff() then
-						fu.notification("No roles yet. Waiting for roles...")
-						repeat
-							task.wait(1)
-						until findSheriff() or findMurderer()
-					end
-					reloadESP()
+		Type = "Toggle",
+		Args = {"Players", function(Self, state)
+			playerESP = state and true or false
+			if not playerESP then
+				espcontainer:RemoveGroup("players")
+			else
+				if not findMurderer() or not findSheriff() then
+					fu.notification("No roles yet. Waiting for roles...")
+					repeat
+						task.wait(1)
+					until findSheriff() or findMurderer()
 				end
-			end,
-	
-			Dropped_Gun = function()
-				if gunDropESP then
-					gunDropESP = false
-					espcontainer:RemoveGroup("gun")
-				else
-					gunDropESP = true
-					if not getMap() then return end
-					if getMap():FindFirstChild("GunDrop") then
-						espcontainer:Add(getMap():FindFirstChild("GunDrop"), {
-							AccentColor    =  Color3.new(0.952941, 1, 0.0745098),
-							ArrowShow        = true,
-							ArrowMinDistance       = 999999,      
-							ArrowSize         = UDim2.new(0,40,0,40),
-							LabelText         = H3XA_MM2_T("Dropped Gun"),
+				reloadESP()
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Dropped Gun", function(Self, state)
+			gunDropESP = state and true or false
+			if not gunDropESP then
+				espcontainer:RemoveGroup("gun")
+			else
+				if not getMap() then return end
+				if getMap():FindFirstChild("GunDrop") then
+					espcontainer:Add(getMap():FindFirstChild("GunDrop"), {
+						AccentColor    = Color3.new(0.952941, 1, 0.0745098),
+						ArrowShow        = true,
+						ArrowMinDistance = 999999,
+						ArrowSize         = UDim2.new(0,40,0,40),
+						LabelText         = H3XA_MM2_T("Dropped Gun"),
+						ShowLabel         = true,
+						GroupName         = "gun"
+					})
+					fu.notification("Gun has been dropped! Find a yellow highlight.")
+				end
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Traps", function(Self, state)
+			trapDetection = state and true or false
+			if not trapDetection then
+				espcontainer:RemoveGroup("trap")
+			else
+				for _, v in ipairs(workspace:GetDescendants()) do
+					if v.Name == "Trap" and (v.Parent:IsA("Folder") or v.Parent:IsA("Model")) then
+						v.Transparency = 0
+						espcontainer:Add(v, {
+							AccentColor    = Color3.new(1, 0, 0),
+							ArrowShow        = false,
 							ShowLabel         = true,
-							GroupName         = "gun"
+							LabelText         = H3XA_MM2_T("Traps"),
+							GroupName         = "trap"
 						})
-						fu.notification("Gun has been dropped! Find a yellow highlight.")
-					end
-	
-				end
-			end,
-	
-			Traps = function()
-				if trapDetection then
-					trapDetection = false
-					espcontainer:RemoveGroup("trap")
-				else
-					trapDetection = true
-					for _, v in ipairs(workspace:GetDescendants()) do
-						if v.Name == "Trap" and (v.Parent:IsA("Folder") or v.Parent:IsA("Model")) then
-							v.Transparency = 0
-							espcontainer:Add(v, {
-								AccentColor    =  Color3.new(1, 0, 0),
-								ArrowShow        = false,
-								ShowLabel         = true,
-								LabelText         = H3XA_MM2_T("Traps"),
-								GroupName         = "trap"
-							})
-						end
 					end
 				end
-			end,
-		}}
+			end
+		end}
 	})
 	
 	table.insert(module, {
@@ -7529,9 +7907,12 @@ local function JFQXCG_routine() -- Routine: StarterGui.H3XA_MM2.Open.OnClick
 	
 		if clickCount == 3 then
 			-- Triple-click detected
-	
+			local envDev = (getgenv and getgenv()) or _G
+			local isMobileUI = (envDev.H3XA_MM2_DEVICE == "MOBILE")
+			local fullSize = isMobileUI and UDim2.fromOffset(560, 380) or UDim2.fromOffset(720, 470)
+
 			ts:Create(getgenv().H3XA_MM2.Menu, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), 
-				{Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(720, 470)}
+				{Position = UDim2.fromScale(0.5, 0.5), Size = fullSize}
 			):Play()
 		end
 	end)
@@ -8223,25 +8604,127 @@ coroutine.wrap(KUFNO_routine)()
 coroutine.wrap(XLYNZG_routine)()
 coroutine.wrap(XAPKH_routine)()
 
--- H3XA X MM2 GLASSMORPHISM / ACRYLIC DARK UI
+-- H3XA X MM2 GLASSMORPHISM / ACRYLIC DARK UI (+ Mobile / PC layout)
 do
     local root = Converted["_H3XA_MM2"]
     local menu = Converted["_Menu"]
+    local env = (getgenv and getgenv()) or _G
+    local isMobile = (env.H3XA_MM2_DEVICE == "MOBILE") or (H3XA_MM2_DEVICE == "MOBILE")
 
-    menu.Size = UDim2.fromOffset(720, 470)
     menu.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
     menu.BackgroundTransparency = 0
     menu.ClipsDescendants = true
-    Converted["_List"].Position = UDim2.new(0, 18, 0.58, 0)
-    Converted["_List"].Size = UDim2.new(0.265, 0, 0.76, 0)
-    Converted["_Area"].Position = UDim2.new(0.635, 0, 0.58, 0)
-    Converted["_Area"].Size = UDim2.new(0.675, -20, 0.76, 0)
+
+    if isMobile then
+        -- MOBILE: MISMO layout HORIZONTAL que PC (lista izq + contenido der), solo más compacto
+        menu.Size = UDim2.fromOffset(560, 380)
+        menu.Position = UDim2.fromScale(0.5, 0.5)
+        menu.AnchorPoint = Vector2.new(0.5, 0.5)
+
+        Converted["_List"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_List"].Position = UDim2.new(0, 10, 0.14, 0)
+        Converted["_List"].Size = UDim2.new(0.30, 0, 0.82, 0)
+        Converted["_List"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        Converted["_List"].BackgroundTransparency = 1
+
+        Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_Area"].Position = UDim2.new(0.32, 6, 0.14, 0)
+        Converted["_Area"].Size = UDim2.new(0.66, -16, 0.82, 0)
+
+        local listSF = Converted["_List"]:FindFirstChildOfClass("ScrollingFrame")
+        if listSF then
+            listSF.ScrollBarThickness = 3
+            local pad = listSF:FindFirstChildOfClass("UIPadding")
+            if pad then
+                pad.PaddingLeft = UDim.new(0, 6)
+                pad.PaddingRight = UDim.new(0, 6)
+                pad.PaddingTop = UDim.new(0, 6)
+                pad.PaddingBottom = UDim.new(0, 6)
+            end
+            local ll = listSF:FindFirstChildOfClass("UIListLayout")
+            if ll then
+                ll.Padding = UDim.new(0, 8)
+                ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            end
+        end
+
+        local areaInner = Converted["_Area"]:FindFirstChild("Area")
+        if areaInner then
+            areaInner.BackgroundTransparency = 1
+            areaInner.BorderSizePixel = 0
+            if areaInner:IsA("ScrollingFrame") then
+                areaInner.ScrollBarThickness = 3
+            end
+        end
+
+        -- Filas un poco más altas para dedo, sin romper el layout horizontal
+        if Converted["_Toggle"] then
+            Converted["_Toggle"].Size = UDim2.new(1, 0, 0, 48)
+        end
+        if Converted["_Dropdown"] then
+            Converted["_Dropdown"].Size = UDim2.new(1, 0, 0, 40)
+        end
+        if Converted["_Range"] then
+            Converted["_Range"].Size = UDim2.new(1, 0, 0, 40)
+        end
+        if Converted["_ListButton"] then
+            Converted["_ListButton"].Size = UDim2.new(1, 0, 0, 36)
+            Converted["_ListButton"].TextSize = 14
+        end
+
+        -- Floating HUD buttons: más anchos para que el texto no se aplaste
+        if Converted["_FloatingButton"] then
+            Converted["_FloatingButton"].Size = UDim2.new(0, 72, 0, 100)
+            Converted["_FloatingButton"].TextSize = 12
+            local fbPad = Converted["_FloatingButton"]:FindFirstChildOfClass("UIPadding")
+            if fbPad then
+                fbPad.PaddingTop = UDim.new(0, 8)
+                fbPad.PaddingBottom = UDim.new(0, 8)
+                fbPad.PaddingLeft = UDim.new(0, 8)
+                fbPad.PaddingRight = UDim.new(0, 8)
+            end
+            local lock = Converted["_FloatingButton"]:FindFirstChild("Lock")
+            if lock then
+                lock.Size = UDim2.new(0, 16, 0, 16)
+                lock.Position = UDim2.new(1, -8, 1, -8)
+            end
+        end
+
+        if Converted["_Notifications"] then
+            Converted["_Notifications"].Size = UDim2.new(0, 240, 0, 320)
+            Converted["_Notifications"].Position = UDim2.new(1, -8, 0, 8)
+        end
+
+        if Converted["_Dialog"] then
+            Converted["_Dialog"].Size = UDim2.new(0, 280, 0, 150)
+        end
+
+        if Converted["_AddCustomModule"] then
+            Converted["_AddCustomModule"].Size = UDim2.new(0, 320, 0, 240)
+        end
+
+        local menuCorner = menu:FindFirstChildOfClass("UICorner")
+        if menuCorner then menuCorner.CornerRadius = UDim.new(0, 24) end
+    else
+        -- PC: original layout
+        menu.Size = UDim2.fromOffset(720, 470)
+        Converted["_List"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_List"].Position = UDim2.new(0, 14, 0.16, 0)
+        Converted["_List"].Size = UDim2.new(0.28, 0, 0.80, 0)
+        Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_Area"].Position = UDim2.new(0.32, 8, 0.16, 0)
+        Converted["_Area"].Size = UDim2.new(0.66, -22, 0.80, 0)
+
+        local menuCorner = menu:FindFirstChildOfClass("UICorner")
+        if menuCorner then menuCorner.CornerRadius = UDim.new(0, 32) end
+    end
+
     Converted["_List"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Converted["_List"].BackgroundTransparency = 1
     local finalListStroke = Converted["_List"]:FindFirstChildOfClass("UIStroke")
     if finalListStroke then
         finalListStroke.Color = Color3.fromRGB(255, 255, 255)
-        finalListStroke.Thickness = 1.2
+        finalListStroke.Thickness = isMobile and 1.1 or 1.2
         finalListStroke.Transparency = 0
     end
     Converted["_Area"].BackgroundTransparency = 1
@@ -8278,13 +8761,11 @@ do
         cg.BackgroundTransparency = 1
     end
 
-    local menuCorner = menu:FindFirstChildOfClass("UICorner")
-    if menuCorner then menuCorner.CornerRadius = UDim.new(0, 32) end
     local menuStroke = menu:FindFirstChildOfClass("UIStroke")
     if menuStroke then
         menuStroke.Color = Color3.fromRGB(255, 255, 255)
-        menuStroke.Thickness = 1
-        menuStroke.Transparency = 0.78
+        menuStroke.Thickness = isMobile and 1.15 or 1
+        menuStroke.Transparency = isMobile and 0.55 or 0.78
     end
 
     -- Soft glass strokes, but keep full-white neon borders on cards + buttons
@@ -8304,7 +8785,7 @@ do
             end
             if parent and parent.Name == "List" then
                 obj.Transparency = 0
-                obj.Thickness = 1.2
+                obj.Thickness = isMobile and 1.1 or 1.2
             end
             if parent and parent.Name == "SectionCard" then
                 obj.Transparency = 0
@@ -8317,6 +8798,9 @@ do
             end
         elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
             obj.TextStrokeTransparency = 1
+            if isMobile and obj:IsA("TextLabel") and obj.TextScaled then
+                -- keep TextScaled; mobile rows already taller
+            end
         end
     end
 
