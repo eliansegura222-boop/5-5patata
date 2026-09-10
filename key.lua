@@ -1,4 +1,4 @@
 return {
     enabled = true,
-    key = "hx160"
+    key = "3d2y"
 }
