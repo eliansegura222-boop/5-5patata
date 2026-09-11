@@ -14,6 +14,9 @@ local FAVORITES_FILE = "H3X4_loader_favorites.json"
 local KEY_FILE = "H3X4_loader_key.json"
 local sessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
 
+-- VIP status resolved during key flow (before catalog/cards)
+local userIsVip = false
+
 local translations = {
     es = {
         loaderSubtitle = "Cargador Universal",
@@ -534,6 +537,11 @@ local function collectTagNormalizedValues(data)
         if value == nil then
             return
         end
+        -- only accept scalar tags (ignore tables/objects)
+        local t = typeof(value)
+        if t ~= "string" and t ~= "number" then
+            return
+        end
         local normalized = tostring(value):lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
         if normalized == "" or seen[normalized] then
             return
@@ -619,7 +627,9 @@ local function getExecuteLock(data)
         }
     end
 
-    if not userIsVip then
+    -- userIsVip is set in beginKeyFlow before catalog load
+    local isVip = userIsVip == true
+    if not isVip then
         if isBetaVipScript(data) then
             return {
                 Locked = true,
@@ -2320,7 +2330,7 @@ local cards = {}
 local visibleCards = {}
 local selectedIndex = 1
 local carouselAnimating = false
-local userIsVip = false
+-- userIsVip declared near top; set during beginKeyFlow
 local CARD_WIDTH = 320
 local CARD_HEIGHT = 280
 local CARD_GAP = 28
