@@ -1185,6 +1185,7 @@ local H3XA_MM2_ES = {
     ["Waypoint saved."] = "Waypoint guardado.",
     ["Teleported to waypoint."] = "Teletransportado al waypoint.",
     ["No waypoint saved."] = "No hay waypoint guardado.",
+    ["MURDERER NEAR"] = "ASESINO CERCA",
 
     ["Not MM2"] = "No es MM2",
     ["Looks like this game isn't MM2. Do you want to load the module anyway?"] = "Parece que este juego no es MM2. ¿Quieres cargar el módulo de todos modos?",
@@ -1299,6 +1300,8 @@ local function H3XA_MM2_T(value)
     -- Small dynamic-message translations used by MM2.
     local hero = value:match("^The hero is (.+)%.$")
     if hero then return "El héroe es " .. hero .. "." end
+    local near = value:match("^MURDERER NEAR %((%d+)m%)$")
+    if near then return "ASESINO CERCA (" .. near .. "m)" end
     return value
 end
 
@@ -5249,7 +5252,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						clonerange.Parent = card
 						clonerange.LayoutOrder = order
 						clonerange.Visible = true
-						clonerange.Size = UDim2.new(1, 0, 0, 44)
+						clonerange.Size = UDim2.new(1, 0, 0, 58)
 						clonerange.BackgroundTransparency = 1
 						-- Label: smaller, clean
 						local label = clonerange.TextLabel
@@ -5267,7 +5270,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						-- Thin pill track, NO border/stroke
 						track.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
 						track.BorderSizePixel = 0
-						track.Size = UDim2.new(1, 0, 0, 6)
+						track.Size = UDim2.new(1, 0, 0, 10)
 						track.Position = UDim2.new(0.5, 0, 0.5, 0)
 						track.AnchorPoint = Vector2.new(0.5, 0.5)
 						for _, s in ipairs(track:GetChildren()) do
@@ -8689,15 +8692,19 @@ table.insert(module, {
 	local AlertBanner = Instance.new("Frame", REHud)
 	AlertBanner.Size = UDim2.new(0, 300, 0, 40)
 	AlertBanner.Position = UDim2.new(0.5, -150, 0, 60)
-	AlertBanner.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+	AlertBanner.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	AlertBanner.Visible = false
 	Instance.new("UICorner", AlertBanner).CornerRadius = UDim.new(0, 8)
+	local alertStroke = Instance.new("UIStroke", AlertBanner)
+	alertStroke.Color = Color3.fromRGB(255, 255, 255)
+	alertStroke.Thickness = 1.2
+	alertStroke.Transparency = 0.15
 	local AlertText = Instance.new("TextLabel", AlertBanner)
 	AlertText.Size = UDim2.new(1, 0, 1, 0)
 	AlertText.BackgroundTransparency = 1
 	AlertText.Font = Enum.Font.GothamBold
 	AlertText.TextColor3 = Color3.fromRGB(255, 255, 255)
-	AlertText.TextSize = 14
+	AlertText.TextSize = 13
 
 	-- Geometric Murderer Arrow
 	local ArrowFrame = Instance.new("Frame", REHud)
@@ -8858,7 +8865,7 @@ table.insert(module, {
 			local dist = (hrp.Position - murdHrp.Position).Magnitude
 			if RE.ProxAlert and dist <= 40 then
 				AlertBanner.Visible = true
-				AlertText.Text = "⚠️ MURDERER NEAR (" .. math.floor(dist) .. "m) ⚠️"
+				AlertText.Text = H3XA_MM2_T("MURDERER NEAR (" .. math.floor(dist) .. "m)")
 			elseif RE.ProxAlert then
 				AlertBanner.Visible = false
 			end
