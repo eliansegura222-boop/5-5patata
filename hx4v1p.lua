@@ -41,6 +41,11 @@ return {
         
     ["8805364041"] = { -- dc id 1540175917886734416 (sorteo)
         vip = true,
-        expires = "permanent"          
+        expires = "permanent"  
+    },    
+        
+    ["473497478"] = { -- dc id 1504220115716149440 (ayuda hx boat)
+        vip = true,
+        expires = "permanent"         
     }
 }
