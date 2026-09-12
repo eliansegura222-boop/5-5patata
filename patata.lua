@@ -14,9 +14,6 @@ local FAVORITES_FILE = "H3X4_loader_favorites.json"
 local KEY_FILE = "H3X4_loader_key.json"
 local sessionEnv = (typeof(getgenv) == "function" and getgenv()) or _G
 
--- VIP status resolved during key flow (before catalog/cards)
-local userIsVip = false
-
 local translations = {
     es = {
         loaderSubtitle = "Cargador Universal",
@@ -42,8 +39,6 @@ local translations = {
         discordCopyFailed = "No se pudo copiar el enlace de Discord.",
         keyDiscordCopied = "Discord copiado correctamente, ve al canal #🔑 • key para obtener tu key.",
         betaVipLocked = "ESTA VERSIÓN BETA ES DE ACCESO ANTICIPADO SOLO PARA USUARIOS VIP. VUELVE EN 2 DÍAS; SE PUBLICARÁ OFICIALMENTE PARA TODOS.",
-        vipOnlyLocked = "Este script es solo para usuarios VIP.",
-        maintenanceLocked = "Este script está en mantenimiento, pronto regresará.",
         details = "DETALLES",
         detailsTitle = "DETALLES DEL SCRIPT",
         closeDetails = "CERRAR",
@@ -94,8 +89,6 @@ local translations = {
         discordCopyFailed = "Could not copy the Discord invite.",
         keyDiscordCopied = "Discord copied successfully. Go to #🔑 • key to get your key.",
         betaVipLocked = "THIS BETA VERSION IS EARLY ACCESS FOR VIP USERS ONLY. COME BACK IN 2 DAYS; IT WILL THEN BE OFFICIALLY RELEASED FOR EVERYONE.",
-        vipOnlyLocked = "This script is for VIP users only.",
-        maintenanceLocked = "This script is under maintenance. It will be back soon.",
         details = "DETAILS",
         detailsTitle = "SCRIPT DETAILS",
         closeDetails = "CLOSE",
@@ -529,124 +522,34 @@ local function rawTagTable(data)
     return typeof(tag) == "table" and tag or nil
 end
 
-local function collectTagNormalizedValues(data)
-    local values = {}
-    local seen = {}
-
-    local function addValue(value)
-        if value == nil then
-            return
-        end
-        -- only accept scalar tags (ignore tables/objects)
-        local t = typeof(value)
-        if t ~= "string" and t ~= "number" then
-            return
-        end
-        local normalized = tostring(value):lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
-        if normalized == "" or seen[normalized] then
-            return
-        end
-        seen[normalized] = true
-        table.insert(values, normalized)
+local function isBetaVipScript(data)
+    local tag = rawTagTable(data)
+    if not tag then
+        return false
     end
 
-    local function addFromTag(tag)
-        if typeof(tag) ~= "table" then
-            return
-        end
-        addValue(tag.Title)
-        addValue(tag.Text)
-        addValue(tag.Name)
-        addValue(tag.TitleES)
-        addValue(tag.TitleEs)
-        addValue(tag.TitleSpanish)
-        addValue(tag.TitleEN)
-        addValue(tag.TitleEn)
-        addValue(tag.TitleEnglish)
-        addValue(tag.Label)
-        addValue(tag.Etiqueta)
-    end
+    local values = {
+        tag.Title,
+        tag.Text,
+        tag.Name,
+        tag.TitleES,
+        tag.TitleEs,
+        tag.TitleSpanish,
+        tag.TitleEN,
+        tag.TitleEn,
+        tag.TitleEnglish,
+    }
 
-    addFromTag(rawTagTable(data))
-
-    if typeof(data.Tags) == "table" then
-        for _, tag in ipairs(data.Tags) do
-            addFromTag(tag)
-        end
-    end
-
-    -- also accept plain string tags if present
-    addValue(data.Tag)
-    addValue(data.Label)
-    addValue(data.Etiqueta)
-
-    return values
-end
-
-local function tagMatchesAny(data, patterns)
-    local values = collectTagNormalizedValues(data)
     for _, value in ipairs(values) do
-        for _, pattern in ipairs(patterns) do
-            if value == pattern then
+        if value ~= nil then
+            local normalized = tostring(value):lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
+            if normalized == "beta vip" then
                 return true
             end
         end
     end
+
     return false
-end
-
-local function isMaintenanceScript(data)
-    return tagMatchesAny(data, {
-        "mantenimiento",
-        "maintenance",
-        "en mantenimiento",
-        "under maintenance",
-    })
-end
-
-local function isBetaVipScript(data)
-    return tagMatchesAny(data, { "beta vip" })
-end
-
-local function isVipOnlyScript(data)
-    -- plain VIP tag (not beta vip)
-    if isBetaVipScript(data) then
-        return false
-    end
-    return tagMatchesAny(data, { "vip", "solo vip", "vip only", "vip only" })
-end
-
--- Returns lock info for execute button, or nil if free to run.
--- Priority: maintenance (all users) > VIP/Beta VIP (free users only)
-local function getExecuteLock(data)
-    if isMaintenanceScript(data) then
-        return {
-            Locked = true,
-            Reason = "maintenance",
-            MessageKey = "maintenanceLocked",
-        }
-    end
-
-    -- userIsVip is set in beginKeyFlow before catalog load
-    local isVip = userIsVip == true
-    if not isVip then
-        if isBetaVipScript(data) then
-            return {
-                Locked = true,
-                Reason = "beta_vip",
-                MessageKey = "betaVipLocked",
-            }
-        end
-        if isVipOnlyScript(data) then
-            return {
-                Locked = true,
-                Reason = "vip",
-                MessageKey = "vipOnlyLocked",
-            }
-        end
-    end
-
-    return nil
 end
 
 local function getTag(data)
@@ -2330,7 +2233,7 @@ local cards = {}
 local visibleCards = {}
 local selectedIndex = 1
 local carouselAnimating = false
--- userIsVip declared near top; set during beginKeyFlow
+local userIsVip = false
 local CARD_WIDTH = 320
 local CARD_HEIGHT = 280
 local CARD_GAP = 28
@@ -2362,7 +2265,7 @@ local function updateActionButtons()
         executeLabel.Text = T("execute")
     end
     detailsActionLabel.Text = T("details")
-    if sel.ExecuteLocked or sel.VipLocked then
+    if sel.VipLocked then
         executeButton.BackgroundColor3 = Color3.fromRGB(62, 62, 62)
         executeLabel.TextColor3 = Color3.fromRGB(178, 178, 178)
         executeIcon.ImageColor3 = Color3.fromRGB(178, 178, 178)
@@ -2545,15 +2448,14 @@ local function createCard(data, index)
     local title = localizedTitle(data)
     local description = localizedDescription(data)
     local tag = getTag(data)
-    local lockInfo = getExecuteLock(data)
-    local executeLocked = lockInfo ~= nil
+    local vipLocked = isBetaVipScript(data) and not userIsVip
 
     local card = new("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0, 0, 0.5, 0),
         Size = UDim2.fromOffset(CARD_WIDTH, CARD_HEIGHT),
         BackgroundColor3 = Color3.fromRGB(10, 10, 10),
-        BackgroundTransparency = executeLocked and 0.28 or 0.08,
+        BackgroundTransparency = vipLocked and 0.28 or 0.08,
         BorderSizePixel = 0,
         ClipsDescendants = true,
         ZIndex = 7,
@@ -2586,13 +2488,13 @@ local function createCard(data, index)
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
         Image = tostring(data.Image or ""),
-        ImageTransparency = executeLocked and 0.35 or 0,
+        ImageTransparency = vipLocked and 0.35 or 0,
         ScaleType = Enum.ScaleType.Fit,
         ZIndex = 9,
         Parent = imageHolder,
     })
 
-    if executeLocked then
+    if vipLocked then
         new("Frame", {
             Size = UDim2.fromScale(1, 1),
             BackgroundColor3 = Color3.new(0, 0, 0),
@@ -2665,7 +2567,7 @@ local function createCard(data, index)
         Size = UDim2.new(1, -16, 0, 18),
         BackgroundTransparency = 1,
         Text = title,
-        TextColor3 = executeLocked and Color3.fromRGB(168, 168, 168) or Color3.new(1, 1, 1),
+        TextColor3 = vipLocked and Color3.fromRGB(168, 168, 168) or Color3.new(1, 1, 1),
         TextSize = CARD_HEIGHT < 210 and 11 or 13,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -2680,7 +2582,7 @@ local function createCard(data, index)
         Size = UDim2.new(1, -16, 0, math.max(28, CARD_HEIGHT - titleY - 26)),
         BackgroundTransparency = 1,
         Text = description,
-        TextColor3 = executeLocked and Color3.fromRGB(105, 105, 105) or Color3.fromRGB(155, 155, 155),
+        TextColor3 = vipLocked and Color3.fromRGB(105, 105, 105) or Color3.fromRGB(155, 155, 155),
         TextSize = CARD_HEIGHT < 210 and 10 or 11,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -2727,9 +2629,7 @@ local function createCard(data, index)
         DimOverlay = dimOverlay,
         CardStroke = cardStroke,
         RawIndex = index,
-        VipLocked = executeLocked, -- backward-compat name used by carousel visuals
-        ExecuteLocked = executeLocked,
-        LockMessageKey = lockInfo and lockInfo.MessageKey or nil,
+        VipLocked = vipLocked,
         Title = title:lower(),
         Description = description:lower(),
         Tag = tag and tag.Title:lower() or "",
@@ -2741,11 +2641,9 @@ local function runSelectedScript()
     local sel = getSelectedCard()
     if not sel then return end
 
-    if sel.ExecuteLocked or sel.VipLocked then
-        local msgKey = sel.LockMessageKey or "vipOnlyLocked"
-        local msg = T(msgKey)
-        status.Text = msg
-        showNotice(msg)
+    if sel.VipLocked then
+        status.Text = T("betaVipLocked")
+        showNotice(T("betaVipLocked"))
         return
     end
 
