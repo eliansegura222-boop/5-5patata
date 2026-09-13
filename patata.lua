@@ -12900,7 +12900,7 @@ do
     end
     function VIP:LoadConfig(data)
         if type(data) ~= "table" then return false, "Config inválida." end
-        if type(data.flags) == "table' then
+        if type(data.flags) == "table" then
             for k,v in pairs(data.flags) do
                 if flags[k] ~= nil and (type(v) == type(flags[k])) then self:SetFlag(k, v) end
             end
