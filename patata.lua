@@ -1,8827 +1,10308 @@
---// HX Boat v41
---// Build A Boat For Treasure - monochrome gamer GUI + optimized utilities
---// Designed for common Roblox executors. Some functions depend on executor APIs.
---// v41 fixes:
---//   - Infinite Jump works on mobile (JumpRequest + hold)
---//   - Boat Fly / Player Fly no longer freezes on mobile (GetMoveVector + soft lock)
---//   - getMoveVector supports thumbstick / touch
 
---====================================================
--- Services / boot
---====================================================
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-local GuiService = game:GetService("GuiService")
-local CoreGui = game:GetService("CoreGui")
-local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
-local VirtualUser = game:GetService("VirtualUser")
-
-local LP = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
-local ENV = (getgenv and getgenv()) or _G
-
-if ENV.__BABFT_NIGHTFALL_CLEANUP then
-    pcall(ENV.__BABFT_NIGHTFALL_CLEANUP)
+if not game:IsLoaded() then
+	game:GetService("StarterGui"):SetCore("SendNotification", {
+		Title = "Script loading",
+		Text = "Waiting for the game to finish loading!",
+		Duration = 5
+	})
+	game.Loaded:Wait()
 end
 
-local alive = true
-local connections = {}
-local cleanupTasks = {}
-local activeStates = {}
-local characterCollisionCache = {}
-local hazardTouchCache = {}
-local espPlayerObjects = {}
-local espBlockObjects = {}
-local flyObjects = {}
-local playerFlyObjects = {}
-local boatUtilityObjects = {}
-local boatCollisionCache = {}
-local boatTouchCache = {}
-local hiddenPlayerCache = {}
-local hiddenBoatCache = {}
-local particleCache = {}
-local shadowCache = {}
-local pressed = {}
-local followTarget
-local lastSeat
-local selectedQuestTarget
-local runsCompleted = 0
+-- H3XA MM2 - Language selector (B&W) + Remember preference
+local H3XA_LANG_FILE = "H3XA_MM2_lang.txt"
 
--- Lightweight world caches. Expensive Workspace scans are throttled instead of
--- running every frame. This is the main performance safeguard for large BABFT maps.
-local worldCache = {
-    chest = nil, chestAt = 0,
-    stages = nil, stagesAt = 0,
-    nearestSeat = nil, seatAt = 0, seatRadius = 0,
-    boatRoot = nil, boatRootAt = 0,
-    teamSpawn = nil, teamSpawnAt = 0, teamKey = nil,
+local function H3XA_loadLangPrefs()
+	local prefs = { remember = false, lang = nil }
+	pcall(function()
+		if isfile and isfile(H3XA_LANG_FILE) and readfile then
+			local raw = readfile(H3XA_LANG_FILE)
+			if type(raw) == "string" and #raw > 0 then
+				local rem, lang = raw:match("^(%d)|(%w+)$")
+				if rem and lang then
+					prefs.remember = (rem == "1")
+					prefs.lang = lang
+				end
+			end
+		end
+	end)
+	return prefs
+end
+
+local function H3XA_saveLangPrefs(remember, lang)
+	pcall(function()
+		if writefile then
+			writefile(H3XA_LANG_FILE, (remember and "1" or "0") .. "|" .. tostring(lang or "EN"))
+		end
+	end)
+end
+
+local function createLanguageSelector(forceOpen)
+	local env = (getgenv and getgenv()) or _G
+	local TweenService = game:GetService("TweenService")
+
+	-- Si "Recordar" está activo y hay idioma guardado, saltar el selector (salvo forceOpen)
+	local prefs = H3XA_loadLangPrefs()
+	if (not forceOpen) and prefs.remember and (prefs.lang == "ES" or prefs.lang == "EN") then
+		env.H3XA_MM2_LANGUAGE = prefs.lang
+		return prefs.lang
+	end
+
+	local parent = game:GetService("CoreGui")
+	pcall(function()
+		if gethui then
+			parent = gethui()
+		elseif get_hidden_gui then
+			parent = get_hidden_gui()
+		end
+	end)
+
+	pcall(function()
+		local old = parent:FindFirstChild("H3XA_MM2_LanguageSelector")
+		if old then old:Destroy() end
+	end)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "H3XA_MM2_LanguageSelector"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 2147483647
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local parented = pcall(function()
+		gui.Parent = parent
+	end)
+	if not parented then
+		gui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local dim = Instance.new("Frame")
+	dim.Name = "Dim"
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "LanguagePanel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(400, 340)
+	panel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	panel.BackgroundTransparency = 0
+	panel.BorderSizePixel = 0
+	panel.ClipsDescendants = true
+	panel.Parent = dim
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 28)
+	corner.Parent = panel
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	panelStroke.LineJoinMode = Enum.LineJoinMode.Round
+	panelStroke.Color = Color3.fromRGB(255, 255, 255)
+	panelStroke.Thickness = 1.5
+	panelStroke.Transparency = 0
+	panelStroke.Parent = panel
+
+	local logo = Instance.new("ImageLabel")
+	logo.Name = "Logo"
+	logo.AnchorPoint = Vector2.new(0.5, 0)
+	logo.Position = UDim2.new(0.5, 0, 0, 28)
+	logo.Size = UDim2.fromOffset(56, 56)
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://72742584610344"
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.new(0, 28, 0, 98)
+	title.Size = UDim2.new(1, -56, 0, 28)
+	title.Font = Enum.Font.GothamBold
+	title.Text = "SELECT LANGUAGE"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.TextStrokeTransparency = 1
+	title.Parent = panel
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "Subtitle"
+	subtitle.BackgroundTransparency = 1
+	subtitle.Position = UDim2.new(0, 28, 0, 128)
+	subtitle.Size = UDim2.new(1, -56, 0, 20)
+	subtitle.Font = Enum.Font.Gotham
+	subtitle.Text = "Elige tu idioma  •  Choose your language"
+	subtitle.TextColor3 = Color3.fromRGB(180, 180, 180)
+	subtitle.TextSize = 13
+	subtitle.TextStrokeTransparency = 1
+	subtitle.Parent = panel
+
+	local buttons = Instance.new("Frame")
+	buttons.Name = "Buttons"
+	buttons.BackgroundTransparency = 1
+	buttons.Position = UDim2.new(0, 28, 0, 168)
+	buttons.Size = UDim2.new(1, -56, 0, 72)
+	buttons.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 14)
+	layout.Parent = buttons
+
+	local selected = Instance.new("BindableEvent")
+	local rememberOn = false
+
+	local function makeButton(text, code, subtext)
+		local button = Instance.new("TextButton")
+		button.Name = code
+		button.Size = UDim2.new(0.5, -7, 1, 0)
+		button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		button.BackgroundTransparency = 1
+		button.BorderSizePixel = 0
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = text .. "\n" .. subtext
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.TextSize = 15
+		button.TextWrapped = true
+		button.TextStrokeTransparency = 1
+		button.Parent = buttons
+
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 16)
+		c.Parent = button
+
+		local s = Instance.new("UIStroke")
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		s.Color = Color3.fromRGB(255, 255, 255)
+		s.Thickness = 1.2
+		s.Transparency = 0
+		s.Parent = button
+
+		button.MouseEnter:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+		end)
+		button.MouseLeave:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.32, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 1,
+				TextColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+		end)
+		button.MouseButton1Click:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.12), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+			selected:Fire(code)
+		end)
+	end
+
+	makeButton("ESPAÑOL", "ES", "Spanish")
+	makeButton("ENGLISH", "EN", "Inglés")
+
+	-- Remember / Recordar toggle
+	local rememberRow = Instance.new("TextButton")
+	rememberRow.Name = "RememberRow"
+	rememberRow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	rememberRow.BackgroundTransparency = 1
+	rememberRow.BorderSizePixel = 0
+	rememberRow.AutoButtonColor = false
+	rememberRow.Text = ""
+	rememberRow.Position = UDim2.new(0, 28, 0, 260)
+	rememberRow.Size = UDim2.new(1, -56, 0, 42)
+	rememberRow.Parent = panel
+
+	local rrCorner = Instance.new("UICorner")
+	rrCorner.CornerRadius = UDim.new(0, 14)
+	rrCorner.Parent = rememberRow
+
+	local rrStroke = Instance.new("UIStroke")
+	rrStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	rrStroke.Color = Color3.fromRGB(255, 255, 255)
+	rrStroke.Thickness = 1.15
+	rrStroke.Transparency = 0
+	rrStroke.Parent = rememberRow
+
+	local rememberLabel = Instance.new("TextLabel")
+	rememberLabel.BackgroundTransparency = 1
+	rememberLabel.Position = UDim2.fromOffset(14, 0)
+	rememberLabel.Size = UDim2.new(1, -70, 1, 0)
+	rememberLabel.Font = Enum.Font.GothamMedium
+	rememberLabel.TextSize = 13
+	rememberLabel.TextXAlignment = Enum.TextXAlignment.Left
+	rememberLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rememberLabel.Text = "RECORDAR / REMEMBER"
+	rememberLabel.Parent = rememberRow
+
+	local track = Instance.new("Frame")
+	track.Name = "Track"
+	track.AnchorPoint = Vector2.new(1, 0.5)
+	track.Position = UDim2.new(1, -12, 0.5, 0)
+	track.Size = UDim2.fromOffset(44, 22)
+	track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	track.BorderSizePixel = 0
+	track.Parent = rememberRow
+	local trackCorner = Instance.new("UICorner")
+	trackCorner.CornerRadius = UDim.new(1, 0)
+	trackCorner.Parent = track
+	local trackStroke = Instance.new("UIStroke")
+	trackStroke.Color = Color3.fromRGB(255, 255, 255)
+	trackStroke.Thickness = 1
+	trackStroke.Transparency = 0.4
+	trackStroke.Parent = track
+
+	local knob = Instance.new("Frame")
+	knob.Name = "Knob"
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Size = UDim2.fromOffset(16, 16)
+	knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	knob.BorderSizePixel = 0
+	knob.Position = UDim2.fromScale(0.28, 0.5)
+	knob.Parent = track
+	local knobCorner = Instance.new("UICorner")
+	knobCorner.CornerRadius = UDim.new(1, 0)
+	knobCorner.Parent = knob
+
+	local function setRememberVisual(on)
+		if on then
+			TweenService:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Position = UDim2.fromScale(0.72, 0.5),
+				BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+			TweenService:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+			TweenService:Create(rrStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Color = Color3.fromRGB(80, 255, 120),
+				Thickness = 1.4
+			}):Play()
+		else
+			TweenService:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Position = UDim2.fromScale(0.28, 0.5),
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+			TweenService:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			}):Play()
+			TweenService:Create(rrStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Color = Color3.fromRGB(255, 255, 255),
+				Thickness = 1.15
+			}):Play()
+		end
+	end
+
+	rememberRow.MouseButton1Click:Connect(function()
+		rememberOn = not rememberOn
+		setRememberVisual(rememberOn)
+	end)
+
+	-- entrada suave
+	panel.Size = UDim2.fromOffset(360, 300)
+	panel.BackgroundTransparency = 1
+	panelStroke.Transparency = 1
+	TweenService:Create(panel, TweenInfo.new(0.45, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(400, 340),
+		BackgroundTransparency = 0
+	}):Play()
+	TweenService:Create(panelStroke, TweenInfo.new(0.45, Enum.EasingStyle.Quint), { Transparency = 0 }):Play()
+
+	local choice = selected.Event:Wait()
+	H3XA_saveLangPrefs(rememberOn, choice)
+	env.H3XA_MM2_LANGUAGE = choice
+	gui:Destroy()
+	selected:Destroy()
+	return choice
+end
+
+local H3XA_MM2_LANGUAGE = createLanguageSelector()
+
+-- H3XA MM2 - Device selector (Celular / Computadora) + Remember preference
+local H3XA_DEVICE_FILE = "H3XA_MM2_device.txt"
+
+local function H3XA_loadDevicePrefs()
+	local prefs = { remember = false, device = nil }
+	pcall(function()
+		if isfile and isfile(H3XA_DEVICE_FILE) and readfile then
+			local raw = readfile(H3XA_DEVICE_FILE)
+			if type(raw) == "string" and #raw > 0 then
+				local rem, device = raw:match("^(%d)|(%w+)$")
+				if rem and device then
+					prefs.remember = (rem == "1")
+					prefs.device = device
+				end
+			end
+		end
+	end)
+	return prefs
+end
+
+local function H3XA_saveDevicePrefs(remember, device)
+	pcall(function()
+		if writefile then
+			writefile(H3XA_DEVICE_FILE, (remember and "1" or "0") .. "|" .. tostring(device or "PC"))
+		end
+	end)
+end
+
+local function createDeviceSelector(forceOpen)
+	local env = (getgenv and getgenv()) or _G
+	local TweenService = game:GetService("TweenService")
+
+	local prefs = H3XA_loadDevicePrefs()
+	if (not forceOpen) and prefs.remember and (prefs.device == "MOBILE" or prefs.device == "PC") then
+		env.H3XA_MM2_DEVICE = prefs.device
+		return prefs.device
+	end
+
+	local parent = game:GetService("CoreGui")
+	pcall(function()
+		if gethui then
+			parent = gethui()
+		elseif get_hidden_gui then
+			parent = get_hidden_gui()
+		end
+	end)
+
+	pcall(function()
+		local old = parent:FindFirstChild("H3XA_MM2_DeviceSelector")
+		if old then old:Destroy() end
+	end)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "H3XA_MM2_DeviceSelector"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 2147483647
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local parented = pcall(function()
+		gui.Parent = parent
+	end)
+	if not parented then
+		gui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local dim = Instance.new("Frame")
+	dim.Name = "Dim"
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "DevicePanel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(400, 340)
+	panel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	panel.BackgroundTransparency = 0
+	panel.BorderSizePixel = 0
+	panel.ClipsDescendants = true
+	panel.Parent = dim
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 28)
+	corner.Parent = panel
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	panelStroke.LineJoinMode = Enum.LineJoinMode.Round
+	panelStroke.Color = Color3.fromRGB(255, 255, 255)
+	panelStroke.Thickness = 1.5
+	panelStroke.Transparency = 0
+	panelStroke.Parent = panel
+
+	local logo = Instance.new("ImageLabel")
+	logo.Name = "Logo"
+	logo.AnchorPoint = Vector2.new(0.5, 0)
+	logo.Position = UDim2.new(0.5, 0, 0, 28)
+	logo.Size = UDim2.fromOffset(56, 56)
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://72742584610344"
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.new(0, 28, 0, 98)
+	title.Size = UDim2.new(1, -56, 0, 28)
+	title.Font = Enum.Font.GothamBold
+	title.Text = "SELECT DEVICE"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.TextStrokeTransparency = 1
+	title.Parent = panel
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "Subtitle"
+	subtitle.BackgroundTransparency = 1
+	subtitle.Position = UDim2.new(0, 28, 0, 128)
+	subtitle.Size = UDim2.new(1, -56, 0, 20)
+	subtitle.Font = Enum.Font.Gotham
+	subtitle.Text = "Elige tu dispositivo  •  Choose your device"
+	subtitle.TextColor3 = Color3.fromRGB(180, 180, 180)
+	subtitle.TextSize = 13
+	subtitle.TextStrokeTransparency = 1
+	subtitle.Parent = panel
+
+	local buttons = Instance.new("Frame")
+	buttons.Name = "Buttons"
+	buttons.BackgroundTransparency = 1
+	buttons.Position = UDim2.new(0, 28, 0, 168)
+	buttons.Size = UDim2.new(1, -56, 0, 72)
+	buttons.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 14)
+	layout.Parent = buttons
+
+	local selected = Instance.new("BindableEvent")
+	local rememberOn = false
+
+	local function makeButton(text, code, subtext)
+		local button = Instance.new("TextButton")
+		button.Name = code
+		button.Size = UDim2.new(0.5, -7, 1, 0)
+		button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		button.BackgroundTransparency = 1
+		button.BorderSizePixel = 0
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.Text = text .. "\n" .. subtext
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.TextSize = 15
+		button.TextWrapped = true
+		button.TextStrokeTransparency = 1
+		button.Parent = buttons
+
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 16)
+		c.Parent = button
+
+		local s = Instance.new("UIStroke")
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		s.Color = Color3.fromRGB(255, 255, 255)
+		s.Thickness = 1.2
+		s.Transparency = 0
+		s.Parent = button
+
+		button.MouseEnter:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+		end)
+		button.MouseLeave:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.32, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 1,
+				TextColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+		end)
+		button.MouseButton1Click:Connect(function()
+			TweenService:Create(button, TweenInfo.new(0.12), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+			selected:Fire(code)
+		end)
+	end
+
+	makeButton("CELULAR", "MOBILE", "Mobile")
+	makeButton("COMPUTADORA", "PC", "Computer")
+
+	local rememberRow = Instance.new("TextButton")
+	rememberRow.Name = "RememberRow"
+	rememberRow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	rememberRow.BackgroundTransparency = 1
+	rememberRow.BorderSizePixel = 0
+	rememberRow.AutoButtonColor = false
+	rememberRow.Text = ""
+	rememberRow.Position = UDim2.new(0, 28, 0, 260)
+	rememberRow.Size = UDim2.new(1, -56, 0, 42)
+	rememberRow.Parent = panel
+
+	local rrCorner = Instance.new("UICorner")
+	rrCorner.CornerRadius = UDim.new(0, 14)
+	rrCorner.Parent = rememberRow
+
+	local rrStroke = Instance.new("UIStroke")
+	rrStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	rrStroke.Color = Color3.fromRGB(255, 255, 255)
+	rrStroke.Thickness = 1.15
+	rrStroke.Transparency = 0
+	rrStroke.Parent = rememberRow
+
+	local rememberLabel = Instance.new("TextLabel")
+	rememberLabel.BackgroundTransparency = 1
+	rememberLabel.Position = UDim2.fromOffset(14, 0)
+	rememberLabel.Size = UDim2.new(1, -70, 1, 0)
+	rememberLabel.Font = Enum.Font.GothamMedium
+	rememberLabel.TextSize = 13
+	rememberLabel.TextXAlignment = Enum.TextXAlignment.Left
+	rememberLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rememberLabel.Text = "RECORDAR / REMEMBER"
+	rememberLabel.Parent = rememberRow
+
+	local track = Instance.new("Frame")
+	track.Name = "Track"
+	track.AnchorPoint = Vector2.new(1, 0.5)
+	track.Position = UDim2.new(1, -12, 0.5, 0)
+	track.Size = UDim2.fromOffset(44, 22)
+	track.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	track.BorderSizePixel = 0
+	track.Parent = rememberRow
+	local trackCorner = Instance.new("UICorner")
+	trackCorner.CornerRadius = UDim.new(1, 0)
+	trackCorner.Parent = track
+	local trackStroke = Instance.new("UIStroke")
+	trackStroke.Color = Color3.fromRGB(255, 255, 255)
+	trackStroke.Thickness = 1
+	trackStroke.Transparency = 0.4
+	trackStroke.Parent = track
+
+	local knob = Instance.new("Frame")
+	knob.Name = "Knob"
+	knob.AnchorPoint = Vector2.new(0.5, 0.5)
+	knob.Size = UDim2.fromOffset(16, 16)
+	knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	knob.BorderSizePixel = 0
+	knob.Position = UDim2.fromScale(0.28, 0.5)
+	knob.Parent = track
+	local knobCorner = Instance.new("UICorner")
+	knobCorner.CornerRadius = UDim.new(1, 0)
+	knobCorner.Parent = knob
+
+	local function setRememberVisual(on)
+		if on then
+			TweenService:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Position = UDim2.fromScale(0.72, 0.5),
+				BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+			TweenService:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+			TweenService:Create(rrStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Color = Color3.fromRGB(80, 255, 120),
+				Thickness = 1.4
+			}):Play()
+		else
+			TweenService:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Position = UDim2.fromScale(0.28, 0.5),
+				BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+			TweenService:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			}):Play()
+			TweenService:Create(rrStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				Color = Color3.fromRGB(255, 255, 255),
+				Thickness = 1.15
+			}):Play()
+		end
+	end
+
+	rememberRow.MouseButton1Click:Connect(function()
+		rememberOn = not rememberOn
+		setRememberVisual(rememberOn)
+	end)
+
+	panel.Size = UDim2.fromOffset(360, 300)
+	panel.BackgroundTransparency = 1
+	panelStroke.Transparency = 1
+	TweenService:Create(panel, TweenInfo.new(0.45, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(400, 340),
+		BackgroundTransparency = 0
+	}):Play()
+	TweenService:Create(panelStroke, TweenInfo.new(0.45, Enum.EasingStyle.Quint), { Transparency = 0 }):Play()
+
+	local choice = selected.Event:Wait()
+	H3XA_saveDevicePrefs(rememberOn, choice)
+	env.H3XA_MM2_DEVICE = choice
+	gui:Destroy()
+	selected:Destroy()
+	return choice
+end
+
+-- Auto-detect device (no selector panel)
+local function H3XA_detectDevice()
+	local UIS = game:GetService("UserInputService")
+	local ok, platform = pcall(function()
+		return UIS:GetPlatform()
+	end)
+	if ok and platform then
+		if platform == Enum.Platform.IOS or platform == Enum.Platform.Android then
+			return "MOBILE"
+		end
+		if platform == Enum.Platform.Windows or platform == Enum.Platform.OSX or platform == Enum.Platform.Linux then
+			-- algunos emuladores/touch en PC: preferir teclado/ratón si existen
+			if UIS.TouchEnabled and not UIS.KeyboardEnabled and not UIS.MouseEnabled then
+				return "MOBILE"
+			end
+			return "PC"
+		end
+	end
+	-- Fallback robusto
+	if UIS.TouchEnabled and not UIS.KeyboardEnabled then
+		return "MOBILE"
+	end
+	if UIS.TouchEnabled and UIS.GyroscopeEnabled and not UIS.MouseEnabled then
+		return "MOBILE"
+	end
+	return "PC"
+end
+
+local H3XA_MM2_DEVICE = H3XA_detectDevice()
+do
+	local env = (getgenv and getgenv()) or _G
+	env.H3XA_MM2_DEVICE = H3XA_MM2_DEVICE
+end
+
+-- Not MM2 gate (after language so UI text respects preference)
+local function H3XA_showNotMM2Panel()
+	local env = (getgenv and getgenv()) or _G
+	local lang = env.H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
+	local isES = (lang == "ES")
+	local TweenService = game:GetService("TweenService")
+	local TeleportService = game:GetService("TeleportService")
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+
+	local parent = game:GetService("CoreGui")
+	pcall(function()
+		if gethui then
+			parent = gethui()
+		elseif get_hidden_gui then
+			parent = get_hidden_gui()
+		end
+	end)
+
+	pcall(function()
+		local old = parent:FindFirstChild("H3XA_MM2_NotMM2")
+		if old then old:Destroy() end
+	end)
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "H3XA_MM2_NotMM2"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 2147483647
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local parented = pcall(function()
+		gui.Parent = parent
+	end)
+	if not parented then
+		gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local dim = Instance.new("Frame")
+	dim.Name = "Dim"
+	dim.Size = UDim2.fromScale(1, 1)
+	dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	dim.BackgroundTransparency = 0.45
+	dim.BorderSizePixel = 0
+	dim.Parent = gui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "NotMM2Panel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.fromOffset(420, 300)
+	panel.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+	panel.BackgroundTransparency = 0
+	panel.BorderSizePixel = 0
+	panel.ClipsDescendants = true
+	panel.Parent = dim
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 28)
+	corner.Parent = panel
+
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	panelStroke.LineJoinMode = Enum.LineJoinMode.Round
+	panelStroke.Color = Color3.fromRGB(255, 255, 255)
+	panelStroke.Thickness = 1.15
+	panelStroke.Transparency = 0.55
+	panelStroke.Parent = panel
+
+	-- Mismo fondo galaxia del panel principal: estrellas blancas cayendo
+	local galaxy = Instance.new("Frame")
+	galaxy.Name = "GalaxyBG"
+	galaxy.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+	galaxy.BackgroundTransparency = 0
+	galaxy.Size = UDim2.fromScale(1, 1)
+	galaxy.Position = UDim2.fromScale(0, 0)
+	galaxy.ZIndex = 0
+	galaxy.ClipsDescendants = true
+	galaxy.Parent = panel
+	local galaxyCorner = Instance.new("UICorner", galaxy)
+	galaxyCorner.CornerRadius = UDim.new(0, 28)
+
+	local rng = Random.new()
+	local starsFolder = Instance.new("Folder")
+	starsFolder.Name = "Stars"
+	starsFolder.Parent = galaxy
+
+	local staticStars = {}
+	for i = 1, 70 do
+		local star = Instance.new("Frame")
+		local size = rng:NextNumber(1, 2.6)
+		star.Name = "StaticStar"
+		star.BorderSizePixel = 0
+		star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		star.BackgroundTransparency = rng:NextNumber(0.15, 0.7)
+		star.Size = UDim2.fromOffset(size, size)
+		star.AnchorPoint = Vector2.new(0.5, 0.5)
+		star.Position = UDim2.new(rng:NextNumber(0, 1), 0, rng:NextNumber(0, 1), 0)
+		star.ZIndex = 1
+		local c = Instance.new("UICorner", star)
+		c.CornerRadius = UDim.new(1, 0)
+		star.Parent = starsFolder
+		table.insert(staticStars, {
+			inst = star,
+			twinkle = rng:NextNumber(1.2, 5),
+			phase = rng:NextNumber(0, math.pi * 2),
+			baseT = star.BackgroundTransparency
+		})
+	end
+
+	local fallingStars = {}
+	local STAR_COUNT = 90
+
+	local function spawnStar(initial)
+		local star = Instance.new("Frame")
+		local size = rng:NextNumber(1.1, 3.8)
+		star.Name = "Star"
+		star.BorderSizePixel = 0
+		star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		star.BackgroundTransparency = rng:NextNumber(0.02, 0.5)
+		star.Size = UDim2.fromOffset(size, size)
+		star.AnchorPoint = Vector2.new(0.5, 0.5)
+		star.ZIndex = 2
+		local x = rng:NextNumber(0, 1)
+		local y = initial and rng:NextNumber(-0.05, 1.05) or rng:NextNumber(-0.18, -0.02)
+		star.Position = UDim2.new(x, 0, y, 0)
+		local c = Instance.new("UICorner", star)
+		c.CornerRadius = UDim.new(1, 0)
+		star.Parent = starsFolder
+		if rng:NextNumber() < 0.38 then
+			local trail = Instance.new("Frame")
+			trail.Name = "Trail"
+			trail.AnchorPoint = Vector2.new(0.5, 0)
+			trail.Position = UDim2.new(0.5, 0, 0, 0)
+			trail.Size = UDim2.fromOffset(math.max(1, size * 0.55), rng:NextNumber(12, 28))
+			trail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			trail.BackgroundTransparency = 0.45
+			trail.BorderSizePixel = 0
+			trail.ZIndex = 1
+			trail.Parent = star
+			local tc = Instance.new("UICorner", trail)
+			tc.CornerRadius = UDim.new(1, 0)
+			local tg = Instance.new("UIGradient", trail)
+			tg.Rotation = 90
+			tg.Transparency = NumberSequence.new{
+				NumberSequenceKeypoint.new(0, 0.15),
+				NumberSequenceKeypoint.new(1, 1)
+			}
+		end
+		table.insert(fallingStars, {
+			inst = star,
+			speed = rng:NextNumber(0.035, 0.22),
+			drift = rng:NextNumber(-0.035, 0.035),
+			twinkle = rng:NextNumber(1.5, 5),
+			phase = rng:NextNumber(0, math.pi * 2),
+			baseT = star.BackgroundTransparency
+		})
+	end
+
+	for i = 1, STAR_COUNT do
+		spawnStar(true)
+	end
+
+	local function spawnShootingStar()
+		local ss = Instance.new("Frame")
+		ss.Name = "ShootingStar"
+		ss.BorderSizePixel = 0
+		ss.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		ss.BackgroundTransparency = 0.05
+		ss.Size = UDim2.fromOffset(2.5, 2.5)
+		ss.AnchorPoint = Vector2.new(0.5, 0.5)
+		ss.ZIndex = 3
+		local startX = rng:NextNumber(0.02, 0.98)
+		ss.Position = UDim2.new(startX, 0, -0.06, 0)
+		local c = Instance.new("UICorner", ss)
+		c.CornerRadius = UDim.new(1, 0)
+		local trail = Instance.new("Frame")
+		trail.AnchorPoint = Vector2.new(0.5, 0)
+		trail.Position = UDim2.new(0.5, 0, 0, 0)
+		trail.Size = UDim2.fromOffset(2, rng:NextNumber(26, 48))
+		trail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		trail.BackgroundTransparency = 0.25
+		trail.BorderSizePixel = 0
+		trail.Parent = ss
+		local tc = Instance.new("UICorner", trail)
+		tc.CornerRadius = UDim.new(1, 0)
+		local tg = Instance.new("UIGradient", trail)
+		tg.Rotation = 90
+		tg.Transparency = NumberSequence.new{
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(1, 1)
+		}
+		ss.Parent = starsFolder
+		local dur = rng:NextNumber(0.4, 0.95)
+		local endX = startX + rng:NextNumber(-0.22, 0.22)
+		TweenService:Create(ss, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(endX, 0, 1.12, 0),
+			BackgroundTransparency = 1
+		}):Play()
+		TweenService:Create(trail, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1
+		}):Play()
+		task.delay(dur + 0.05, function()
+			if ss then ss:Destroy() end
+		end)
+	end
+
+	task.spawn(function()
+		while galaxy and galaxy.Parent do
+			task.wait(rng:NextNumber(0.45, 1.4))
+			if galaxy and galaxy.Parent then
+				local burst = rng:NextInteger(1, 3)
+				for _ = 1, burst do
+					spawnShootingStar()
+					task.wait(rng:NextNumber(0.05, 0.18))
+				end
+			end
+		end
+	end)
+
+	local galaxyConn = RunService.RenderStepped:Connect(function(dt)
+		if not galaxy or not galaxy.Parent then return end
+		local t = os.clock()
+		for _, st in ipairs(staticStars) do
+			local inst = st.inst
+			if inst and inst.Parent then
+				local tw = (math.sin(t * st.twinkle + st.phase) + 1) * 0.5
+				inst.BackgroundTransparency = math.clamp(st.baseT + tw * 0.4, 0.05, 0.9)
+			end
+		end
+		for i = #fallingStars, 1, -1 do
+			local st = fallingStars[i]
+			local inst = st.inst
+			if not inst or not inst.Parent then
+				table.remove(fallingStars, i)
+			else
+				local p = inst.Position
+				local ny = p.Y.Scale + st.speed * dt
+				local nx = p.X.Scale + st.drift * dt
+				if ny > 1.08 then
+					ny = rng:NextNumber(-0.14, -0.02)
+					nx = rng:NextNumber(0, 1)
+					st.speed = rng:NextNumber(0.035, 0.22)
+					st.drift = rng:NextNumber(-0.035, 0.035)
+				end
+				inst.Position = UDim2.new(nx, 0, ny, 0)
+				local tw = (math.sin(t * st.twinkle + st.phase) + 1) * 0.5
+				inst.BackgroundTransparency = math.clamp(st.baseT + tw * 0.35, 0.02, 0.85)
+			end
+		end
+		while #fallingStars < STAR_COUNT do
+			spawnStar(false)
+		end
+	end)
+
+	-- Contenido encima de las estrellas
+	local content = Instance.new("Frame")
+	content.Name = "Content"
+	content.BackgroundTransparency = 1
+	content.Size = UDim2.fromScale(1, 1)
+	content.ZIndex = 5
+	content.Parent = panel
+
+	local logo = Instance.new("ImageLabel")
+	logo.Name = "Logo"
+	logo.AnchorPoint = Vector2.new(0.5, 0)
+	logo.Position = UDim2.new(0.5, 0, 0, 24)
+	logo.Size = UDim2.fromOffset(52, 52)
+	logo.BackgroundTransparency = 1
+	logo.Image = "rbxassetid://72742584610344"
+	logo.ScaleType = Enum.ScaleType.Fit
+	logo.ZIndex = 6
+	logo.Parent = content
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Name = "CloseX"
+	closeBtn.AnchorPoint = Vector2.new(1, 0)
+	closeBtn.Position = UDim2.new(1, -10, 0, 10)
+	closeBtn.Size = UDim2.fromOffset(32, 32)
+	closeBtn.BackgroundTransparency = 1
+	closeBtn.BorderSizePixel = 0
+	closeBtn.AutoButtonColor = false
+	closeBtn.Font = Enum.Font.GothamBold
+	closeBtn.Text = "X"
+	closeBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+	closeBtn.TextSize = 20
+	closeBtn.TextStrokeTransparency = 1
+	closeBtn.ZIndex = 10
+	closeBtn.Parent = content
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.new(0, 28, 0, 90)
+	title.Size = UDim2.new(1, -56, 0, 70)
+	title.Font = Enum.Font.GothamMedium
+	title.Text = isES
+		and "Este hub es específico de MM2,\n¿aún así deseas abrir la interfaz?"
+		or "This hub is specific to MM2.\nDo you still want to open the interface?"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 16
+	title.TextWrapped = true
+	title.TextStrokeTransparency = 1
+	title.ZIndex = 6
+	title.Parent = content
+
+	local buttons = Instance.new("Frame")
+	buttons.Name = "Buttons"
+	buttons.BackgroundTransparency = 1
+	buttons.Position = UDim2.new(0, 28, 0, 190)
+	buttons.Size = UDim2.new(1, -56, 0, 52)
+	buttons.ZIndex = 6
+	buttons.Parent = content
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 14)
+	layout.Parent = buttons
+
+	local decision = Instance.new("BindableEvent")
+
+	local function makeBtn(name, label)
+		local btn = Instance.new("TextButton")
+		btn.Name = name
+		btn.Size = UDim2.new(0.5, -7, 1, 0)
+		btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		btn.BackgroundTransparency = 1
+		btn.BorderSizePixel = 0
+		btn.AutoButtonColor = false
+		btn.Font = Enum.Font.GothamBold
+		btn.Text = label
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.TextSize = 15
+		btn.TextStrokeTransparency = 1
+		btn.ZIndex = 7
+		btn.Parent = buttons
+
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 14)
+		c.Parent = btn
+
+		local s = Instance.new("UIStroke")
+		s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		s.Color = Color3.fromRGB(255, 255, 255)
+		s.Thickness = 1.2
+		s.Transparency = 0
+		s.Parent = btn
+
+		btn.MouseEnter:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 0,
+				TextColor3 = Color3.fromRGB(0, 0, 0)
+			}):Play()
+		end)
+		btn.MouseLeave:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+				BackgroundTransparency = 1,
+				TextColor3 = Color3.fromRGB(255, 255, 255)
+			}):Play()
+		end)
+		return btn
+	end
+
+	local yesBtn = makeBtn("Yes", isES and "SÍ" or "YES")
+	local goBtn = makeBtn("GoMM2", isES and "IR A MM2" or "GO TO MM2")
+
+	closeBtn.MouseEnter:Connect(function()
+		TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+			TextColor3 = Color3.fromRGB(255, 255, 255)
+		}):Play()
+	end)
+	closeBtn.MouseLeave:Connect(function()
+		TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+			TextColor3 = Color3.fromRGB(220, 220, 220)
+		}):Play()
+	end)
+	closeBtn.MouseButton1Click:Connect(function()
+		decision:Fire("close")
+	end)
+	yesBtn.MouseButton1Click:Connect(function()
+		decision:Fire("yes")
+	end)
+	goBtn.MouseButton1Click:Connect(function()
+		decision:Fire("goto")
+	end)
+
+	panel.Size = UDim2.fromOffset(400, 280)
+	panel.BackgroundTransparency = 1
+	panelStroke.Transparency = 1
+	TweenService:Create(panel, TweenInfo.new(0.22, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {
+		Size = UDim2.fromOffset(420, 300),
+		BackgroundTransparency = 0
+	}):Play()
+	TweenService:Create(panelStroke, TweenInfo.new(0.22, Enum.EasingStyle.Quint), { Transparency = 0.55 }):Play()
+
+	local choice = decision.Event:Wait()
+	pcall(function() galaxyConn:Disconnect() end)
+	gui:Destroy()
+	decision:Destroy()
+
+	if choice == "goto" then
+		pcall(function()
+			TeleportService:Teleport(142823291, Players.LocalPlayer)
+		end)
+		return false
+	end
+	if choice == "yes" then
+		return true
+	end
+	return false
+end
+
+do
+	local isMM2 = false
+	local gid = game.GameId
+	local pid = game.PlaceId
+	if gid == 66654135 or pid == 142823291 or pid == 1428232910 or pid == 5956782898 or pid == 7074860883 then
+		isMM2 = true
+	end
+	if not isMM2 then
+		local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+		if remotes and remotes:FindFirstChild("Gameplay") then
+			isMM2 = true
+		end
+	end
+	if not isMM2 then
+		local openAnyway = H3XA_showNotMM2Panel()
+		if not openAnyway then
+			return
+		end
+	end
+end
+
+local H3XA_MM2_ES = {
+    ["Triple-click this region to open MM2."] = "Toca tres veces esta zona para abrir MM2.",
+    ["This can fit a lot of text, probably."] = "Aquí puede caber bastante texto.",
+    ["Placeholder"] = "Marcador",
+    ["Shoot into murderer"] = "Disparar al asesino",
+    ["Loop walkspeed and FOV"] = "Mantener velocidad y FOV",
+    ["Select..."] = "Seleccionar...",
+    ["Add a module"] = "Agregar un módulo",
+    ["Custom module link"] = "Enlace del módulo personalizado",
+    ["ONLY ADD MODULES YOU TRUST!"] = "¡AGREGA SOLO MÓDULOS DE CONFIANZA!",
+    ["Add"] = "Agregar",
+    ["Cancel"] = "Cancelar",
+    [""] = "",
+    ["murder mystery 2 hub"] = "hub para Murder Mystery 2",
+    ["Murder Mystery 2 Hub"] = "Hub de Murder Mystery 2",
+    ["Tap here to minimize."] = "Toca aquí para minimizar.",
+    ["Toggle visibility"] = "Mostrar / ocultar",
+    ["Toggle lock"] = "Bloquear / desbloquear",
+    ["Drag the button around to resize!"] = "¡Arrastra el botón para cambiar su tamaño!",
+
+    ["ESPs"] = "ESP",
+    ["Players"] = "Rol ESP",
+    ["Role ESP"] = "Rol ESP",
+    ["Dropped Gun"] = "Arma caída",
+    ["Traps"] = "Trampas",
+    ["Hide my own ESP"] = "Ocultar mi propio ESP",
+    ["Tools"] = "Herramientas",
+    ["Shoot murderer"] = "Disparar al asesino",
+    ["Knife throw to closest"] = "Lanzar cuchillo al más cercano",
+    ["Auto knife throw"] = "Lanzamiento automático de cuchillo",
+    ["Delayed shoot murderer"] = "Disparo retrasado al asesino",
+    ["Shoot position offset"] = "Desfase de posición del disparo",
+    ["Set"] = "Aplicar",
+    ["Press the key you want to assign. Press Backspace to remove it."] = "Toca la tecla que quieras asignar. Pulsa Backspace para quitarla.",
+    ["Keybind removed."] = "Keybind eliminado.",
+    ["Offset-to-ping multiplier"] = "Multiplicador de desfase según ping",
+    ["Shoot offset re-aims the gun/knife shoot/throw to the character's predicted position. Recommended is 2.8"] = "El desfase reajusta el disparo/lanzamiento hacia la posición predicha del personaje. Recomendado: 2.8",
+    ["Offset-to-ping multiplier allows the offset to change dynamically with latency/ping. The default is 1 (aka no adjustment)"] = "El multiplicador permite ajustar dinámicamente el desfase según la latencia/ping. El valor predeterminado es 1 (sin ajuste).",
+    ["<font color='#FF0000'>Detectables</font>"] = "Detectables",
+    ["Instakill murderer as sheriff"] = "Matar instantáneamente al asesino como sheriff",
+    ["Spawn knife throw near player"] = "Generar lanzamiento de cuchillo cerca del jugador",
+    ["Send Sheriff and Murderer names into chat"] = "Enviar nombres de Sheriff y Asesino al chat",
+    ["Teleport to dropped gun"] = "Teletransportarse al arma caída",
+    ["Automatically get gun on drop"] = "Recoger automáticamente el arma al caer",
+    ["Ignore knife throws (doesn't work)"] = "Ignorar cuchillos lanzados (no funciona)",
+    ["God mode (Very, VERY UNSTABLE)"] = "Modo dios (MUY, MUY INESTABLE)",
+    ["Kill closest player as murderer"] = "Matar al jugador más cercano como asesino",
+    ["Murderer kill aura"] = "Aura de muerte del asesino",
+    ["Kill EVERYONE as murderer"] = "Matar a TODOS como asesino",
+    ["Fun"] = "Diversión",
+    ["Hold everyone hostage"] = "Retener a todos",
+
+    -- Runtime Error categories & features
+    ["Combat"] = "COMBATE",
+    ["Movement"] = "MOVIMIENTO",
+    ["Awareness"] = "CONCIENCIA",
+    ["Utility"] = "UTILIDAD",
+    ["Silent Aim"] = "Silent Aim",
+    ["Aimbot"] = "Aimbot",
+    ["Aimbot FOV Radius"] = "Radio FOV del Aimbot",
+    ["Hitbox Expander"] = "Expansor de Hitbox",
+    ["Hitbox Size"] = "Tamaño de Hitbox",
+    ["Auto Win"] = "Auto Victoria",
+    ["WalkSpeed"] = "Velocidad de caminata",
+    ["WalkSpeed Value"] = "Valor de velocidad",
+    ["JumpPower"] = "Fuerza de salto",
+    ["JumpPower Value"] = "Valor de salto",
+    ["Infinite Jump"] = "Salto infinito",
+    ["Noclip"] = "Noclip",
+    ["Murderer Arrow"] = "Flecha del asesino",
+    ["Proximity Alert"] = "Alerta de proximidad",
+    ["Radar 3D"] = "Radar 3D",
+    ["Coin ESP"] = "ESP de monedas",
+    ["Distance ESP"] = "ESP de distancia",
+    ["Tracers"] = "Trazadores",
+    ["Skeleton ESP"] = "ESP de esqueleto",
+    ["Invisibility"] = "Invisibilidad",
+    ["Auto Grab Gun"] = "Auto recoger arma",
+    ["Anti-AFK"] = "Anti-AFK",
+    ["Clear floating buttons"] = "Limpiar botones flotantes",
+    ["Floating buttons cleared."] = "Botones flotantes eliminados.",
+    ["Save Waypoint"] = "Guardar waypoint",
+    ["Teleport to Waypoint"] = "Teletransportar a waypoint",
+    ["Waypoint saved."] = "Waypoint guardado.",
+    ["Teleported to waypoint."] = "Teletransportado al waypoint.",
+    ["No waypoint saved."] = "No hay waypoint guardado.",
+    ["MURDERER NEAR"] = "ASESINO CERCA",
+
+    ["Not MM2"] = "No es MM2",
+    ["Looks like this game isn't MM2. Do you want to load the module anyway?"] = "Parece que este juego no es MM2. ¿Quieres cargar el módulo de todos modos?",
+    ["Load"] = "Cargar",
+    ["No"] = "No",
+    ["MM2 will not be loaded until you rejoin."] = "MM2 no se cargará hasta que vuelvas a entrar.",
+    ["Map has loaded, waiting for roles..."] = "Mapa cargado; esperando los roles...",
+    ["Player ESP reloaded."] = "ESP de jugadores recargado.",
+    ["Game ended, removing Player ESPs."] = "La partida terminó; eliminando los ESP de jugadores.",
+    ["Murderer has placed a trap!"] = "¡El asesino colocó una trampa!",
+    ["Gun has been dropped! Find a yellow highlight."] = "¡El arma cayó! Busca el resaltado amarillo.",
+    ["Auto get dropped gun - Cooling down..."] = "Recogida automática del arma: esperando enfriamiento...",
+    ["No dropped gun to be teleported to."] = "No hay un arma caída a la que teletransportarse.",
+    ["Someone has took the dropped gun."] = "Alguien recogió el arma caída.",
+    ["Cancelling AI prediction, using basic prediction."] = "Cancelando predicción con IA; usando predicción básica.",
+    ["No murderer to predict position."] = "No hay asesino para predecir su posición.",
+    ["Calculating trajectory..."] = "Calculando trayectoria...",
+    ["Murderer is too close for trajectory prediction. Reverting to basic prediction."] = "El asesino está demasiado cerca para predecir la trayectoria. Volviendo a la predicción básica.",
+    ["Prediction engine is not available. Reverting to basic prediction."] = "El motor de predicción no está disponible. Volviendo a la predicción básica.",
+    ["Auto-shooting started."] = "Disparo automático iniciado.",
+    ["No murderer."] = "No hay asesino.",
+    ["Auto-shooting!"] = "¡Disparo automático!",
+    ["You don't have the gun..?"] = "¿No tienes el arma?",
+    ["Could not find the murderer's HumanoidRootPart."] = "No se pudo encontrar el HumanoidRootPart del asesino.",
+    ["No roles yet. Waiting for roles..."] = "Aún no hay roles. Esperando...",
+    ["You're not sheriff/hero."] = "No eres sheriff/héroe.",
+    ["No murderer (or sheriff) to shoot."] = "No hay asesino (o sheriff) al que disparar.",
+    ["You're not murderer."] = "No eres el asesino.",
+    ["You don't have the knife..?"] = "¿No tienes el cuchillo?",
+    ["Can't find a player!?"] = "¡No se pudo encontrar un jugador!",
+    ["Can't find the player's pivot."] = "No se pudo encontrar el pivote del jugador.",
+    ["Waiting for murderer to be in view..."] = "Esperando a que el asesino esté a la vista...",
+    ["Not a valid number."] = "No es un número válido.",
+    ["An offset with a multiplier of 5 might not at all shoot the murderer!"] = "¡Un desfase con multiplicador 5 podría hacer que no se le dispare al asesino!",
+    ["An offset with a negative multiplier will make a shot BEHIND the murderer's walk direction."] = "Un multiplicador negativo hará que el disparo vaya DETRÁS de la dirección del asesino.",
+    ["Offset has been set."] = "Desfase aplicado.",
+    ["No map to teleport to."] = "No hay mapa al que teletransportarse.",
+    ["No sheriff/hero to fling."] = "No hay sheriff/héroe para lanzar.",
+    ["No murderer to fling."] = "No hay asesino para lanzar.",
+    ["No murderer to copy."] = "No hay asesino para copiar.",
+    ["No sheriff/hero to copy."] = "No hay sheriff/héroe para copiar.",
+    ["Copied to clipboard."] = "Copiado al portapapeles.",
+    ["You're not a valid character."] = "Tu personaje no es válido.",
+    ["You're not murderer. This'll only be useful if you're the murderer."] = "No eres el asesino. Esto solo sirve si eres el asesino.",
+    ["Placed every single player in a single point. Kill everyone at once once you decide to."] = "Todos los jugadores fueron colocados en un solo punto. Puedes eliminarlos juntos cuando decidas.",
+    ["Player is already flung. Fling again?"] = "El jugador ya fue lanzado. ¿Lanzarlo otra vez?",
+    ["Fling again"] = "Lanzar otra vez",
+    ["Player flung"] = "Jugador lanzado",
+    ["Can't find a proper part of target player to fling."] = "No se encontró una parte válida del jugador objetivo para lanzarlo.",
+    ["No valid character of said target player. May have died."] = "El jugador objetivo no tiene un personaje válido; quizá murió.",
+    ["Could not find the player's HumanoidRootPart."] = "No se pudo encontrar el HumanoidRootPart del jugador.",
+    ["Teleport to lobby"] = "Teletransportarse al lobby",
+    ["Teleport to map"] = "Teletransportarse al mapa",
+    ["Fling Sheriff"] = "Lanzar al Sheriff",
+    ["Fling Murderer"] = "Lanzar al Asesino",
+    ["Copy murderer username"] = "Copiar usuario del asesino",
+    ["Copy sheriff username"] = "Copiar usuario del sheriff",
+    ["No lobby to teleport to."] = "No hay lobby al que teletransportarse.",
+    ["Teleported to lobby."] = "Teletransportado al lobby.",
+    ["Teleported to map."] = "Teletransportado al mapa.",
+    ["Round timer"] = "Temporizador de ronda",
+    ["Detectables"] = "Detectables",
+    ["Instakill murderer as sheriff"] = "Matar instantáneamente al asesino como sheriff",
+    ["Spawn knife throw near player"] = "Generar lanzamiento de cuchillo cerca del jugador",
+    ["Send Sheriff and Murderer names into chat"] = "Enviar nombres de Sheriff y Asesino al chat",
+    ["Teleport to dropped gun"] = "Teletransportarse al arma caída",
+    ["Automatically get gun on drop"] = "Recoger automáticamente el arma al caer",
+    ["Kill closest player as murderer"] = "Matar al jugador más cercano como asesino",
+    ["Murderer kill aura"] = "Aura de muerte del asesino",
+    ["Kill EVERYONE as murderer"] = "Matar a TODOS como asesino",
+    ["Fun"] = "Diversión",
+    ["Hold everyone hostage"] = "Retener a todos",
+    ["Language"] = "Idioma",
+    ["Device"] = "Dispositivo",
+    ["Couldn't find a place to teleport to."] = "No se encontró un lugar al que teletransportarse.",
+    ["OP Fly"] = "Vuelo OP",
+    ["Fly speed"] = "Velocidad de vuelo",
+    ["Infinite jump"] = "Salto infinito",
+    ["Limit infinite jump to 2 jumps only"] = "Limitar salto infinito a solo 2 saltos",
+    ["CTRL+Click Teleport"] = "Teletransporte con CTRL+clic",
+    ["Teleports"] = "Teletransportes",
+    ["Spectate players"] = "Espectear jugadores",
+    ["Aim locking"] = "Bloqueo de mira",
+    ["Target player"] = "Jugador objetivo",
+    ["Set target"] = "Fijar objetivo",
+    ["Aim lock"] = "Bloquear mira",
+    ["Unaim lock"] = "Quitar bloqueo de mira",
+    ["Fling"] = "Lanzar",
+    ["Target fling player"] = "Jugador a lanzar",
+    ["Anti-fling"] = "Anti-lanzamiento",
+    ["Miscellaneous"] = "Misceláneo",
+    ["Anti AFK detection"] = "Anti detección AFK",
+    ["Hide H3XA_MM2"] = "Ocultar H3XA_MM2",
+    ["FPS Boost"] = "Mejora de FPS",
+    ["Other"] = "Otros",
+    ["Get ping"] = "Ver ping",
+    ["Open developer console (debugging)"] = "Abrir consola de desarrollador",
+    ["Theme"] = "Tema",
+    ["Reload theme"] = "Recargar tema",
+    ["Delete theme from save"] = "Eliminar tema guardado",
+
 }
-local autoCollectTargets = {}
-local autoCollectScanAt = 0
-local cachedGoldValueObject = nil
 
-local function track(conn)
-    connections[#connections + 1] = conn
-    return conn
+local function H3XA_MM2_T(value)
+    if type(value) ~= "string" then return value end
+    local env = (getgenv and getgenv()) or _G
+    local lang = env.H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
+    if lang ~= "ES" then return value end
+    local exact = H3XA_MM2_ES[value]
+    if exact then return exact end
+
+    -- Small dynamic-message translations used by MM2.
+    local hero = value:match("^The hero is (.+)%.$")
+    if hero then return "El héroe es " .. hero .. "." end
+    local near = value:match("^MURDERER NEAR %((%d+)m%)$")
+    if near then return "ASESINO CERCA (" .. near .. "m)" end
+    return value
 end
 
-local function addCleanup(fn)
-    cleanupTasks[#cleanupTasks + 1] = fn
-end
+local env = (getgenv and getgenv()) or _G
+env.H3XA_MM2_TRANSLATE = H3XA_MM2_T
+env.H3XA_MM2_LANGUAGE = H3XA_MM2_LANGUAGE
 
-local function disconnectAll()
-    for _, c in ipairs(connections) do
-        pcall(function() c:Disconnect() end)
+
+-- Instances:
+
+local Converted = {
+	["_H3XA_MM2"] = Instance.new("ScreenGui");
+	["_FUNCTIONS"] = Instance.new("ModuleScript");
+	["_Universal"] = Instance.new("LocalScript");
+	["_DraggableObject"] = Instance.new("ModuleScript");
+	["_ClickAndHold"] = Instance.new("ModuleScript");
+	["_Spring"] = Instance.new("ModuleScript");
+	["_Init"] = Instance.new("LocalScript");
+	["_Murder Mystery 2"] = Instance.new("LocalScript");
+	["_ESPIndicator"] = Instance.new("ModuleScript");
+	["_Bezier"] = Instance.new("ModuleScript");
+	["_PointSave"] = Instance.new("ModuleScript");
+	["_Theme"] = Instance.new("ModuleScript");
+	["_FlyUtility"] = Instance.new("ModuleScript");
+	["_Open"] = Instance.new("TextButton");
+	["_InitOpen"] = Instance.new("LocalScript");
+	["_OnClick"] = Instance.new("LocalScript");
+	["_Resizer"] = Instance.new("LocalScript");
+	["_UICorner"] = Instance.new("UICorner");
+	["_UIPadding"] = Instance.new("UIPadding");
+	["_DropdownFrameSample"] = Instance.new("Frame");
+	["_UICorner1"] = Instance.new("UICorner");
+	["_UIGradient"] = Instance.new("UIGradient");
+	["_UIStroke"] = Instance.new("UIStroke");
+	["_UIGradient1"] = Instance.new("UIGradient");
+	["_ScrollingFrame"] = Instance.new("ScrollingFrame");
+	["_UIListLayout"] = Instance.new("UIListLayout");
+	["_Sample"] = Instance.new("TextButton");
+	["_UIPadding1"] = Instance.new("UIPadding");
+	["_UICorner2"] = Instance.new("UICorner");
+	["_UIPadding2"] = Instance.new("UIPadding");
+	["_themedColor"] = Instance.new("StringValue");
+	["_ListButton"] = Instance.new("TextButton");
+	["_UICorner3"] = Instance.new("UICorner");
+	["_Notifications"] = Instance.new("Frame");
+	["_UIListLayout1"] = Instance.new("UIListLayout");
+	["_UIPadding3"] = Instance.new("UIPadding");
+	["_Placeholder"] = Instance.new("Frame");
+	["_UICorner4"] = Instance.new("UICorner");
+	["_TextLabel"] = Instance.new("TextLabel");
+	["_TextBoxPlaceholder"] = Instance.new("Frame");
+	["_UIListLayout2"] = Instance.new("UIListLayout");
+	["_TextButton"] = Instance.new("TextButton");
+	["_UICorner5"] = Instance.new("UICorner");
+	["_UIPadding4"] = Instance.new("UIPadding");
+	["_TextBox"] = Instance.new("TextBox");
+	["_UICorner6"] = Instance.new("UICorner");
+	["_FloatingButton"] = Instance.new("TextButton");
+	["_Keybinding"] = Instance.new("LocalScript");
+	["_Invisible"] = Instance.new("LocalScript");
+	["_UIPadding5"] = Instance.new("UIPadding");
+	["_UICorner7"] = Instance.new("UICorner");
+	["_UIStroke1"] = Instance.new("UIStroke");
+	["_Lock"] = Instance.new("TextLabel");
+	["_UIScale"] = Instance.new("UIScale");
+	["_Ripple"] = Instance.new("Frame");
+	["_UICorner8"] = Instance.new("UICorner");
+	["_UIScale1"] = Instance.new("UIScale");
+	["_Dropdown"] = Instance.new("Frame");
+	["_TextLabel1"] = Instance.new("TextLabel");
+	["_UIListLayout3"] = Instance.new("UIListLayout");
+	["_UIPadding6"] = Instance.new("UIPadding");
+	["_Frame"] = Instance.new("TextButton");
+	["_UIPadding7"] = Instance.new("UIPadding");
+	["_UICorner9"] = Instance.new("UICorner");
+	["_AddCustomModule"] = Instance.new("Frame");
+	["_UICorner10"] = Instance.new("UICorner");
+	["_UIStroke2"] = Instance.new("UIStroke");
+	["_UIGradient2"] = Instance.new("UIGradient");
+	["_UIGradient3"] = Instance.new("UIGradient");
+	["_UIScale2"] = Instance.new("UIScale");
+	["_TextLabel2"] = Instance.new("TextLabel");
+	["_TextBox1"] = Instance.new("TextBox");
+	["_UICorner11"] = Instance.new("UICorner");
+	["_UIPadding8"] = Instance.new("UIPadding");
+	["_TextLabel3"] = Instance.new("TextLabel");
+	["_Add"] = Instance.new("TextButton");
+	["_LocalScript"] = Instance.new("LocalScript");
+	["_UICorner12"] = Instance.new("UICorner");
+	["_UIPadding9"] = Instance.new("UIPadding");
+	["_UIStroke3"] = Instance.new("UIStroke");
+	["_Cancel"] = Instance.new("TextButton");
+	["_LocalScript1"] = Instance.new("LocalScript");
+	["_UICorner13"] = Instance.new("UICorner");
+	["_UIPadding10"] = Instance.new("UIPadding");
+	["_UIStroke4"] = Instance.new("UIStroke");
+	["_themedColor1"] = Instance.new("StringValue");
+	["_Menu"] = Instance.new("Frame");
+	["_UICorner14"] = Instance.new("UICorner");
+	["_UIStroke5"] = Instance.new("UIStroke");
+	["_UIGradient4"] = Instance.new("UIGradient");
+	["_Animator"] = Instance.new("LocalScript");
+	["_HubCredits"] = Instance.new("TextLabel");
+	["_HubDesc"] = Instance.new("TextLabel");
+	["_HubName"] = Instance.new("TextLabel");
+	["_CanvasGroup"] = Instance.new("CanvasGroup");
+	["_UICorner15"] = Instance.new("UICorner");
+	["_ImageLabel"] = Instance.new("ImageLabel");
+	["_Opener"] = Instance.new("TextButton");
+	["_TextLabel4"] = Instance.new("TextLabel");
+	["_CloseArea"] = Instance.new("TextButton");
+	["_CloseOpen"] = Instance.new("LocalScript");
+	["_Frame1"] = Instance.new("Frame");
+	["_UICorner16"] = Instance.new("UICorner");
+	["_themedColor2"] = Instance.new("StringValue");
+	["_TextLabel5"] = Instance.new("TextLabel");
+	["_UICorner17"] = Instance.new("UICorner");
+	["_AllowForSpring"] = Instance.new("BindableEvent");
+	["_themedColor3"] = Instance.new("StringValue");
+	["_UIGradient5"] = Instance.new("UIGradient");
+	["_Area"] = Instance.new("CanvasGroup");
+	["_Area1"] = Instance.new("ScrollingFrame");
+	["_TextLabel6"] = Instance.new("TextLabel");
+	["_TextLabel7"] = Instance.new("TextLabel");
+	["_UICorner18"] = Instance.new("UICorner");
+	["_List"] = Instance.new("CanvasGroup");
+	["_AutoSetup"] = Instance.new("LocalScript");
+	["_UICorner19"] = Instance.new("UICorner");
+	["_ScrollingFrame1"] = Instance.new("ScrollingFrame");
+	["_UIListLayout4"] = Instance.new("UIListLayout");
+	["_UIPadding11"] = Instance.new("UIPadding");
+	["_UIPadding12"] = Instance.new("UIPadding");
+	["_UIStroke6"] = Instance.new("UIStroke");
+	["_UIGradient6"] = Instance.new("UIGradient");
+	["_AddCustomModule1"] = Instance.new("TextButton");
+	["_LocalScript2"] = Instance.new("LocalScript");
+	["_UICorner20"] = Instance.new("UICorner");
+	["_UIPadding13"] = Instance.new("UIPadding");
+	["_UIStroke7"] = Instance.new("UIStroke");
+	["_themedColor4"] = Instance.new("StringValue");
+	["_themedColor5"] = Instance.new("StringValue");
+	["_themedColor6"] = Instance.new("StringValue");
+	["_UIScale3"] = Instance.new("UIScale");
+	["_Stub"] = Instance.new("Frame");
+	["_themedColor7"] = Instance.new("StringValue");
+	["_Stub1"] = Instance.new("Frame");
+	["_themedColor8"] = Instance.new("StringValue");
+	["_Toggle"] = Instance.new("Frame");
+	["_TextLabel8"] = Instance.new("TextLabel");
+	["_UIListLayout5"] = Instance.new("UIListLayout");
+	["_Frame2"] = Instance.new("Frame");
+	["_Frame3"] = Instance.new("Frame");
+	["_UICorner21"] = Instance.new("UICorner");
+	["_Toggler"] = Instance.new("TextButton");
+	["_UICorner22"] = Instance.new("UICorner");
+	["_ImageLabel1"] = Instance.new("ImageLabel");
+	["_UIPadding14"] = Instance.new("UIPadding");
+	["_Modules"] = Instance.new("Folder");
+	["_NotificationSample"] = Instance.new("Frame");
+	["_UICorner23"] = Instance.new("UICorner");
+	["_UIStroke8"] = Instance.new("UIStroke");
+	["_UIGradient7"] = Instance.new("UIGradient");
+	["_ImageLabel2"] = Instance.new("ImageLabel");
+	["_TextLabel9"] = Instance.new("TextLabel");
+	["_UITextSizeConstraint"] = Instance.new("UITextSizeConstraint");
+	["_Close"] = Instance.new("ImageButton");
+	["_UICorner24"] = Instance.new("UICorner");
+	["_UIStroke9"] = Instance.new("UIStroke");
+	["_UIScale4"] = Instance.new("UIScale");
+	["_themedColor9"] = Instance.new("StringValue");
+	["_Dialog"] = Instance.new("Frame");
+	["_UICorner25"] = Instance.new("UICorner");
+	["_UIGradient8"] = Instance.new("UIGradient");
+	["_UIPadding15"] = Instance.new("UIPadding");
+	["_UIStroke10"] = Instance.new("UIStroke");
+	["_UIGradient9"] = Instance.new("UIGradient");
+	["_DialogTitle"] = Instance.new("TextLabel");
+	["_UIListLayout6"] = Instance.new("UIListLayout");
+	["_DialogDesc"] = Instance.new("TextLabel");
+	["_UITextSizeConstraint1"] = Instance.new("UITextSizeConstraint");
+	["_Options"] = Instance.new("Frame");
+	["_UIListLayout7"] = Instance.new("UIListLayout");
+	["_OptionPlaceholder"] = Instance.new("TextButton");
+	["_UIPadding16"] = Instance.new("UIPadding");
+	["_UICorner26"] = Instance.new("UICorner");
+	["_UIStroke11"] = Instance.new("UIStroke");
+	["_UIGradient10"] = Instance.new("UIGradient");
+	["_themedColor10"] = Instance.new("StringValue");
+	["_OnSelect"] = Instance.new("BindableEvent");
+	["_UIScale5"] = Instance.new("UIScale");
+	["_themedColor11"] = Instance.new("StringValue");
+	["_Range"] = Instance.new("Frame");
+	["_TextLabel10"] = Instance.new("TextLabel");
+	["_UIListLayout8"] = Instance.new("UIListLayout");
+	["_UIPadding17"] = Instance.new("UIPadding");
+	["_Frame4"] = Instance.new("Frame");
+	["_UIPadding18"] = Instance.new("UIPadding");
+	["_UICorner27"] = Instance.new("UICorner");
+	["_Track"] = Instance.new("Frame");
+	["_UICorner28"] = Instance.new("UICorner");
+	["_Ball"] = Instance.new("TextButton");
+	["_BallProgress"] = Instance.new("TextLabel");
+	["_UIPadding19"] = Instance.new("UIPadding");
+	["_themedColor12"] = Instance.new("StringValue");
+	["_UICorner29"] = Instance.new("UICorner");
+	["_UIPadding20"] = Instance.new("UIPadding");
+	["_TrackProgress"] = Instance.new("TextLabel");
+	["_themedColor13"] = Instance.new("StringValue");
+	["_UISizeConstraint"] = Instance.new("UISizeConstraint");
+	["_FloatingButtonSetting"] = Instance.new("Frame");
+	["_ControlBarContainer"] = Instance.new("Frame");
+	["_ControlBar"] = Instance.new("Frame");
+	["_UIListLayout9"] = Instance.new("UIListLayout");
+	["_Visibility"] = Instance.new("TextButton");
+	["_LocalScript3"] = Instance.new("LocalScript");
+	["_UICorner30"] = Instance.new("UICorner");
+	["_UIPadding21"] = Instance.new("UIPadding");
+	["_Event"] = Instance.new("BindableEvent");
+	["_themedColor14"] = Instance.new("StringValue");
+	["_Lock1"] = Instance.new("TextButton");
+	["_LocalScript4"] = Instance.new("LocalScript");
+	["_UICorner31"] = Instance.new("UICorner");
+	["_UIPadding22"] = Instance.new("UIPadding");
+	["_Event1"] = Instance.new("BindableEvent");
+	["_themedColor15"] = Instance.new("StringValue");
+	["_Exit"] = Instance.new("TextButton");
+	["_LocalScript5"] = Instance.new("LocalScript");
+	["_UICorner32"] = Instance.new("UICorner");
+	["_UIPadding23"] = Instance.new("UIPadding");
+	["_UIAspectRatioConstraint"] = Instance.new("UIAspectRatioConstraint");
+	["_themedColor16"] = Instance.new("StringValue");
+	["_UIListLayout10"] = Instance.new("UIListLayout");
+	["_Tip"] = Instance.new("TextLabel");
+	["_UIStroke12"] = Instance.new("UIStroke");
+	["_UIScale6"] = Instance.new("UIScale");
+	["_FloatingButtons"] = Instance.new("Frame");
+	["_FloatingButtons1"] = Instance.new("Frame");
+}
+
+-- Properties:
+
+Converted["_H3XA_MM2"].DisplayOrder = 3
+Converted["_H3XA_MM2"].IgnoreGuiInset = true
+Converted["_H3XA_MM2"].ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+Converted["_H3XA_MM2"].ResetOnSpawn = false
+Converted["_H3XA_MM2"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Converted["_H3XA_MM2"].Name = "H3XA_MM2"
+Converted["_H3XA_MM2"].Parent = game:GetService("CoreGui")
+
+Converted["_Open"].Font = Enum.Font.Gotham
+Converted["_Open"].Text = H3XA_MM2_T("Triple-click this region to open MM2.")
+Converted["_Open"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Open"].TextScaled = true
+Converted["_Open"].TextSize = 14
+Converted["_Open"].TextTransparency = 1
+Converted["_Open"].TextWrapped = true
+Converted["_Open"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Open"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Open"].BackgroundTransparency = 1
+Converted["_Open"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Open"].BorderSizePixel = 0
+Converted["_Open"].Position = UDim2.new(0.499372631, 0, 0.06341701, 0)
+Converted["_Open"].Selectable = false
+Converted["_Open"].Size = UDim2.new(0, 493, 0, 50)
+Converted["_Open"].Visible = false
+Converted["_Open"].Name = "Open"
+Converted["_Open"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner"].Parent = Converted["_Open"]
+
+Converted["_UIPadding"].PaddingBottom = UDim.new(0, 10)
+Converted["_UIPadding"].PaddingLeft = UDim.new(0, 20)
+Converted["_UIPadding"].PaddingRight = UDim.new(0, 20)
+Converted["_UIPadding"].PaddingTop = UDim.new(0, 10)
+Converted["_UIPadding"].Parent = Converted["_Open"]
+
+Converted["_DropdownFrameSample"].AnchorPoint = Vector2.new(0.5, 0)
+Converted["_DropdownFrameSample"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_DropdownFrameSample"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_DropdownFrameSample"].BorderSizePixel = 0
+Converted["_DropdownFrameSample"].Size = UDim2.new(0, 108, 0, 239)
+Converted["_DropdownFrameSample"].Visible = false
+Converted["_DropdownFrameSample"].Name = "DropdownFrameSample"
+Converted["_DropdownFrameSample"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner1"].Parent = Converted["_DropdownFrameSample"]
+
+Converted["_UIGradient"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(36.00000165402889, 36.00000165402889, 36.00000165402889)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(68.00000354647636, 68.00000354647636, 68.00000354647636))
+}
+Converted["_UIGradient"].Rotation = 68
+Converted["_UIGradient"].Parent = Converted["_DropdownFrameSample"]
+
+Converted["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke"].Thickness = 2
+Converted["_UIStroke"].Parent = Converted["_DropdownFrameSample"]
+
+Converted["_UIGradient1"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(111.00000098347664, 111.00000098347664, 111.00000098347664)),
+	ColorSequenceKeypoint.new(0.6401384472846985, Color3.fromRGB(114.23875719308853, 114.23875719308853, 114.23875719308853)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+}
+Converted["_UIGradient1"].Rotation = -107
+Converted["_UIGradient1"].Parent = Converted["_UIStroke"]
+
+Converted["_ScrollingFrame"].AutomaticCanvasSize = Enum.AutomaticSize.XY
+Converted["_ScrollingFrame"].CanvasSize = UDim2.new(0, 0, 0, 0)
+Converted["_ScrollingFrame"].ScrollBarImageColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ScrollingFrame"].ScrollBarThickness = 0
+Converted["_ScrollingFrame"].Active = true
+Converted["_ScrollingFrame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ScrollingFrame"].BackgroundTransparency = 1
+Converted["_ScrollingFrame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ScrollingFrame"].BorderSizePixel = 0
+Converted["_ScrollingFrame"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_ScrollingFrame"].Parent = Converted["_DropdownFrameSample"]
+
+Converted["_UIListLayout"].Padding = UDim.new(0, 5)
+Converted["_UIListLayout"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout"].Parent = Converted["_ScrollingFrame"]
+
+Converted["_Sample"].Font = Enum.Font.Unknown
+Converted["_Sample"].Text = H3XA_MM2_T("This can fit a lot of text, probably.")
+Converted["_Sample"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Sample"].TextScaled = true
+Converted["_Sample"].TextSize = 14
+Converted["_Sample"].TextWrapped = true
+Converted["_Sample"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_Sample"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Sample"].BorderSizePixel = 0
+Converted["_Sample"].Size = UDim2.new(1, 0, 0, 35)
+Converted["_Sample"].Visible = false
+Converted["_Sample"].Name = "Sample"
+Converted["_Sample"].Parent = Converted["_ScrollingFrame"]
+
+Converted["_UIPadding1"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding1"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding1"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding1"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding1"].Parent = Converted["_Sample"]
+
+Converted["_UICorner2"].Parent = Converted["_Sample"]
+
+Converted["_UIPadding2"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding2"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding2"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding2"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding2"].Parent = Converted["_DropdownFrameSample"]
+
+Converted["_themedColor"].Value = "backgroundColorCSQ"
+Converted["_themedColor"].Name = "themedColor"
+Converted["_themedColor"].Parent = Converted["_DropdownFrameSample"]
+
+Converted["_ListButton"].Font = Enum.Font.Gotham
+Converted["_ListButton"].Text = H3XA_MM2_T("Placeholder")
+Converted["_ListButton"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ListButton"].TextSize = 14
+Converted["_ListButton"].TextWrapped = true
+Converted["_ListButton"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_ListButton"].BackgroundColor3 = Color3.fromRGB(49.00000087916851, 49.00000087916851, 49.00000087916851)
+Converted["_ListButton"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ListButton"].BorderSizePixel = 0
+Converted["_ListButton"].Position = UDim2.new(0.0450000018, 0, 0.112000003, 0)
+Converted["_ListButton"].Size = UDim2.new(1, 0, 0, 30)
+Converted["_ListButton"].Visible = false
+Converted["_ListButton"].Name = "ListButton"
+Converted["_ListButton"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner3"].Parent = Converted["_ListButton"]
+
+Converted["_Notifications"].AnchorPoint = Vector2.new(1, 0)
+Converted["_Notifications"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Notifications"].BackgroundTransparency = 1
+Converted["_Notifications"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Notifications"].BorderSizePixel = 0
+Converted["_Notifications"].Position = UDim2.new(1, -12, 0, 12)
+Converted["_Notifications"].Size = UDim2.new(0, 280, 0, 420)
+Converted["_Notifications"].Name = "Notifications"
+Converted["_Notifications"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UIListLayout1"].Padding = UDim.new(0, 8)
+Converted["_UIListLayout1"].HorizontalAlignment = Enum.HorizontalAlignment.Right
+Converted["_UIListLayout1"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout1"].VerticalAlignment = Enum.VerticalAlignment.Top
+Converted["_UIListLayout1"].Parent = Converted["_Notifications"]
+
+Converted["_UIPadding3"].PaddingTop = UDim.new(0, 4)
+Converted["_UIPadding3"].PaddingRight = UDim.new(0, 4)
+Converted["_UIPadding3"].Parent = Converted["_Notifications"]
+
+Converted["_Placeholder"].AnchorPoint = Vector2.new(0.5, 0)
+Converted["_Placeholder"].BackgroundColor3 = Color3.fromRGB(31.000001952052116, 31.000001952052116, 31.000001952052116)
+Converted["_Placeholder"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Placeholder"].BorderSizePixel = 0
+Converted["_Placeholder"].Position = UDim2.new(0.0450000018, 0, 0.112000003, 0)
+Converted["_Placeholder"].Visible = false
+Converted["_Placeholder"].Name = "Placeholder"
+Converted["_Placeholder"].Parent = Converted["_Notifications"]
+
+Converted["_UICorner4"].Parent = Converted["_Placeholder"]
+
+Converted["_TextLabel"].Font = Enum.Font.Gotham
+Converted["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel"].TextScaled = true
+Converted["_TextLabel"].TextSize = 14
+Converted["_TextLabel"].TextWrapped = true
+Converted["_TextLabel"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_TextLabel"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel"].BackgroundTransparency = 1
+Converted["_TextLabel"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel"].BorderSizePixel = 0
+Converted["_TextLabel"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_TextLabel"].Size = UDim2.new(0.899999976, 0, 0.800000012, 0)
+Converted["_TextLabel"].Parent = Converted["_Placeholder"]
+
+Converted["_TextBoxPlaceholder"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextBoxPlaceholder"].BackgroundTransparency = 1
+Converted["_TextBoxPlaceholder"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextBoxPlaceholder"].BorderSizePixel = 0
+Converted["_TextBoxPlaceholder"].Size = UDim2.new(1, 0, 0, 50)
+Converted["_TextBoxPlaceholder"].Visible = false
+Converted["_TextBoxPlaceholder"].Name = "TextBoxPlaceholder"
+Converted["_TextBoxPlaceholder"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UIListLayout2"].Padding = UDim.new(0, 5)
+Converted["_UIListLayout2"].FillDirection = Enum.FillDirection.Horizontal
+Converted["_UIListLayout2"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout2"].Parent = Converted["_TextBoxPlaceholder"]
+
+Converted["_TextButton"].Font = Enum.Font.Gotham
+Converted["_TextButton"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextButton"].TextScaled = true
+Converted["_TextButton"].TextSize = 14
+Converted["_TextButton"].TextWrapped = true
+Converted["_TextButton"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_TextButton"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextButton"].BorderSizePixel = 0
+Converted["_TextButton"].Position = UDim2.new(0.292333364, 0, 1.67999995, 0)
+Converted["_TextButton"].Size = UDim2.new(0, 50, 0, 50)
+Converted["_TextButton"].Parent = Converted["_TextBoxPlaceholder"]
+
+Converted["_UICorner5"].Parent = Converted["_TextButton"]
+
+Converted["_UIPadding4"].PaddingBottom = UDim.new(0, 5)
+Converted["_UIPadding4"].PaddingLeft = UDim.new(0, 5)
+Converted["_UIPadding4"].PaddingRight = UDim.new(0, 5)
+Converted["_UIPadding4"].PaddingTop = UDim.new(0, 5)
+Converted["_UIPadding4"].Parent = Converted["_TextButton"]
+
+Converted["_TextBox"].Font = Enum.Font.Gotham
+Converted["_TextBox"].PlaceholderText = "Placeholder"
+Converted["_TextBox"].Text = ""
+Converted["_TextBox"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextBox"].TextSize = 14
+Converted["_TextBox"].TextWrapped = true
+Converted["_TextBox"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_TextBox"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextBox"].BorderSizePixel = 0
+Converted["_TextBox"].Size = UDim2.new(0.800000012, 0, 0, 50)
+Converted["_TextBox"].Parent = Converted["_TextBoxPlaceholder"]
+
+Converted["_UICorner6"].Parent = Converted["_TextBox"]
+
+Converted["_FloatingButton"].Font = Enum.Font.GothamBold
+Converted["_FloatingButton"].Text = H3XA_MM2_T("Shoot into murderer")
+Converted["_FloatingButton"].TextColor3 = Color3.fromRGB(220, 255, 250)
+Converted["_FloatingButton"].TextScaled = true
+Converted["_FloatingButton"].TextSize = 14
+Converted["_FloatingButton"].TextWrapped = true
+Converted["_FloatingButton"].AutoButtonColor = false
+Converted["_FloatingButton"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_FloatingButton"].BackgroundColor3 = Color3.fromRGB(12, 14, 24)
+Converted["_FloatingButton"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_FloatingButton"].BorderSizePixel = 0
+Converted["_FloatingButton"].ClipsDescendants = true
+Converted["_FloatingButton"].Position = UDim2.new(0, 125, 0, 40)
+Converted["_FloatingButton"].Size = UDim2.new(0, 56, 0, 110)
+Converted["_FloatingButton"].Visible = false
+Converted["_FloatingButton"].Name = "FloatingButton"
+Converted["_FloatingButton"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UIPadding5"].PaddingBottom = UDim.new(0, 6)
+Converted["_UIPadding5"].PaddingLeft = UDim.new(0, 6)
+Converted["_UIPadding5"].PaddingRight = UDim.new(0, 6)
+Converted["_UIPadding5"].PaddingTop = UDim.new(0, 6)
+Converted["_UIPadding5"].Parent = Converted["_FloatingButton"]
+
+Converted["_UICorner7"].CornerRadius = UDim.new(0, 14)
+Converted["_UICorner7"].Parent = Converted["_FloatingButton"]
+
+Converted["_UIStroke1"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+Converted["_UIStroke1"].Color = Color3.fromRGB(0, 255, 220)
+Converted["_UIStroke1"].Thickness = 1.4
+Converted["_UIStroke1"].Transparency = 0.3
+Converted["_UIStroke1"].Parent = Converted["_FloatingButton"]
+
+Converted["_Lock"].Font = Enum.Font.Gotham
+Converted["_Lock"].Text = "ðŸ”’"
+Converted["_Lock"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Lock"].TextScaled = true
+Converted["_Lock"].TextSize = 14
+Converted["_Lock"].TextWrapped = true
+Converted["_Lock"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Lock"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Lock"].BackgroundTransparency = 1
+Converted["_Lock"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Lock"].BorderSizePixel = 0
+Converted["_Lock"].Position = UDim2.new(1, -10, 1, -10)
+Converted["_Lock"].Size = UDim2.new(0, 20, 0, 20)
+Converted["_Lock"].ZIndex = 999999999
+Converted["_Lock"].Name = "Lock"
+Converted["_Lock"].Parent = Converted["_FloatingButton"]
+
+Converted["_UIScale"].Scale = 1.0000000116860974e-07
+Converted["_UIScale"].Parent = Converted["_Lock"]
+
+Converted["_Ripple"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Ripple"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Ripple"].BackgroundTransparency = 1
+Converted["_Ripple"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Ripple"].BorderSizePixel = 0
+Converted["_Ripple"].Size = UDim2.new(0, 100, 0, 100)
+Converted["_Ripple"].Name = "Ripple"
+Converted["_Ripple"].Parent = Converted["_FloatingButton"]
+
+Converted["_UICorner8"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner8"].Parent = Converted["_Ripple"]
+
+Converted["_UIScale1"].Parent = Converted["_FloatingButton"]
+
+Converted["_Dropdown"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Dropdown"].BackgroundTransparency = 1
+Converted["_Dropdown"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Dropdown"].BorderSizePixel = 0
+Converted["_Dropdown"].Size = UDim2.new(1, 0, 0, 35)
+Converted["_Dropdown"].Visible = false
+Converted["_Dropdown"].Name = "Dropdown"
+Converted["_Dropdown"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_TextLabel1"].Font = Enum.Font.Unknown
+Converted["_TextLabel1"].Text = H3XA_MM2_T("Loop walkspeed and FOV")
+Converted["_TextLabel1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel1"].TextScaled = true
+Converted["_TextLabel1"].TextSize = 14
+Converted["_TextLabel1"].TextWrapped = true
+Converted["_TextLabel1"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_TextLabel1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel1"].BackgroundTransparency = 1
+Converted["_TextLabel1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel1"].BorderSizePixel = 0
+Converted["_TextLabel1"].Size = UDim2.new(0.699999988, 0, 1, 0)
+Converted["_TextLabel1"].Parent = Converted["_Dropdown"]
+
+Converted["_UIListLayout3"].Padding = UDim.new(0, 15)
+Converted["_UIListLayout3"].FillDirection = Enum.FillDirection.Horizontal
+Converted["_UIListLayout3"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout3"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout3"].Parent = Converted["_Dropdown"]
+
+Converted["_UIPadding6"].PaddingLeft = UDim.new(0.0700000003, 0)
+Converted["_UIPadding6"].PaddingRight = UDim.new(0.0700000003, 0)
+Converted["_UIPadding6"].Parent = Converted["_Dropdown"]
+
+Converted["_Frame"].Font = Enum.Font.Gotham
+Converted["_Frame"].Text = H3XA_MM2_T("Select...")
+Converted["_Frame"].TextColor3 = Color3.fromRGB(200, 255, 245)
+Converted["_Frame"].TextScaled = true
+Converted["_Frame"].TextWrapped = true
+Converted["_Frame"].Active = false
+Converted["_Frame"].BackgroundColor3 = Color3.fromRGB(14, 16, 26)
+Converted["_Frame"].BackgroundTransparency = 0
+Converted["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame"].BorderSizePixel = 0
+Converted["_Frame"].Selectable = false
+Converted["_Frame"].Size = UDim2.new(0.400000006, 0, 1, 0)
+Converted["_Frame"].Name = "Frame"
+Converted["_Frame"].Parent = Converted["_Dropdown"]
+
+Converted["_UIPadding7"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding7"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding7"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding7"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding7"].Parent = Converted["_Frame"]
+
+Converted["_UICorner9"].Parent = Converted["_Frame"]
+
+Converted["_AddCustomModule"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_AddCustomModule"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_AddCustomModule"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_AddCustomModule"].BorderSizePixel = 0
+Converted["_AddCustomModule"].ClipsDescendants = true
+Converted["_AddCustomModule"].Position = UDim2.new(0.5, 0, -0.5, 0)
+Converted["_AddCustomModule"].Size = UDim2.new(0, 440, 0, 268)
+Converted["_AddCustomModule"].ZIndex = 3
+Converted["_AddCustomModule"].Name = "AddCustomModule"
+Converted["_AddCustomModule"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner10"].Parent = Converted["_AddCustomModule"]
+
+Converted["_UIStroke2"].Color = Color3.fromRGB(0, 255, 220)
+Converted["_UIStroke2"].Thickness = 1.8
+Converted["_UIStroke2"].Transparency = 0.2
+Converted["_UIStroke2"].Parent = Converted["_AddCustomModule"]
+
+Converted["_UIGradient2"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(53.00000064074993, 53.00000064074993, 53.00000064074993)),
+	ColorSequenceKeypoint.new(0.15224914252758026, Color3.fromRGB(50.69031357765198, 50.69031357765198, 50.69031357765198)),
+	ColorSequenceKeypoint.new(0.4723183512687683, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(0.7577854990959167, Color3.fromRGB(50.13314567506313, 50.13314567506313, 50.13314567506313)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(48.000000938773155, 48.000000938773155, 48.000000938773155))
+}
+Converted["_UIGradient2"].Rotation = 62
+Converted["_UIGradient2"].Parent = Converted["_UIStroke2"]
+
+Converted["_UIGradient3"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(10, 12, 22)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 6, 14))
+}
+Converted["_UIGradient3"].Rotation = 110
+Converted["_UIGradient3"].Parent = Converted["_AddCustomModule"]
+
+Converted["_UIScale2"].Parent = Converted["_AddCustomModule"]
+
+Converted["_TextLabel2"].Font = Enum.Font.Gotham
+Converted["_TextLabel2"].Text = H3XA_MM2_T("Add a module")
+Converted["_TextLabel2"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel2"].TextScaled = true
+Converted["_TextLabel2"].TextSize = 14
+Converted["_TextLabel2"].TextWrapped = true
+Converted["_TextLabel2"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel2"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel2"].BackgroundTransparency = 1
+Converted["_TextLabel2"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel2"].BorderSizePixel = 0
+Converted["_TextLabel2"].Position = UDim2.new(0.352256238, 0, 0.133915231, 0)
+Converted["_TextLabel2"].Size = UDim2.new(0.619047642, 0, 0.125920027, 0)
+Converted["_TextLabel2"].Parent = Converted["_AddCustomModule"]
+
+Converted["_TextBox1"].ClearTextOnFocus = false
+Converted["_TextBox1"].Font = Enum.Font.Gotham
+Converted["_TextBox1"].PlaceholderText = H3XA_MM2_T("Custom module link")
+Converted["_TextBox1"].Text = ""
+Converted["_TextBox1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextBox1"].TextScaled = true
+Converted["_TextBox1"].TextSize = 14
+Converted["_TextBox1"].TextWrapped = true
+Converted["_TextBox1"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextBox1"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_TextBox1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextBox1"].BorderSizePixel = 0
+Converted["_TextBox1"].Position = UDim2.new(0.499648541, 0, 0.500059664, 0)
+Converted["_TextBox1"].Size = UDim2.new(0.804988742, 0, 0.544776142, 0)
+Converted["_TextBox1"].Parent = Converted["_AddCustomModule"]
+
+Converted["_UICorner11"].Parent = Converted["_TextBox1"]
+
+Converted["_UIPadding8"].PaddingBottom = UDim.new(0, 10)
+Converted["_UIPadding8"].PaddingLeft = UDim.new(0, 10)
+Converted["_UIPadding8"].PaddingRight = UDim.new(0, 10)
+Converted["_UIPadding8"].PaddingTop = UDim.new(0, 10)
+Converted["_UIPadding8"].Parent = Converted["_TextBox1"]
+
+Converted["_TextLabel3"].Font = Enum.Font.GothamBold
+Converted["_TextLabel3"].Text = H3XA_MM2_T("ONLY ADD MODULES YOU TRUST!")
+Converted["_TextLabel3"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel3"].TextScaled = true
+Converted["_TextLabel3"].TextSize = 14
+Converted["_TextLabel3"].TextWrapped = true
+Converted["_TextLabel3"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel3"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel3"].BackgroundTransparency = 1
+Converted["_TextLabel3"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel3"].BorderSizePixel = 0
+Converted["_TextLabel3"].Position = UDim2.new(0.499648541, 0, 0.833542168, 0)
+Converted["_TextLabel3"].Size = UDim2.new(0.619047642, 0, 0.0550245307, 0)
+Converted["_TextLabel3"].Parent = Converted["_AddCustomModule"]
+
+Converted["_Add"].Font = Enum.Font.Gotham
+Converted["_Add"].Text = H3XA_MM2_T("Add")
+Converted["_Add"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Add"].TextScaled = true
+Converted["_Add"].TextSize = 14
+Converted["_Add"].TextWrapped = true
+Converted["_Add"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Add"].BackgroundColor3 = Color3.fromRGB(50.00000461935997, 50.00000461935997, 50.00000461935997)
+Converted["_Add"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Add"].BorderSizePixel = 0
+Converted["_Add"].Position = UDim2.new(0.108492024, 0, 0.927298486, 0)
+Converted["_Add"].Size = UDim2.new(0.163265288, 0, 0.0858208984, 0)
+Converted["_Add"].Name = "Add"
+Converted["_Add"].Parent = Converted["_AddCustomModule"]
+
+Converted["_UICorner12"].Parent = Converted["_Add"]
+
+Converted["_UIPadding9"].PaddingBottom = UDim.new(0, 5)
+Converted["_UIPadding9"].PaddingLeft = UDim.new(0, 5)
+Converted["_UIPadding9"].PaddingRight = UDim.new(0, 5)
+Converted["_UIPadding9"].PaddingTop = UDim.new(0, 5)
+Converted["_UIPadding9"].Parent = Converted["_Add"]
+
+Converted["_UIStroke3"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+Converted["_UIStroke3"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke3"].Parent = Converted["_Add"]
+
+Converted["_Cancel"].Font = Enum.Font.Gotham
+Converted["_Cancel"].Text = H3XA_MM2_T("Cancel")
+Converted["_Cancel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Cancel"].TextScaled = true
+Converted["_Cancel"].TextSize = 14
+Converted["_Cancel"].TextWrapped = true
+Converted["_Cancel"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Cancel"].BackgroundColor3 = Color3.fromRGB(50.00000461935997, 50.00000461935997, 50.00000461935997)
+Converted["_Cancel"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Cancel"].BorderSizePixel = 0
+Converted["_Cancel"].Position = UDim2.new(0.899875283, 0, 0.931029797, 0)
+Converted["_Cancel"].Size = UDim2.new(0.163265288, 0, 0.0858208984, 0)
+Converted["_Cancel"].Name = "Cancel"
+Converted["_Cancel"].Parent = Converted["_AddCustomModule"]
+
+Converted["_UICorner13"].Parent = Converted["_Cancel"]
+
+Converted["_UIPadding10"].PaddingBottom = UDim.new(0, 5)
+Converted["_UIPadding10"].PaddingLeft = UDim.new(0, 5)
+Converted["_UIPadding10"].PaddingRight = UDim.new(0, 5)
+Converted["_UIPadding10"].PaddingTop = UDim.new(0, 5)
+Converted["_UIPadding10"].Parent = Converted["_Cancel"]
+
+Converted["_UIStroke4"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+Converted["_UIStroke4"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke4"].Parent = Converted["_Cancel"]
+
+Converted["_themedColor1"].Value = "backgroundColorCSQ"
+Converted["_themedColor1"].Name = "themedColor"
+Converted["_themedColor1"].Parent = Converted["_AddCustomModule"]
+
+Converted["_Menu"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Menu"].BackgroundColor3 = Color3.fromRGB(6, 6, 8)
+Converted["_Menu"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Menu"].BorderSizePixel = 0
+Converted["_Menu"].Position = UDim2.fromScale(0.5, 0.5)
+Converted["_Menu"].Size = ((H3XA_MM2_DEVICE == "MOBILE") and UDim2.new(0, 560, 0, 380)) or UDim2.new(0, 720, 0, 470)
+Converted["_Menu"].Name = "Menu"
+Converted["_Menu"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner14"].CornerRadius = UDim.new(0, 32)
+Converted["_UICorner14"].Parent = Converted["_Menu"]
+
+Converted["_UIStroke5"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke5"].Thickness = 1.6
+Converted["_UIStroke5"].Transparency = 0.28
+Converted["_UIStroke5"].Parent = Converted["_Menu"]
+
+Converted["_UIGradient4"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(0.35, Color3.fromRGB(180, 180, 190)),
+	ColorSequenceKeypoint.new(0.7, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 140, 150))
+}
+Converted["_UIGradient4"].Rotation = 0
+    Converted["_UIGradient4"].Enabled = false
+Converted["_UIGradient4"].Parent = Converted["_UIStroke5"]
+
+Converted["_HubCredits"].Font = Enum.Font.GothamBold
+Converted["_HubCredits"].Text = ""
+Converted["_HubCredits"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_HubCredits"].TextScaled = true
+Converted["_HubCredits"].TextSize = 14
+Converted["_HubCredits"].TextTransparency = 0.699999988079071
+Converted["_HubCredits"].TextWrapped = true
+Converted["_HubCredits"].TextXAlignment = Enum.TextXAlignment.Right
+Converted["_HubCredits"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_HubCredits"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_HubCredits"].BackgroundTransparency = 1
+Converted["_HubCredits"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_HubCredits"].BorderSizePixel = 0
+Converted["_HubCredits"].Position = UDim2.new(0.785926819, 0, 0.160157606, 0)
+Converted["_HubCredits"].Size = UDim2.new(0.316320807, 0, 0.0585099049, 0)
+Converted["_HubCredits"].Visible = false
+Converted["_HubCredits"].Name = "HubCredits"
+Converted["_HubCredits"].Parent = Converted["_Menu"]
+
+Converted["_HubDesc"].Font = Enum.Font.GothamBold
+Converted["_HubDesc"].Text = ""
+Converted["_HubDesc"].TextColor3 = Color3.fromRGB(170, 170, 175)
+Converted["_HubDesc"].TextSize = 12
+Converted["_HubDesc"].TextWrapped = true
+Converted["_HubDesc"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_HubDesc"].AnchorPoint = Vector2.new(0, 0.5)
+Converted["_HubDesc"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_HubDesc"].BackgroundTransparency = 1
+Converted["_HubDesc"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_HubDesc"].BorderSizePixel = 0
+Converted["_HubDesc"].Position = UDim2.new(0, 82, 0, 52)
+Converted["_HubDesc"].Size = UDim2.new(0, 220, 0, 18)
+Converted["_HubDesc"].Visible = false
+Converted["_HubDesc"].Name = "HubDesc"
+Converted["_HubDesc"].Parent = Converted["_Menu"]
+
+Converted["_HubName"].Font = Enum.Font.GothamBold
+Converted["_HubName"].RichText = true
+Converted["_HubName"].Text = ""
+Converted["_HubName"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_HubName"].TextScaled = true
+Converted["_HubName"].TextSize = 16
+Converted["_HubName"].TextWrapped = true
+Converted["_HubName"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_HubName"].AnchorPoint = Vector2.new(0, 0.5)
+Converted["_HubName"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_HubName"].BackgroundTransparency = 1
+Converted["_HubName"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_HubName"].BorderSizePixel = 0
+Converted["_HubName"].Position = UDim2.new(0, 82, 0, 28)
+Converted["_HubName"].Size = UDim2.new(0, 160, 0, 32)
+Converted["_HubName"].Visible = false
+Converted["_HubName"].Name = "HubName"
+Converted["_HubName"].Parent = Converted["_Menu"]
+
+Converted["_CanvasGroup"].GroupTransparency = 1
+Converted["_CanvasGroup"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_CanvasGroup"].BackgroundColor3 = Color3.fromRGB(6, 6, 8)
+Converted["_CanvasGroup"].BackgroundTransparency = 1
+Converted["_CanvasGroup"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_CanvasGroup"].BorderSizePixel = 0
+Converted["_CanvasGroup"].Interactable = false
+Converted["_CanvasGroup"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_CanvasGroup"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_CanvasGroup"].Visible = false
+Converted["_CanvasGroup"].ZIndex = 999999998
+Converted["_CanvasGroup"].Parent = Converted["_Menu"]
+
+Converted["_UICorner15"].CornerRadius = UDim.new(0, 16)
+Converted["_UICorner15"].Parent = Converted["_CanvasGroup"]
+
+Converted["_ImageLabel"].Image = "rbxassetid://72742584610344"
+-- Converted["_ImageLabel"].ImageContent = Content{SourceType=Uri, Uri=rbxassetid://72742584610344}
+Converted["_ImageLabel"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_ImageLabel"].BackgroundColor3 = Color3.fromRGB(6, 6, 8)
+Converted["_ImageLabel"].BackgroundTransparency = 1
+Converted["_ImageLabel"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ImageLabel"].BorderSizePixel = 0
+Converted["_ImageLabel"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_ImageLabel"].Size = UDim2.new(0, 42, 0, 42)
+Converted["_ImageLabel"].Visible = false
+Converted["_ImageLabel"].ZIndex = 3
+Converted["_ImageLabel"].Parent = Converted["_CanvasGroup"]
+
+Converted["_Opener"].Font = Enum.Font.SourceSans
+Converted["_Opener"].Text = ""
+Converted["_Opener"].TextColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Opener"].TextSize = 14
+Converted["_Opener"].AutoButtonColor = false
+Converted["_Opener"].BackgroundColor3 = Color3.fromRGB(6, 6, 8)
+Converted["_Opener"].BackgroundTransparency = 1
+Converted["_Opener"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Opener"].BorderSizePixel = 0
+Converted["_Opener"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_Opener"].Name = "Opener"
+Converted["_Opener"].Parent = Converted["_CanvasGroup"]
+
+Converted["_TextLabel4"].Font = Enum.Font.GothamBold
+Converted["_TextLabel4"].Text = ""
+Converted["_TextLabel4"].TextColor3 = Color3.fromRGB(0, 255, 220)
+Converted["_TextLabel4"].TextScaled = true
+Converted["_TextLabel4"].TextSize = 14
+Converted["_TextLabel4"].TextWrapped = true
+Converted["_TextLabel4"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel4"].BackgroundTransparency = 1
+Converted["_TextLabel4"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel4"].BorderSizePixel = 0
+Converted["_TextLabel4"].Position = UDim2.new(0.204081595, 0, 0.447761208, 0)
+Converted["_TextLabel4"].Size = UDim2.new(0, 260, 0, 27)
+Converted["_TextLabel4"].Visible = false
+Converted["_TextLabel4"].ZIndex = 3
+Converted["_TextLabel4"].Parent = Converted["_CanvasGroup"]
+
+Converted["_CloseArea"].Text = ""
+Converted["_CloseArea"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_CloseArea"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_CloseArea"].BackgroundTransparency = 1
+Converted["_CloseArea"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_CloseArea"].BorderSizePixel = 0
+Converted["_CloseArea"].Position = UDim2.new(0.5, 0, 0.00295135868, 0)
+Converted["_CloseArea"].Size = UDim2.new(0.326999992, 0, 0.184, 0)
+Converted["_CloseArea"].Name = "CloseArea"
+Converted["_CloseArea"].Parent = Converted["_Menu"]
+
+Converted["_Frame1"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Frame1"].BackgroundColor3 = Color3.fromRGB(0, 255, 220)
+Converted["_Frame1"].BackgroundTransparency = 1
+Converted["_Frame1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame1"].BorderSizePixel = 0
+Converted["_Frame1"].Position = UDim2.new(0.5, 0, 0.699999988, 0)
+Converted["_Frame1"].Size = UDim2.new(0, 0, 0, 0)
+Converted["_Frame1"].Visible = false
+Converted["_Frame1"].Parent = Converted["_CloseArea"]
+
+Converted["_UICorner16"].CornerRadius = UDim.new(0, 9999)
+Converted["_UICorner16"].Parent = Converted["_Frame1"]
+
+Converted["_themedColor2"].Value = "accentColor"
+Converted["_themedColor2"].Name = "themedColor"
+Converted["_themedColor2"].Parent = Converted["_Frame1"]
+
+Converted["_TextLabel5"].Font = Enum.Font.Gotham
+Converted["_TextLabel5"].Text = H3XA_MM2_T("Tap here to minimize.")
+Converted["_TextLabel5"].TextColor3 = Color3.fromRGB(0, 255, 220)
+Converted["_TextLabel5"].TextSize = 14
+Converted["_TextLabel5"].TextWrapped = true
+Converted["_TextLabel5"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel5"].BackgroundColor3 = Color3.fromRGB(8, 8, 14)
+Converted["_TextLabel5"].BackgroundTransparency = 1
+Converted["_TextLabel5"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel5"].BorderSizePixel = 0
+Converted["_TextLabel5"].Position = UDim2.new(0.5, 0, 0.680000007, 0)
+Converted["_TextLabel5"].Size = UDim2.new(0, 0, 0, 0)
+Converted["_TextLabel5"].Visible = false
+Converted["_TextLabel5"].TextTransparency = 1
+Converted["_TextLabel5"].Parent = Converted["_CloseArea"]
+
+Converted["_UICorner17"].Parent = Converted["_TextLabel5"]
+
+Converted["_AllowForSpring"].Name = "AllowForSpring"
+Converted["_AllowForSpring"].Parent = Converted["_CloseArea"]
+
+Converted["_themedColor3"].Value = "backgroundColorCSQ"
+Converted["_themedColor3"].Name = "themedColor"
+Converted["_themedColor3"].Parent = Converted["_Menu"]
+
+Converted["_UIGradient5"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(6, 8, 16)),
+	ColorSequenceKeypoint.new(0.45, Color3.fromRGB(10, 10, 20)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 4, 10))
+}
+Converted["_UIGradient5"].Offset = Vector2.new(0, 0.3)
+Converted["_UIGradient5"].Rotation = 110
+Converted["_UIGradient5"].Parent = Converted["_Menu"]
+
+Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
+Converted["_Area"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Area"].BackgroundTransparency = 1
+Converted["_Area"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Area"].BorderSizePixel = 0
+Converted["_Area"].Position = UDim2.new(0.32, 8, 0, 78)
+Converted["_Area"].Size = UDim2.new(0.66, -22, 1, -92)
+Converted["_Area"].Name = "Area"
+Converted["_Area"].Parent = Converted["_Menu"]
+
+Converted["_Area1"].AutomaticCanvasSize = Enum.AutomaticSize.Y
+Converted["_Area1"].CanvasSize = UDim2.new(0, 0, 0, 0)
+Converted["_Area1"].ScrollBarThickness = 0
+Converted["_Area1"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Area1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Area1"].BackgroundTransparency = 1
+Converted["_Area1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Area1"].BorderSizePixel = 0
+Converted["_Area1"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_Area1"].Selectable = false
+Converted["_Area1"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_Area1"].Name = "Area"
+Converted["_Area1"].Parent = Converted["_Area"]
+
+Converted["_TextLabel6"].Font = Enum.Font.GothamBold
+Converted["_TextLabel6"].Text = ""
+Converted["_TextLabel6"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel6"].TextSize = 14
+Converted["_TextLabel6"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel6"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel6"].BackgroundTransparency = 1
+Converted["_TextLabel6"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel6"].BorderSizePixel = 0
+Converted["_TextLabel6"].Position = UDim2.new(0.4923051, 0, 0.46438089, 0)
+Converted["_TextLabel6"].Size = UDim2.new(0, 200, 0, 50)
+Converted["_TextLabel6"].Parent = Converted["_Area1"]
+
+Converted["_TextLabel7"].Font = Enum.Font.GothamBold
+Converted["_TextLabel7"].Text = ""
+Converted["_TextLabel7"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel7"].TextScaled = true
+Converted["_TextLabel7"].TextSize = 14
+Converted["_TextLabel7"].TextWrapped = true
+Converted["_TextLabel7"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel7"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel7"].BackgroundTransparency = 1
+Converted["_TextLabel7"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel7"].BorderSizePixel = 0
+Converted["_TextLabel7"].Position = UDim2.new(0.491272807, 0, 0.363785654, 0)
+Converted["_TextLabel7"].Size = UDim2.new(0, 135, 0, 33)
+Converted["_TextLabel7"].Parent = Converted["_Area1"]
+
+Converted["_UICorner18"].Parent = Converted["_Area"]
+
+Converted["_List"].AnchorPoint = Vector2.new(0, 0)
+Converted["_List"].BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+Converted["_List"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_List"].BorderSizePixel = 0
+Converted["_List"].Position = UDim2.new(0, 14, 0, 78)
+Converted["_List"].Size = UDim2.new(0.28, 0, 1, -92)
+Converted["_List"].Name = "List"
+Converted["_List"].Parent = Converted["_Menu"]
+
+Converted["_UICorner19"].CornerRadius = UDim.new(0, 18)
+Converted["_UICorner19"].Parent = Converted["_List"]
+
+Converted["_ScrollingFrame1"].AutomaticCanvasSize = Enum.AutomaticSize.Y
+Converted["_ScrollingFrame1"].CanvasSize = UDim2.new(0, 0, 0, 0)
+Converted["_ScrollingFrame1"].ScrollBarThickness = 2
+Converted["_ScrollingFrame1"].VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Left
+Converted["_ScrollingFrame1"].Active = true
+Converted["_ScrollingFrame1"].AnchorPoint = Vector2.new(0.5, 0)
+Converted["_ScrollingFrame1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ScrollingFrame1"].BackgroundTransparency = 1
+Converted["_ScrollingFrame1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ScrollingFrame1"].BorderSizePixel = 0
+Converted["_ScrollingFrame1"].Position = UDim2.new(0.5, 0, 0, 8)
+Converted["_ScrollingFrame1"].Size = UDim2.new(1, 0, 1, -16)
+Converted["_ScrollingFrame1"].Parent = Converted["_List"]
+
+Converted["_UIListLayout4"].Padding = UDim.new(0, 10)
+Converted["_UIListLayout4"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout4"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout4"].Parent = Converted["_ScrollingFrame1"]
+
+Converted["_UIPadding11"].PaddingLeft = UDim.new(0, 6)
+Converted["_UIPadding11"].PaddingRight = UDim.new(0, 6)
+Converted["_UIPadding11"].PaddingTop = UDim.new(0, 8)
+Converted["_UIPadding11"].PaddingBottom = UDim.new(0, 8)
+Converted["_UIPadding11"].Parent = Converted["_ScrollingFrame1"]
+
+Converted["_UIPadding12"].PaddingBottom = UDim.new(0, 12)
+Converted["_UIPadding12"].PaddingLeft = UDim.new(0, 10)
+Converted["_UIPadding12"].PaddingRight = UDim.new(0, 10)
+Converted["_UIPadding12"].PaddingTop = UDim.new(0, 12)
+Converted["_UIPadding12"].Parent = Converted["_List"]
+
+Converted["_UIStroke6"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke6"].Thickness = 0
+Converted["_UIStroke6"].Parent = Converted["_List"]
+
+Converted["_UIGradient6"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(111.00000098347664, 111.00000098347664, 111.00000098347664)),
+	ColorSequenceKeypoint.new(0.6401384472846985, Color3.fromRGB(114.23875719308853, 114.23875719308853, 114.23875719308853)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+}
+Converted["_UIGradient6"].Rotation = -44
+Converted["_UIGradient6"].Parent = Converted["_UIStroke6"]
+
+Converted["_AddCustomModule1"].Font = Enum.Font.Gotham
+Converted["_AddCustomModule1"].Text = "+"
+Converted["_AddCustomModule1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_AddCustomModule1"].TextScaled = true
+Converted["_AddCustomModule1"].TextSize = 14
+Converted["_AddCustomModule1"].TextWrapped = true
+Converted["_AddCustomModule1"].AnchorPoint = Vector2.new(1, 1)
+Converted["_AddCustomModule1"].BackgroundColor3 = Color3.fromRGB(50.00000461935997, 50.00000461935997, 50.00000461935997)
+Converted["_AddCustomModule1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_AddCustomModule1"].BorderSizePixel = 0
+Converted["_AddCustomModule1"].Position = UDim2.new(1, 0, 1, 0)
+Converted["_AddCustomModule1"].Size = UDim2.new(0.215681866, 0, 0.142528668, 0)
+Converted["_AddCustomModule1"].Visible = false
+Converted["_AddCustomModule1"].Name = "AddCustomModule"
+Converted["_AddCustomModule1"].Parent = Converted["_List"]
+
+Converted["_UICorner20"].Parent = Converted["_AddCustomModule1"]
+
+Converted["_UIPadding13"].PaddingLeft = UDim.new(0, 1)
+Converted["_UIPadding13"].Parent = Converted["_AddCustomModule1"]
+
+Converted["_UIStroke7"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+Converted["_UIStroke7"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke7"].Parent = Converted["_AddCustomModule1"]
+
+Converted["_themedColor4"].Value = "secondaryColor"
+Converted["_themedColor4"].Name = "themedColor"
+Converted["_themedColor4"].Parent = Converted["_UIStroke7"]
+
+Converted["_themedColor5"].Value = "primaryColor"
+Converted["_themedColor5"].Name = "themedColor"
+Converted["_themedColor5"].Parent = Converted["_AddCustomModule1"]
+
+Converted["_themedColor6"].Value = "primaryColor"
+Converted["_themedColor6"].Name = "themedColor"
+Converted["_themedColor6"].Parent = Converted["_List"]
+
+Converted["_UIScale3"].Parent = Converted["_Menu"]
+
+Converted["_Stub"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_Stub"].BackgroundTransparency = 1
+Converted["_Stub"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Stub"].BorderSizePixel = 0
+Converted["_Stub"].Position = UDim2.new(0, 0, 0.214000002, 0)
+Converted["_Stub"].Size = UDim2.new(0, 0, 0, 0)
+Converted["_Stub"].Visible = false
+Converted["_Stub"].ZIndex = -9999
+Converted["_Stub"].Name = "Stub"
+Converted["_Stub"].Parent = Converted["_Menu"]
+
+Converted["_themedColor7"].Value = "primaryColor"
+Converted["_themedColor7"].Name = "themedColor"
+Converted["_themedColor7"].Parent = Converted["_Stub"]
+
+Converted["_Stub1"].AnchorPoint = Vector2.new(1, 1)
+Converted["_Stub1"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_Stub1"].BackgroundTransparency = 1
+Converted["_Stub1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Stub1"].BorderSizePixel = 0
+Converted["_Stub1"].Position = UDim2.new(0.315192729, 0, 1, 0)
+Converted["_Stub1"].Size = UDim2.new(0, 0, 0, 0)
+Converted["_Stub1"].Visible = false
+Converted["_Stub1"].ZIndex = -9999
+Converted["_Stub1"].Name = "Stub"
+Converted["_Stub1"].Parent = Converted["_Menu"]
+
+Converted["_themedColor8"].Value = "primaryColor"
+Converted["_themedColor8"].Name = "themedColor"
+Converted["_themedColor8"].Parent = Converted["_Stub1"]
+
+Converted["_Toggle"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Toggle"].BackgroundTransparency = 1
+Converted["_Toggle"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Toggle"].BorderSizePixel = 0
+Converted["_Toggle"].Size = UDim2.new(1, 0, 0, 48)
+Converted["_Toggle"].Visible = false
+Converted["_Toggle"].Name = "Toggle"
+Converted["_Toggle"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_TextLabel8"].Font = Enum.Font.Unknown
+Converted["_TextLabel8"].Text = H3XA_MM2_T("Loop walkspeed and FOV")
+Converted["_TextLabel8"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel8"].TextScaled = true
+Converted["_TextLabel8"].TextSize = 14
+Converted["_TextLabel8"].TextWrapped = true
+Converted["_TextLabel8"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_TextLabel8"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel8"].BackgroundTransparency = 1
+Converted["_TextLabel8"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel8"].BorderSizePixel = 0
+Converted["_TextLabel8"].Size = UDim2.new(0.699999988, 0, 0, 25)
+Converted["_TextLabel8"].Parent = Converted["_Toggle"]
+
+Converted["_UIListLayout5"].Padding = UDim.new(0, 25)
+Converted["_UIListLayout5"].FillDirection = Enum.FillDirection.Horizontal
+Converted["_UIListLayout5"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout5"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout5"].VerticalAlignment = Enum.VerticalAlignment.Center
+Converted["_UIListLayout5"].Parent = Converted["_Toggle"]
+
+Converted["_Frame2"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Frame2"].BackgroundTransparency = 1
+Converted["_Frame2"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame2"].BorderSizePixel = 0
+Converted["_Frame2"].Size = UDim2.new(0.200000003, 0, 1, 0)
+Converted["_Frame2"].Parent = Converted["_Toggle"]
+
+Converted["_Frame3"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Frame3"].BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+Converted["_Frame3"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame3"].BorderSizePixel = 0
+Converted["_Frame3"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_Frame3"].Size = UDim2.new(0, 89, 1, 0)
+Converted["_Frame3"].Parent = Converted["_Frame2"]
+
+Converted["_UICorner21"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner21"].Parent = Converted["_Frame3"]
+
+Converted["_Toggler"].Font = Enum.Font.SourceSans
+Converted["_Toggler"].Text = ""
+Converted["_Toggler"].TextColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Toggler"].TextSize = 14
+Converted["_Toggler"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Toggler"].BackgroundColor3 = Color3.fromRGB(238, 238, 238)
+Converted["_Toggler"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Toggler"].BorderSizePixel = 0
+Converted["_Toggler"].Position = UDim2.new(0.300000012, 0, 0.5, 0)
+Converted["_Toggler"].Size = UDim2.new(0.449438214, 0, 0.800000012, 0)
+Converted["_Toggler"].Name = "Toggler"
+Converted["_Toggler"].Parent = Converted["_Frame3"]
+
+Converted["_UICorner22"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner22"].Parent = Converted["_Toggler"]
+
+Converted["_ImageLabel1"].Image = "rbxassetid://10002373478"
+Converted["_ImageLabel1"].ImageColor3 = Color3.fromRGB(255, 255, 255)
+-- Converted["_ImageLabel1"].ImageContent = Content{SourceType=Uri, Uri=rbxassetid://10002373478}
+Converted["_ImageLabel1"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_ImageLabel1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ImageLabel1"].BackgroundTransparency = 1
+Converted["_ImageLabel1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ImageLabel1"].BorderSizePixel = 0
+Converted["_ImageLabel1"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_ImageLabel1"].Size = UDim2.new(0, 20, 0, 20)
+Converted["_ImageLabel1"].Parent = Converted["_Toggler"]
+
+Converted["_UIPadding14"].PaddingRight = UDim.new(0.0700000003, 0)
+Converted["_UIPadding14"].Parent = Converted["_Toggle"]
+
+Converted["_Modules"].Name = "Modules"
+Converted["_Modules"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_NotificationSample"].AnchorPoint = Vector2.new(0.5, 0)
+Converted["_NotificationSample"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_NotificationSample"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_NotificationSample"].BorderSizePixel = 0
+Converted["_NotificationSample"].ClipsDescendants = true
+Converted["_NotificationSample"].Position = UDim2.new(0.5, 0, 0, 10)
+Converted["_NotificationSample"].Size = UDim2.new(0, 400, 0, 50)
+Converted["_NotificationSample"].Visible = false
+Converted["_NotificationSample"].ZIndex = 5
+Converted["_NotificationSample"].Name = "NotificationSample"
+Converted["_NotificationSample"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner23"].CornerRadius = UDim.new(0, 10)
+Converted["_UICorner23"].Parent = Converted["_NotificationSample"]
+
+Converted["_UIStroke8"].Color = Color3.fromRGB(0, 255, 220)
+Converted["_UIStroke8"].Thickness = 1.5
+Converted["_UIStroke8"].Transparency = 0.25
+Converted["_UIStroke8"].Parent = Converted["_NotificationSample"]
+
+Converted["_UIGradient7"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 16, 28)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 6, 12))
+}
+Converted["_UIGradient7"].Parent = Converted["_NotificationSample"]
+
+Converted["_ImageLabel2"].Image = "rbxassetid://11780939099"
+-- Converted["_ImageLabel2"].ImageContent = Content{SourceType=Uri, Uri=rbxassetid://11780939099}
+Converted["_ImageLabel2"].ScaleType = Enum.ScaleType.Fit
+Converted["_ImageLabel2"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_ImageLabel2"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ImageLabel2"].BackgroundTransparency = 1
+Converted["_ImageLabel2"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ImageLabel2"].BorderSizePixel = 0
+Converted["_ImageLabel2"].Position = UDim2.new(0.100000001, 0, 0.5, 0)
+Converted["_ImageLabel2"].Size = UDim2.new(0.0799999982, 0, 0.639999986, 0)
+Converted["_ImageLabel2"].Parent = Converted["_NotificationSample"]
+
+Converted["_TextLabel9"].Font = Enum.Font.Gotham
+Converted["_TextLabel9"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel9"].TextScaled = true
+Converted["_TextLabel9"].TextSize = 14
+Converted["_TextLabel9"].TextWrapped = true
+Converted["_TextLabel9"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_TextLabel9"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_TextLabel9"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel9"].BackgroundTransparency = 1
+Converted["_TextLabel9"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel9"].BorderSizePixel = 0
+Converted["_TextLabel9"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_TextLabel9"].Size = UDim2.new(0.600000024, 0, 0.600000024, 0)
+Converted["_TextLabel9"].Parent = Converted["_NotificationSample"]
+
+Converted["_UITextSizeConstraint"].MaxTextSize = 30
+Converted["_UITextSizeConstraint"].Parent = Converted["_TextLabel9"]
+
+Converted["_Close"].Image = "rbxassetid://10002373478"
+-- Converted["_Close"].ImageContent = Content{SourceType=Uri, Uri=rbxassetid://10002373478}
+Converted["_Close"].ScaleType = Enum.ScaleType.Fit
+Converted["_Close"].Active = false
+Converted["_Close"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Close"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Close"].BackgroundTransparency = 1
+Converted["_Close"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Close"].BorderSizePixel = 0
+Converted["_Close"].Position = UDim2.new(0.899999976, 0, 0.5, 0)
+Converted["_Close"].Selectable = false
+Converted["_Close"].Size = UDim2.new(0.0799999982, 0, 0.639999986, 0)
+Converted["_Close"].Name = "Close"
+Converted["_Close"].Parent = Converted["_NotificationSample"]
+
+Converted["_UICorner24"].Parent = Converted["_Close"]
+
+Converted["_UIStroke9"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke9"].Parent = Converted["_Close"]
+
+Converted["_UIScale4"].Scale = 0.800000011920929
+Converted["_UIScale4"].Parent = Converted["_NotificationSample"]
+
+Converted["_themedColor9"].Value = "backgroundColorCSQ"
+Converted["_themedColor9"].Name = "themedColor"
+Converted["_themedColor9"].Parent = Converted["_NotificationSample"]
+
+Converted["_Dialog"].AnchorPoint = Vector2.new(0.5, 1)
+Converted["_Dialog"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Dialog"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Dialog"].BorderSizePixel = 0
+Converted["_Dialog"].Position = UDim2.new(0.499000013, 0, 0.984000027, 0)
+Converted["_Dialog"].Size = UDim2.new(0, 313, 0, 147)
+Converted["_Dialog"].Visible = false
+Converted["_Dialog"].ZIndex = 5
+Converted["_Dialog"].Name = "Dialog"
+Converted["_Dialog"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_UICorner25"].Parent = Converted["_Dialog"]
+
+Converted["_UIGradient8"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(36.00000165402889, 36.00000165402889, 36.00000165402889)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(68.00000354647636, 68.00000354647636, 68.00000354647636))
+}
+Converted["_UIGradient8"].Rotation = -133
+Converted["_UIGradient8"].Parent = Converted["_Dialog"]
+
+Converted["_UIPadding15"].PaddingBottom = UDim.new(0, 15)
+Converted["_UIPadding15"].PaddingLeft = UDim.new(0, 15)
+Converted["_UIPadding15"].PaddingRight = UDim.new(0, 15)
+Converted["_UIPadding15"].PaddingTop = UDim.new(0, 15)
+Converted["_UIPadding15"].Parent = Converted["_Dialog"]
+
+Converted["_UIStroke10"].Color = Color3.fromRGB(0, 255, 220)
+Converted["_UIStroke10"].Thickness = 1.8
+Converted["_UIStroke10"].Transparency = 0.2
+Converted["_UIStroke10"].Parent = Converted["_Dialog"]
+
+Converted["_UIGradient9"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(111.00000098347664, 111.00000098347664, 111.00000098347664)),
+	ColorSequenceKeypoint.new(0.6401384472846985, Color3.fromRGB(114.23875719308853, 114.23875719308853, 114.23875719308853)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+}
+Converted["_UIGradient9"].Rotation = -107
+Converted["_UIGradient9"].Parent = Converted["_UIStroke10"]
+
+Converted["_DialogTitle"].Font = Enum.Font.Unknown
+Converted["_DialogTitle"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_DialogTitle"].TextScaled = true
+Converted["_DialogTitle"].TextSize = 14
+Converted["_DialogTitle"].TextWrapped = true
+Converted["_DialogTitle"].TextXAlignment = Enum.TextXAlignment.Right
+Converted["_DialogTitle"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_DialogTitle"].BackgroundTransparency = 1
+Converted["_DialogTitle"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_DialogTitle"].BorderSizePixel = 0
+Converted["_DialogTitle"].Size = UDim2.new(0.997416437, 0, 0.16459392, 0)
+Converted["_DialogTitle"].Name = "DialogTitle"
+Converted["_DialogTitle"].Parent = Converted["_Dialog"]
+
+Converted["_UIListLayout6"].Padding = UDim.new(0, 3)
+Converted["_UIListLayout6"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout6"].Parent = Converted["_Dialog"]
+
+Converted["_DialogDesc"].Font = Enum.Font.Unknown
+Converted["_DialogDesc"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_DialogDesc"].TextScaled = true
+Converted["_DialogDesc"].TextSize = 14
+Converted["_DialogDesc"].TextWrapped = true
+Converted["_DialogDesc"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_DialogDesc"].TextYAlignment = Enum.TextYAlignment.Top
+Converted["_DialogDesc"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_DialogDesc"].BackgroundTransparency = 1
+Converted["_DialogDesc"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_DialogDesc"].BorderSizePixel = 0
+Converted["_DialogDesc"].Position = UDim2.new(0, 0, 0.187079012, 0)
+Converted["_DialogDesc"].Size = UDim2.new(0.997416437, 0, 0.604575336, 0)
+Converted["_DialogDesc"].Name = "DialogDesc"
+Converted["_DialogDesc"].Parent = Converted["_Dialog"]
+
+Converted["_UITextSizeConstraint1"].MaxTextSize = 20
+Converted["_UITextSizeConstraint1"].MinTextSize = 5
+Converted["_UITextSizeConstraint1"].Parent = Converted["_DialogDesc"]
+
+Converted["_Options"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Options"].BackgroundTransparency = 1
+Converted["_Options"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Options"].BorderSizePixel = 0
+Converted["_Options"].Position = UDim2.new(0, 0, 0.82045126, 0)
+Converted["_Options"].Size = UDim2.new(0.997436285, 0, 0.241758227, 0)
+Converted["_Options"].Name = "Options"
+Converted["_Options"].Parent = Converted["_Dialog"]
+
+Converted["_UIListLayout7"].Padding = UDim.new(0, 10)
+Converted["_UIListLayout7"].FillDirection = Enum.FillDirection.Horizontal
+Converted["_UIListLayout7"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout7"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout7"].Parent = Converted["_Options"]
+
+Converted["_OptionPlaceholder"].Font = Enum.Font.GothamBold
+Converted["_OptionPlaceholder"].RichText = true
+Converted["_OptionPlaceholder"].Text = "aaaaaaaaaaa"
+Converted["_OptionPlaceholder"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_OptionPlaceholder"].TextScaled = true
+Converted["_OptionPlaceholder"].TextSize = 100
+Converted["_OptionPlaceholder"].TextWrapped = true
+Converted["_OptionPlaceholder"].BackgroundColor3 = Color3.fromRGB(36.00000165402889, 36.00000165402889, 36.00000165402889)
+Converted["_OptionPlaceholder"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_OptionPlaceholder"].BorderSizePixel = 0
+Converted["_OptionPlaceholder"].Size = UDim2.new(0.532000005, -5, 1.00899994, 0)
+Converted["_OptionPlaceholder"].Visible = false
+Converted["_OptionPlaceholder"].Name = "OptionPlaceholder"
+Converted["_OptionPlaceholder"].Parent = Converted["_Options"]
+
+Converted["_UIPadding16"].PaddingBottom = UDim.new(0, 1)
+Converted["_UIPadding16"].PaddingLeft = UDim.new(0, 15)
+Converted["_UIPadding16"].PaddingRight = UDim.new(0, 15)
+Converted["_UIPadding16"].PaddingTop = UDim.new(0, 1)
+Converted["_UIPadding16"].Parent = Converted["_OptionPlaceholder"]
+
+Converted["_UICorner26"].Parent = Converted["_OptionPlaceholder"]
+
+Converted["_UIStroke11"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+Converted["_UIStroke11"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke11"].Thickness = 2
+Converted["_UIStroke11"].Parent = Converted["_OptionPlaceholder"]
+
+Converted["_UIGradient10"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(111.00000098347664, 111.00000098347664, 111.00000098347664)),
+	ColorSequenceKeypoint.new(0.6401384472846985, Color3.fromRGB(114.23875719308853, 114.23875719308853, 114.23875719308853)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+}
+Converted["_UIGradient10"].Rotation = -107
+Converted["_UIGradient10"].Parent = Converted["_UIStroke11"]
+
+Converted["_themedColor10"].Value = "primaryColor"
+Converted["_themedColor10"].Name = "themedColor"
+Converted["_themedColor10"].Parent = Converted["_OptionPlaceholder"]
+
+Converted["_OnSelect"].Name = "OnSelect"
+Converted["_OnSelect"].Parent = Converted["_Dialog"]
+
+Converted["_UIScale5"].Parent = Converted["_Dialog"]
+
+Converted["_themedColor11"].Value = "backgroundColorCSQ"
+Converted["_themedColor11"].Name = "themedColor"
+Converted["_themedColor11"].Parent = Converted["_Dialog"]
+
+Converted["_Range"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Range"].BackgroundTransparency = 1
+Converted["_Range"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Range"].BorderSizePixel = 0
+Converted["_Range"].Size = UDim2.new(1, 0, 0, 35)
+Converted["_Range"].Visible = false
+Converted["_Range"].Name = "Range"
+Converted["_Range"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_TextLabel10"].Font = Enum.Font.Unknown
+Converted["_TextLabel10"].Text = "something something idk lol"
+Converted["_TextLabel10"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel10"].TextScaled = true
+Converted["_TextLabel10"].TextSize = 58
+Converted["_TextLabel10"].TextWrapped = true
+Converted["_TextLabel10"].TextXAlignment = Enum.TextXAlignment.Left
+Converted["_TextLabel10"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel10"].BackgroundTransparency = 1
+Converted["_TextLabel10"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TextLabel10"].BorderSizePixel = 0
+Converted["_TextLabel10"].Position = UDim2.new(-0.0633024424, 0, 0.685714304, 0)
+Converted["_TextLabel10"].Size = UDim2.new(0, 125, 0, 25)
+Converted["_TextLabel10"].Parent = Converted["_Range"]
+
+Converted["_UIListLayout8"].HorizontalFlex = Enum.UIFlexAlignment.Fill
+Converted["_UIListLayout8"].Padding = UDim.new(0, 15)
+Converted["_UIListLayout8"].VerticalFlex = Enum.UIFlexAlignment.SpaceAround
+Converted["_UIListLayout8"].FillDirection = Enum.FillDirection.Horizontal
+Converted["_UIListLayout8"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout8"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout8"].VerticalAlignment = Enum.VerticalAlignment.Center
+Converted["_UIListLayout8"].Parent = Converted["_Range"]
+
+Converted["_UIPadding17"].Parent = Converted["_Range"]
+
+Converted["_Frame4"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Frame4"].BackgroundTransparency = 1
+Converted["_Frame4"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame4"].BorderSizePixel = 0
+Converted["_Frame4"].Size = UDim2.new(0.400000006, 0, 1, 0)
+Converted["_Frame4"].Parent = Converted["_Range"]
+
+Converted["_UIPadding18"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding18"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding18"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding18"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding18"].Parent = Converted["_Frame4"]
+
+Converted["_UICorner27"].Parent = Converted["_Frame4"]
+
+Converted["_Track"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_Track"].BackgroundColor3 = Color3.fromRGB(22.000000588595867, 22.000000588595867, 22.000000588595867)
+Converted["_Track"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Track"].BorderSizePixel = 0
+Converted["_Track"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_Track"].Size = UDim2.new(1, 0, 1.20000005, 0)
+Converted["_Track"].Name = "Track"
+Converted["_Track"].Parent = Converted["_Frame4"]
+
+Converted["_UICorner28"].CornerRadius = UDim.new(0, 6)
+Converted["_UICorner28"].Parent = Converted["_Track"]
+
+Converted["_Ball"].Font = Enum.Font.SourceSans
+Converted["_Ball"].Text = ""
+Converted["_Ball"].TextColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Ball"].TextSize = 14
+Converted["_Ball"].AnchorPoint = Vector2.new(0, 0.5)
+Converted["_Ball"].BackgroundColor3 = Color3.fromRGB(197.0000034570694, 0, 0)
+Converted["_Ball"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Ball"].BorderSizePixel = 0
+Converted["_Ball"].Interactable = false
+Converted["_Ball"].Position = UDim2.new(1.32920917e-07, 0, 0.5, 0)
+Converted["_Ball"].Size = UDim2.new(0.0599999987, 0, 1, 0)
+Converted["_Ball"].Name = "Ball"
+Converted["_Ball"].Parent = Converted["_Track"]
+
+Converted["_BallProgress"].Font = Enum.Font.GothamBold
+Converted["_BallProgress"].Text = "0"
+Converted["_BallProgress"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_BallProgress"].TextScaled = true
+Converted["_BallProgress"].TextSize = 14
+Converted["_BallProgress"].TextTransparency = 1
+Converted["_BallProgress"].TextWrapped = true
+Converted["_BallProgress"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_BallProgress"].BackgroundTransparency = 1
+Converted["_BallProgress"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_BallProgress"].BorderSizePixel = 0
+Converted["_BallProgress"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_BallProgress"].Name = "BallProgress"
+Converted["_BallProgress"].Parent = Converted["_Ball"]
+
+Converted["_UIPadding19"].PaddingBottom = UDim.new(0, 2)
+Converted["_UIPadding19"].PaddingTop = UDim.new(0, 1)
+Converted["_UIPadding19"].Parent = Converted["_Ball"]
+
+Converted["_themedColor12"].Value = "accentColor"
+Converted["_themedColor12"].Name = "themedColor"
+Converted["_themedColor12"].Parent = Converted["_Ball"]
+
+Converted["_UICorner29"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner29"].Parent = Converted["_Ball"]
+
+Converted["_UIPadding20"].PaddingBottom = UDim.new(0, 6)
+Converted["_UIPadding20"].PaddingLeft = UDim.new(0, 6)
+Converted["_UIPadding20"].PaddingRight = UDim.new(0, 6)
+Converted["_UIPadding20"].PaddingTop = UDim.new(0, 6)
+Converted["_UIPadding20"].Parent = Converted["_Track"]
+
+Converted["_TrackProgress"].Font = Enum.Font.GothamBold
+Converted["_TrackProgress"].Text = "0"
+Converted["_TrackProgress"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TrackProgress"].TextScaled = true
+Converted["_TrackProgress"].TextSize = 14
+Converted["_TrackProgress"].TextTransparency = 1
+Converted["_TrackProgress"].TextWrapped = true
+Converted["_TrackProgress"].TextXAlignment = Enum.TextXAlignment.Right
+Converted["_TrackProgress"].AnchorPoint = Vector2.new(1, 0.5)
+Converted["_TrackProgress"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TrackProgress"].BackgroundTransparency = 1
+Converted["_TrackProgress"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_TrackProgress"].BorderSizePixel = 0
+Converted["_TrackProgress"].Position = UDim2.new(1, 0, 0.5, 0)
+Converted["_TrackProgress"].Size = UDim2.new(0, 35, 1, 0)
+Converted["_TrackProgress"].Name = "TrackProgress"
+Converted["_TrackProgress"].Parent = Converted["_Track"]
+
+Converted["_themedColor13"].Value = "primaryColor"
+Converted["_themedColor13"].Name = "themedColor"
+Converted["_themedColor13"].Parent = Converted["_Track"]
+
+Converted["_UISizeConstraint"].Parent = Converted["_Frame4"]
+
+Converted["_FloatingButtonSetting"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_FloatingButtonSetting"].BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_FloatingButtonSetting"].BackgroundTransparency = 0.5
+Converted["_FloatingButtonSetting"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_FloatingButtonSetting"].BorderSizePixel = 0
+Converted["_FloatingButtonSetting"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_FloatingButtonSetting"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_FloatingButtonSetting"].Visible = false
+Converted["_FloatingButtonSetting"].ZIndex = 10
+Converted["_FloatingButtonSetting"].Name = "FloatingButtonSetting"
+Converted["_FloatingButtonSetting"].Parent = Converted["_H3XA_MM2"]
+
+Converted["_ControlBarContainer"].AnchorPoint = Vector2.new(0.5, 1)
+Converted["_ControlBarContainer"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ControlBarContainer"].BackgroundTransparency = 1
+Converted["_ControlBarContainer"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ControlBarContainer"].BorderSizePixel = 0
+Converted["_ControlBarContainer"].Position = UDim2.new(0.5, 0, 1, -50)
+Converted["_ControlBarContainer"].Size = UDim2.new(1, 0, 0, 40)
+Converted["_ControlBarContainer"].Name = "ControlBarContainer"
+Converted["_ControlBarContainer"].Parent = Converted["_FloatingButtonSetting"]
+
+Converted["_ControlBar"].AnchorPoint = Vector2.new(0.5, 1)
+Converted["_ControlBar"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_ControlBar"].BackgroundTransparency = 1
+Converted["_ControlBar"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_ControlBar"].BorderSizePixel = 0
+Converted["_ControlBar"].Position = UDim2.new(0.5, 0, 1, -30)
+Converted["_ControlBar"].Size = UDim2.new(1, 0, 0, 40)
+Converted["_ControlBar"].Name = "ControlBar"
+Converted["_ControlBar"].Parent = Converted["_ControlBarContainer"]
+
+Converted["_UIListLayout9"].Padding = UDim.new(0, 5)
+Converted["_UIListLayout9"].FillDirection = Enum.FillDirection.Horizontal
+Converted["_UIListLayout9"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout9"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout9"].Parent = Converted["_ControlBar"]
+
+Converted["_Visibility"].Font = Enum.Font.Gotham
+Converted["_Visibility"].Text = H3XA_MM2_T("Toggle visibility")
+Converted["_Visibility"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Visibility"].TextScaled = true
+Converted["_Visibility"].TextSize = 14
+Converted["_Visibility"].TextWrapped = true
+Converted["_Visibility"].BackgroundColor3 = Color3.fromRGB(46.000001057982445, 46.000001057982445, 46.000001057982445)
+Converted["_Visibility"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Visibility"].BorderSizePixel = 0
+Converted["_Visibility"].Size = UDim2.new(0, 200, 1, 0)
+Converted["_Visibility"].Name = "Visibility"
+Converted["_Visibility"].Parent = Converted["_ControlBar"]
+
+Converted["_UICorner30"].CornerRadius = UDim.new(0, 16)
+Converted["_UICorner30"].Parent = Converted["_Visibility"]
+
+Converted["_UIPadding21"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding21"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding21"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding21"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding21"].Parent = Converted["_Visibility"]
+
+Converted["_Event"].Parent = Converted["_Visibility"]
+
+Converted["_themedColor14"].Value = "primaryColor"
+Converted["_themedColor14"].Name = "themedColor"
+Converted["_themedColor14"].Parent = Converted["_Visibility"]
+
+Converted["_Lock1"].Font = Enum.Font.Gotham
+Converted["_Lock1"].Text = H3XA_MM2_T("Toggle lock")
+Converted["_Lock1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Lock1"].TextScaled = true
+Converted["_Lock1"].TextSize = 14
+Converted["_Lock1"].TextWrapped = true
+Converted["_Lock1"].BackgroundColor3 = Color3.fromRGB(46.000001057982445, 46.000001057982445, 46.000001057982445)
+Converted["_Lock1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Lock1"].BorderSizePixel = 0
+Converted["_Lock1"].Size = UDim2.new(0, 200, 1, 0)
+Converted["_Lock1"].Name = "Lock"
+Converted["_Lock1"].Parent = Converted["_ControlBar"]
+
+Converted["_UICorner31"].CornerRadius = UDim.new(0, 16)
+Converted["_UICorner31"].Parent = Converted["_Lock1"]
+
+Converted["_UIPadding22"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding22"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding22"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding22"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding22"].Parent = Converted["_Lock1"]
+
+Converted["_Event1"].Parent = Converted["_Lock1"]
+
+Converted["_themedColor15"].Value = "primaryColor"
+Converted["_themedColor15"].Name = "themedColor"
+Converted["_themedColor15"].Parent = Converted["_Lock1"]
+
+Converted["_Exit"].Font = Enum.Font.GothamBold
+Converted["_Exit"].Text = "X"
+Converted["_Exit"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Exit"].TextScaled = true
+Converted["_Exit"].TextSize = 14
+Converted["_Exit"].TextWrapped = true
+Converted["_Exit"].BackgroundColor3 = Color3.fromRGB(22, 22, 24)
+Converted["_Exit"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Exit"].BorderSizePixel = 0
+Converted["_Exit"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_Exit"].Name = "Exit"
+Converted["_Exit"].Parent = Converted["_ControlBar"]
+
+Converted["_UICorner32"].CornerRadius = UDim.new(0, 16)
+Converted["_UICorner32"].Parent = Converted["_Exit"]
+
+Converted["_UIPadding23"].PaddingBottom = UDim.new(0, 7)
+Converted["_UIPadding23"].PaddingLeft = UDim.new(0, 7)
+Converted["_UIPadding23"].PaddingRight = UDim.new(0, 7)
+Converted["_UIPadding23"].PaddingTop = UDim.new(0, 7)
+Converted["_UIPadding23"].Parent = Converted["_Exit"]
+
+Converted["_UIAspectRatioConstraint"].Parent = Converted["_Exit"]
+
+Converted["_themedColor16"].Value = "secondaryColor"
+Converted["_themedColor16"].Name = "themedColor"
+Converted["_themedColor16"].Parent = Converted["_Exit"]
+
+Converted["_UIListLayout10"].Padding = UDim.new(0, 5)
+Converted["_UIListLayout10"].HorizontalAlignment = Enum.HorizontalAlignment.Center
+Converted["_UIListLayout10"].SortOrder = Enum.SortOrder.LayoutOrder
+Converted["_UIListLayout10"].Parent = Converted["_ControlBarContainer"]
+
+Converted["_Tip"].Font = Enum.Font.GothamBold
+Converted["_Tip"].Text = H3XA_MM2_T("Drag the button around to resize!")
+Converted["_Tip"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Tip"].TextScaled = true
+Converted["_Tip"].TextSize = 14
+Converted["_Tip"].TextWrapped = true
+Converted["_Tip"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Tip"].BackgroundTransparency = 1
+Converted["_Tip"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Tip"].BorderSizePixel = 0
+Converted["_Tip"].Size = UDim2.new(1, 0, 0, 10)
+Converted["_Tip"].Name = "Tip"
+Converted["_Tip"].Parent = Converted["_ControlBarContainer"]
+
+Converted["_UIStroke12"].Parent = Converted["_Tip"]
+
+Converted["_UIScale6"].Parent = Converted["_ControlBarContainer"]
+
+Converted["_FloatingButtons"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_FloatingButtons"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_FloatingButtons"].BackgroundTransparency = 1
+Converted["_FloatingButtons"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_FloatingButtons"].BorderSizePixel = 0
+Converted["_FloatingButtons"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_FloatingButtons"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_FloatingButtons"].ZIndex = 3
+Converted["_FloatingButtons"].Name = "FloatingButtons"
+Converted["_FloatingButtons"].Parent = Converted["_FloatingButtonSetting"]
+
+Converted["_FloatingButtons1"].AnchorPoint = Vector2.new(0.5, 0.5)
+Converted["_FloatingButtons1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_FloatingButtons1"].BackgroundTransparency = 1
+Converted["_FloatingButtons1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_FloatingButtons1"].BorderSizePixel = 0
+Converted["_FloatingButtons1"].Position = UDim2.new(0.5, 0, 0.5, 0)
+Converted["_FloatingButtons1"].Size = UDim2.new(1, 0, 1, 0)
+Converted["_FloatingButtons1"].ZIndex = 3
+Converted["_FloatingButtons1"].Name = "FloatingButtons"
+Converted["_FloatingButtons1"].Parent = Converted["_H3XA_MM2"]
+
+
+-- H3XA MM2 - BLACK / WHITE NEON REDESIGN
+do
+    local root = Converted["_H3XA_MM2"]
+    local menu = Converted["_Menu"]
+    local TweenService = game:GetService("TweenService")
+
+    root.DisplayOrder = 2147483646
+    root.Name = "H3XA_MM2"
+
+    -- Fondo galaxia neón B&N (sin transparencia)
+    menu.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+    menu.BackgroundTransparency = 0
+    do
+        local envDev = (getgenv and getgenv()) or _G
+        local isMobileUI = (envDev.H3XA_MM2_DEVICE == "MOBILE") or (H3XA_MM2_DEVICE == "MOBILE")
+        menu.Size = isMobileUI and UDim2.fromOffset(560, 380) or UDim2.fromOffset(720, 470)
     end
-    table.clear(connections)
-end
+    menu.ClipsDescendants = true
+    menu.AnchorPoint = Vector2.new(0.5, 0.5)
 
-local function getChar()
-    return LP.Character
-end
+    Converted["_UICorner14"].CornerRadius = UDim.new(0, 32)
+    Converted["_UIStroke5"].ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Converted["_UIStroke5"].Color = Color3.fromRGB(255, 255, 255)
+    Converted["_UIStroke5"].Thickness = 1
+    Converted["_UIStroke5"].Transparency = 0.72
 
-local function getHum()
-    local c = getChar()
-    return c and c:FindFirstChildOfClass("Humanoid")
-end
+    Converted["_UIGradient4"].Enabled = false
 
-local function getRoot()
-    local c = getChar()
-    return c and (c:FindFirstChild("HumanoidRootPart") or c.PrimaryPart)
-end
+    -- Solo negro puro (sin manchas blancas del degradado)
+    Converted["_UIGradient5"].Enabled = false
+    Converted["_UIGradient5"].Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(2, 2, 6)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 2, 6))
+    }
 
-local function toast(text)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "HX Boat",
-            Text = ENV.__HX_TR and ENV.__HX_TR(tostring(text)) or tostring(text),
-            Duration = 3
+    -- Capa galaxia: solo estrellas animadas (sin nebulosas blancas)
+    local galaxy = menu:FindFirstChild("GalaxyBG")
+    if galaxy then galaxy:Destroy() end
+    galaxy = Instance.new("Frame")
+    galaxy.Name = "GalaxyBG"
+    galaxy.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+    galaxy.BackgroundTransparency = 0
+    galaxy.Size = UDim2.fromScale(1, 1)
+    galaxy.Position = UDim2.fromScale(0, 0)
+    galaxy.ZIndex = 0
+    galaxy.ClipsDescendants = true
+    galaxy.Parent = menu
+    local galaxyCorner = Instance.new("UICorner", galaxy)
+    galaxyCorner.CornerRadius = UDim.new(0, 32)
+
+    local rng = Random.new()
+
+    local starsFolder = Instance.new("Folder")
+    starsFolder.Name = "Stars"
+    starsFolder.Parent = galaxy
+
+    -- capa de estrellas fijas parpadeantes (fondo denso)
+    local staticStars = {}
+    for i = 1, 90 do
+        local star = Instance.new("Frame")
+        local size = rng:NextNumber(1, 2.6)
+        star.Name = "StaticStar"
+        star.BorderSizePixel = 0
+        star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        star.BackgroundTransparency = rng:NextNumber(0.15, 0.7)
+        star.Size = UDim2.fromOffset(size, size)
+        star.AnchorPoint = Vector2.new(0.5, 0.5)
+        star.Position = UDim2.new(rng:NextNumber(0, 1), 0, rng:NextNumber(0, 1), 0)
+        star.ZIndex = 1
+        local c = Instance.new("UICorner", star)
+        c.CornerRadius = UDim.new(1, 0)
+        star.Parent = starsFolder
+        table.insert(staticStars, {
+            inst = star,
+            twinkle = rng:NextNumber(1.2, 5),
+            phase = rng:NextNumber(0, math.pi * 2),
+            baseT = star.BackgroundTransparency
         })
-    end)
-end
-
---====================================================
--- Helpers: workspace / BABFT
---====================================================
-local function isBasePart(x)
-    return x and x:IsA("BasePart")
-end
-
-local function findFirstPart(obj)
-    if not obj then return nil end
-    if obj:IsA("BasePart") then return obj end
-    if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart end
-    for _, d in ipairs(obj:GetDescendants()) do
-        if d:IsA("BasePart") then return d end
-    end
-    return nil
-end
-
-local function getObjectPosition(obj)
-    if not obj then return nil end
-    if obj:IsA("BasePart") then return obj.Position end
-    if obj:IsA("Model") then
-        local ok, pivot = pcall(function() return obj:GetPivot() end)
-        if ok then return pivot.Position end
-    end
-    local p = findFirstPart(obj)
-    return p and p.Position or nil
-end
-
-local function tpToCFrame(cf)
-    local root = getRoot()
-    if not root or not cf then return false end
-    root.AssemblyLinearVelocity = Vector3.zero
-    root.AssemblyAngularVelocity = Vector3.zero
-    if activeStates.tweenTP and not activeStates._farmTeleporting then
-        local speed = tonumber(ENV.__BABFT_TWEEN_SPEED) or 180
-        local distance = (root.Position - cf.Position).Magnitude
-        local duration = math.clamp(distance / math.max(speed, 1), 0.05, 12)
-        local tw = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = cf})
-        tw:Play()
-        tw.Completed:Wait()
-    else
-        root.CFrame = cf
-    end
-    return true
-end
-
-local function tpToPart(part, offset)
-    if not isBasePart(part) then return false end
-    return tpToCFrame(part.CFrame * CFrame.new(offset or Vector3.new(0, 3.5, 0)))
-end
-
-local function lower(s)
-    return string.lower(tostring(s or ""))
-end
-
-local function containsAny(s, words)
-    s = lower(s)
-    for _, w in ipairs(words) do
-        if string.find(s, w, 1, true) then return true end
-    end
-    return false
-end
-
-local function findChestPart(forceRefresh)
-    local now = os.clock()
-    if not forceRefresh and worldCache.chest and worldCache.chest.Parent and (now - worldCache.chestAt) < 10 then
-        return worldCache.chest
     end
 
-    -- O(N) scan only: do not recursively scan every Model again while already
-    -- traversing descendants. Prefer BoatStages, then fall back to Workspace.
-    local function scan(scope, canYield)
-        if not scope then return nil end
-        local best, bestScore
-        local descendants = scope:GetDescendants()
-        for i, d in ipairs(descendants) do
-            if d:IsA("BasePart") then
-                local parent = d.Parent
-                local grand = parent and parent.Parent
-                local ancestry = lower(d.Name .. " " .. (parent and parent.Name or "") .. " " .. (grand and grand.Name or ""))
-                local score
-                if containsAny(ancestry, {"goldenchest", "treasurechest"}) then
-                    score = 120
-                elseif containsAny(ancestry, {"treasure", "theend", "chest"}) then
-                    score = 85
-                elseif lower(d.Name) == "trigger" and containsAny(ancestry, {"treasure", "chest", "theend"}) then
-                    score = 105
-                end
-                if score and (not bestScore or score > bestScore) then
-                    best, bestScore = d, score
-                    if score >= 120 then break end
-                end
-            end
-            if canYield and i % 260 == 0 then task.wait() end
-        end
-        return best
-    end
+    local fallingStars = {}
+    local STAR_COUNT = 140
 
-    local boatStages = Workspace:FindFirstChild("BoatStages")
-    local best = scan(boatStages, true)
-    if not best then best = scan(Workspace, true) end
+    local function spawnStar(initial)
+        local star = Instance.new("Frame")
+        local size = rng:NextNumber(1.1, 3.8)
+        star.Name = "Star"
+        star.BorderSizePixel = 0
+        star.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        star.BackgroundTransparency = rng:NextNumber(0.02, 0.5)
+        star.Size = UDim2.fromOffset(size, size)
+        star.AnchorPoint = Vector2.new(0.5, 0.5)
+        star.ZIndex = 2
+        local x = rng:NextNumber(0, 1)
+        local y = initial and rng:NextNumber(-0.05, 1.05) or rng:NextNumber(-0.18, -0.02)
+        star.Position = UDim2.new(x, 0, y, 0)
+        local c = Instance.new("UICorner", star)
+        c.CornerRadius = UDim.new(1, 0)
+        star.Parent = starsFolder
 
-    worldCache.chest = best
-    worldCache.chestAt = now
-    return best
-end
-
-local function getNormalStages()
-    local boatStages = Workspace:FindFirstChild("BoatStages")
-    if not boatStages then return nil end
-    return boatStages:FindFirstChild("NormalStages") or boatStages
-end
-
-local function numericSuffix(name)
-    return tonumber(string.match(name or "", "(%d+)%s*$"))
-end
-
-local function getStageTargets()
-    local now = os.clock()
-    if worldCache.stages and (now - worldCache.stagesAt) < 15 then
-        local valid = true
-        for _, info in ipairs(worldCache.stages) do
-            if not info.part or not info.part.Parent then valid = false break end
-        end
-        if valid then return worldCache.stages end
-    end
-
-    local holder = getNormalStages()
-    local targets = {}
-    if not holder then return targets end
-
-    -- Stage discovery is cached. Yield occasionally so large custom maps cannot
-    -- monopolize one frame while their stage models are inspected.
-    for i, stage in ipairs(holder:GetChildren()) do
-        if stage:IsA("Model") or stage:IsA("Folder") then
-            local n = lower(stage.Name)
-            if not containsAny(n, {"theend", "treasure", "chest"}) then
-                local target = stage:FindFirstChild("StageTrigger", true)
-                    or stage:FindFirstChild("Trigger", true)
-                    or stage:FindFirstChild("TouchPart", true)
-                    or stage:FindFirstChild("Checkpoint", true)
-                    or stage:FindFirstChild("DarknessPart", true)
-                    or findFirstPart(stage)
-                if isBasePart(target) then
-                    if (target.Size.X > 80 or target.Size.Y > 80 or target.Size.Z > 80)
-                        and not containsAny(lower(target.Name), {"trigger", "touch", "checkpoint"}) then
-
-                        local smallest, smallestVolume
-                        for _, candidate in ipairs(stage:GetDescendants()) do
-                            if candidate:IsA("BasePart") then
-                                local cn = lower(candidate.Name)
-                                if not containsAny(cn, {"wall", "darkness", "decor", "water"}) then
-                                    local volume = candidate.Size.X * candidate.Size.Y * candidate.Size.Z
-                                    if not smallestVolume or volume < smallestVolume then
-                                        smallest, smallestVolume = candidate, volume
-                                    end
-                                end
-                            end
-                        end
-                        if smallest then target = smallest end
-                    end
-
-                    targets[#targets + 1] = {
-                        name = stage.Name,
-                        part = target,
-                        index = numericSuffix(stage.Name)
-                    }
-                end
-            end
-        end
-        if i % 6 == 0 then task.wait() end
-    end
-
-    local root = getRoot()
-    table.sort(targets, function(a, b)
-        if a.index and b.index then return a.index < b.index end
-        if a.index then return true end
-        if b.index then return false end
-        if root then return (a.part.Position - root.Position).Magnitude < (b.part.Position - root.Position).Magnitude end
-        return a.name < b.name
-    end)
-
-    worldCache.stages = targets
-    worldCache.stagesAt = now
-    return targets
-end
-
-local function touchPart(part)
-    local root = getRoot()
-    if not root or not isBasePart(part) then return false end
-    if firetouchinterest then
-        pcall(function()
-            firetouchinterest(root, part, 0)
-            task.wait(0.05)
-            firetouchinterest(root, part, 1)
-        end)
-        return true
-    end
-    return tpToPart(part, Vector3.new(0, 2, 0))
-end
-
-local function finishRun(stepDelay, farmToken)
-    if activeStates._finishBusy then return false, "Ya hay una finalización en curso" end
-    activeStates._finishBusy = true
-    activeStates._farmTeleporting = true
-
-    local okCall, success, message = pcall(function()
-        stepDelay = math.max(tonumber(stepDelay) or 0.40, 0.26)
-        local root = getRoot()
-        if not root then return false, "Personaje no disponible" end
-
-        local stages = getStageTargets()
-        if farmToken and activeStates._farmToken ~= farmToken then return false, "Auto Farm detenido" end
-
-        if #stages == 0 then
-            local chest = findChestPart()
-            if chest and chest.Parent then
-                tpToPart(chest, Vector3.new(0, 2, 0))
-                task.wait(stepDelay)
-                touchPart(chest)
-                runsCompleted += 1
-                return true
-            end
-            return false, "No pude localizar los stages"
+        if rng:NextNumber() < 0.38 then
+            local trail = Instance.new("Frame")
+            trail.Name = "Trail"
+            trail.AnchorPoint = Vector2.new(0.5, 0)
+            trail.Position = UDim2.new(0.5, 0, 0, 0)
+            trail.Size = UDim2.fromOffset(math.max(1, size * 0.55), rng:NextNumber(12, 28))
+            trail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            trail.BackgroundTransparency = 0.45
+            trail.BorderSizePixel = 0
+            trail.ZIndex = 1
+            trail.Parent = star
+            local tc = Instance.new("UICorner", trail)
+            tc.CornerRadius = UDim.new(1, 0)
+            local tg = Instance.new("UIGradient", trail)
+            tg.Rotation = 90
+            tg.Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 0.15),
+                NumberSequenceKeypoint.new(1, 1)
+            }
         end
 
-        for i, info in ipairs(stages) do
-            if not alive then return false, "Cerrado" end
-            if farmToken and activeStates._farmToken ~= farmToken then return false, "Auto Farm detenido" end
-            if not info.part or not info.part.Parent then
-                worldCache.stagesAt = 0
-                return false, "Los stages cambiaron; reintentando"
-            end
-
-            local r = getRoot()
-            if not r then return false, "Personaje no disponible" end
-            r.AssemblyLinearVelocity = Vector3.zero
-            r.AssemblyAngularVelocity = Vector3.zero
-            r.CFrame = info.part.CFrame * CFrame.new(0, 2, 0)
-
-            -- Spread stage work across frames to avoid streaming/render spikes.
-            task.wait(stepDelay)
-            touchPart(info.part)
-            task.wait(0.08)
-            if i % 2 == 0 then task.wait() end
-        end
-
-        if farmToken and activeStates._farmToken ~= farmToken then return false, "Auto Farm detenido" end
-        local chest = findChestPart()
-        if chest and chest.Parent then
-            local r = getRoot()
-            if not r then return false, "Personaje no disponible" end
-            r.AssemblyLinearVelocity = Vector3.zero
-            r.AssemblyAngularVelocity = Vector3.zero
-            r.CFrame = chest.CFrame * CFrame.new(0, 2, 0)
-            task.wait(math.max(stepDelay, 0.35))
-            touchPart(chest)
-            runsCompleted += 1
-            return true
-        end
-        return false, "Stages recorridos, pero no encontré el cofre final"
-    end)
-
-    activeStates._farmTeleporting = false
-    activeStates._finishBusy = false
-
-    if not okCall then
-        return false, "Error interno: " .. tostring(success)
-    end
-    return success, message
-end
-
-local function findLaunchButton()
-    local pg = LP:FindFirstChildOfClass("PlayerGui")
-    if not pg then return nil end
-    for _, d in ipairs(pg:GetDescendants()) do
-        if d:IsA("TextButton") or d:IsA("ImageButton") then
-            local text = d:IsA("TextButton") and d.Text or ""
-            if containsAny(d.Name .. " " .. text, {"launch", "lanzar"}) then
-                return d
-            end
-        end
-    end
-end
-
-local function launchBoat()
-    local button = findLaunchButton()
-    if button then
-        local fired = false
-        if firesignal then
-            fired = pcall(function()
-                firesignal(button.MouseButton1Click)
-                firesignal(button.Activated)
-            end)
-        end
-        if not fired then fired = pcall(function() button:Activate() end) end
-        if fired then return true end
+        table.insert(fallingStars, {
+            inst = star,
+            speed = rng:NextNumber(0.035, 0.22),
+            drift = rng:NextNumber(-0.035, 0.035),
+            twinkle = rng:NextNumber(1.5, 5),
+            phase = rng:NextNumber(0, math.pi * 2),
+            baseT = star.BackgroundTransparency
+        })
     end
 
-    -- Cache the fallback remote and search only ReplicatedStorage. Scanning
-    -- game:GetDescendants() every Auto Launch cycle caused large frame spikes.
-    local cached = activeStates._launchRemote
-    if cached and cached.Parent then
-        local ok = pcall(function() cached:FireServer() end)
-        if ok then return true end
-        activeStates._launchRemote = nil
+    for i = 1, STAR_COUNT do
+        spawnStar(true)
     end
 
-    local now = os.clock()
-    if activeStates._launchScanAt and now - activeStates._launchScanAt < 20 then return false end
-    activeStates._launchScanAt = now
-
-    local rs = game:GetService("ReplicatedStorage")
-    local descendants = rs:GetDescendants()
-    for i, d in ipairs(descendants) do
-        if d:IsA("RemoteEvent") and containsAny(d.Name, {"launch", "lanzar"}) then
-            activeStates._launchRemote = d
-            return pcall(function() d:FireServer() end)
-        end
-        if i % 240 == 0 then task.wait() end
-    end
-    return false
-end
-
-local function getSeat()
-    local hum = getHum()
-    if not hum then return nil end
-    local seat = hum.SeatPart
-    if seat and seat:IsA("BasePart") then return seat end
-    return nil
-end
-
---====================================================
--- Persistent positions
---====================================================
-local POS_FILE = "BABFT_Nightfall_Positions.json"
-local savedPositions = {}
-
-local function serializeCFrame(cf)
-    return {cf:GetComponents()}
-end
-
-local function deserializeCFrame(t)
-    if type(t) ~= "table" or #t < 12 then return nil end
-    return CFrame.new(table.unpack(t, 1, 12))
-end
-
-local function savePositionsToDisk()
-    if not writefile then return end
-    pcall(function()
-        writefile(POS_FILE, HttpService:JSONEncode(savedPositions))
-    end)
-end
-
-local function loadPositionsFromDisk()
-    if not (readfile and isfile and isfile(POS_FILE)) then return end
-    pcall(function()
-        local decoded = HttpService:JSONDecode(readfile(POS_FILE))
-        if type(decoded) == "table" then savedPositions = decoded end
-    end)
-end
-
-loadPositionsFromDisk()
-
---====================================================
--- ESP
---====================================================
-local function clearPlayerESP()
-    for _, o in pairs(espPlayerObjects) do
-        if o.highlight then pcall(function() o.highlight:Destroy() end) end
-        if o.billboard then pcall(function() o.billboard:Destroy() end) end
-    end
-    table.clear(espPlayerObjects)
-end
-
-local function addPlayerESP(plr)
-    if plr == LP or not plr.Character or espPlayerObjects[plr] then return end
-    local char = plr.Character
-    local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
-    if not root then return end
-
-    local h = Instance.new("Highlight")
-    h.Name = "BABFT_PlayerESP"
-    h.Adornee = char
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillTransparency = 0.78
-    h.OutlineTransparency = 0.05
-    h.Parent = char
-
-    local bb = Instance.new("BillboardGui")
-    bb.Name = "BABFT_PlayerName"
-    bb.Adornee = root
-    bb.AlwaysOnTop = true
-    bb.Size = UDim2.fromOffset(180, 34)
-    bb.StudsOffset = Vector3.new(0, 3.2, 0)
-    bb.Parent = root
-
-    local txt = Instance.new("TextLabel")
-    txt.BackgroundTransparency = 1
-    txt.Size = UDim2.fromScale(1, 1)
-    txt.Font = Enum.Font.GothamBold
-    txt.TextSize = 13
-    txt.TextColor3 = Color3.fromRGB(245, 245, 255)
-    txt.TextStrokeTransparency = 0.55
-    txt.Text = plr.DisplayName .. "  @" .. plr.Name
-    txt.Parent = bb
-
-    espPlayerObjects[plr] = {highlight = h, billboard = bb}
-end
-
-local function refreshPlayerESP()
-    if not activeStates.playerESP then return end
-    for _, plr in ipairs(Players:GetPlayers()) do addPlayerESP(plr) end
-    for plr, o in pairs(espPlayerObjects) do
-        if not plr.Parent or not plr.Character or o.highlight.Adornee ~= plr.Character then
-            if o.highlight then pcall(function() o.highlight:Destroy() end) end
-            if o.billboard then pcall(function() o.billboard:Destroy() end) end
-            espPlayerObjects[plr] = nil
-            if plr.Parent and plr.Character then addPlayerESP(plr) end
-        end
-    end
-end
-
-local function clearBlockESP()
-    for _, o in ipairs(espBlockObjects) do pcall(function() o:Destroy() end) end
-    table.clear(espBlockObjects)
-end
-
-local function isCharacterPart(part)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Character and part:IsDescendantOf(plr.Character) then return true end
-    end
-    return false
-end
-
-local function refreshBlockESP()
-    clearBlockESP()
-    if not activeStates.blockESP then return end
-    local root = getRoot()
-    if not root then return end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local char = getChar()
-    if char then params.FilterDescendantsInstances = {char} end
-    params.MaxParts = 220
-
-    local ok, nearby = pcall(function()
-        return Workspace:GetPartBoundsInRadius(root.Position, 750, params)
-    end)
-    if not ok or not nearby then return end
-
-    local count = 0
-    for _, part in ipairs(nearby) do
-        if part:IsA("BasePart")
-            and part.Transparency < 1
-            and not isCharacterPart(part)
-            and (not part.Anchored or containsAny(part.Name, {"block", "boat", "seat", "motor", "jet", "wheel"})) then
-            local box = Instance.new("SelectionBox")
-            box.Name = "BABFT_BlockESP"
-            box.Adornee = part
-            box.LineThickness = 0.025
-            box.SurfaceTransparency = 1
-            box.Parent = part
-            espBlockObjects[#espBlockObjects + 1] = box
-            count += 1
-            if count >= 110 then break end
-        end
-    end
-end
-
---====================================================
--- Main ScreenGui
---====================================================
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "HX_Boat_Hub"
-Gui.ResetOnSpawn = false
-Gui.IgnoreGuiInset = true
-Gui.DisplayOrder = 2147483647
-Gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-pcall(function() Gui.OnTopOfCoreBlur = true end)
-
-if syn and syn.protect_gui then pcall(syn.protect_gui, Gui) end
-
-local guiParent
-if gethui then
-    local ok, result = pcall(gethui)
-    if ok and result then guiParent = result end
-end
-if not guiParent then
-    local ok = pcall(function() Gui.Parent = CoreGui end)
-    if ok and Gui.Parent then guiParent = CoreGui end
-end
-if not guiParent then guiParent = LP:WaitForChild("PlayerGui") end
-Gui.Parent = guiParent
-
-local Theme = {
-    bg = Color3.fromRGB(0, 0, 0),
-    panel = Color3.fromRGB(3, 3, 3),
-    panel2 = Color3.fromRGB(8, 8, 8),
-    soft = Color3.fromRGB(24, 24, 24),
-    accent = Color3.fromRGB(255, 255, 255),
-    accent2 = Color3.fromRGB(232, 232, 232),
-    text = Color3.fromRGB(248, 248, 248),
-    muted = Color3.fromRGB(150, 150, 150),
-    danger = Color3.fromRGB(255, 255, 255),
-    line = Color3.fromRGB(76, 76, 76),
-    good = Color3.fromRGB(255, 255, 255)
-}
-
-local function corner(obj, radius)
-    local c = Instance.new("UICorner")
-    -- Never allow tiny/square-looking corners. Small controls automatically
-    -- become capsules/circles when the radius exceeds half their height.
-    c.CornerRadius = UDim.new(0, math.max(radius or 16, 14))
-    c.Parent = obj
-    return c
-end
-
-local function stroke(obj, color, thickness, transparency)
-    local s = Instance.new("UIStroke")
-    s.Color = color or Theme.line
-    s.Thickness = thickness or 1
-    s.Transparency = transparency or 0
-    pcall(function() s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border end)
-    pcall(function() s.LineJoinMode = Enum.LineJoinMode.Round end)
-    s.Parent = obj
-    return s
-end
-
-local function tween(obj, props, time)
-    local tw = TweenService:Create(obj, TweenInfo.new(time or 0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props)
-    tw:Play()
-    return tw
-end
-
---====================================================
--- Language / idioma
---====================================================
-ENV.__HX_TEXTS = {
-    ["Este script funciona únicamente en Build A Boat For Treasure."] = {es = "Este script funciona únicamente en Build A Boat For Treasure.", en = "This script only works in Build A Boat For Treasure."},
-    ["IR AL JUEGO"] = {es = "IR AL JUEGO", en = "GO TO GAME"},
-    ["CATEGORÍAS"] = {es = "CATEGORÍAS", en = "CATEGORIES"},
-    ["EJECUTAR"] = {es = "EJECUTAR", en = "RUN"},
-    ["Buscar..."] = {es = "Buscar...", en = "Search..."},
-    ["Buscar jugador..."] = {es = "Buscar jugador...", en = "Search player..."},
-    ["Ya hay una finalización en curso"] = {es = "Ya hay una finalización en curso", en = "A finish is already in progress"},
-    ["Personaje no disponible"] = {es = "Personaje no disponible", en = "Character unavailable"},
-    ["Auto Farm detenido"] = {es = "Farmeo automático detenido", en = "Auto Farm stopped"},
-    ["No pude localizar los stages"] = {es = "No pude localizar las etapas", en = "I couldn't locate the stages"},
-    ["Cerrado"] = {es = "Cerrado", en = "Closed"},
-    ["Los stages cambiaron; reintentando"] = {es = "Las etapas cambiaron; reintentando", en = "The stages changed; retrying"},
-    ["Stages recorridos, pero no encontré el cofre final"] = {es = "Etapas recorridas, pero no encontré el cofre final", en = "Stages completed, but I couldn't find the final chest"},
-    ["Tu executor no permitió consultar servidores"] = {es = "Tu executor no permitió consultar servidores", en = "Your executor didn't allow server lookup"},
-    ["No se pudo leer la lista de servidores"] = {es = "No se pudo leer la lista de servidores", en = "Couldn't read the server list"},
-    ["No encontré otro servidor disponible"] = {es = "No encontré otro servidor disponible", en = "I couldn't find another available server"},
-    ["Abre el menú de guardar del juego y vuelve a intentarlo"] = {es = "Abre el menú de guardar del juego y vuelve a intentarlo", en = "Open the in-game save menu and try again"},
-    ["No pude leer los servidores"] = {es = "No pude leer los servidores", en = "I couldn't read the servers"},
-    ["No encontré un servidor con menos jugadores"] = {es = "No encontré un servidor con menos jugadores", en = "I couldn't find a server with fewer players"},
-    ["Finalización ejecutada"] = {es = "Finalización ejecutada", en = "Finish completed"},
-    ["No se pudo finalizar"] = {es = "No se pudo finalizar", en = "Couldn't finish"},
-    ["Quest seleccionada"] = {es = "Misión seleccionada", en = "Quest selected"},
-    ["No detecté controles de propulsor compatibles"] = {es = "No detecté controles de propulsor compatibles", en = "I couldn't detect compatible thruster controls"},
-    ["Save activado"] = {es = "Guardado activado", en = "Save activated"},
-    ["No pude activar Save"] = {es = "No pude activar el guardado", en = "I couldn't activate Save"},
-    ["Launch ejecutado"] = {es = "Lanzamiento ejecutado", en = "Launch completed"},
-    ["No pude ejecutar el lanzamiento"] = {es = "No pude ejecutar el lanzamiento", en = "I couldn't launch the boat"},
-    ["No encontré el cofre final"] = {es = "No encontré el cofre final", en = "I couldn't find the final chest"},
-    ["No encontré stages"] = {es = "No encontré etapas", en = "I couldn't find any stages"},
-    ["No pude detectar la zona de tu equipo"] = {es = "No pude detectar la zona de tu equipo", en = "I couldn't detect your team area"},
-    ["No detecté un barco cercano"] = {es = "No detecté un barco cercano", en = "I couldn't detect a nearby boat"},
-    ["No detecté un asiento"] = {es = "No detecté un asiento", en = "I couldn't detect a seat"},
-    ["Posiciones eliminadas"] = {es = "Posiciones eliminadas", en = "Saved positions deleted"},
-    ["Boat movido"] = {es = "Barco movido", en = "Boat moved"},
-    ["No pude detectar jugador/barco"] = {es = "No pude detectar jugador/barco", en = "I couldn't detect the player/boat"},
-    ["Anti Water / Anti Damage está ACTIVADO por defecto. HX Boat usa el modo optimizado."] = {es = "Anti agua / Anti daño está ACTIVADO por defecto. HX Boat usa el modo optimizado.", en = "Anti Water / Anti Damage is ENABLED by default. HX Boat uses optimized mode."},
-    ["FARM"] = {es = "FARMEO", en = "FARM"},
-    ["Finalización, oro y recolección automática."] = {es = "Finalización, oro y recolección automática.", en = "Finishing, gold and automatic collection."},
-    ["Auto Farm Gold / Auto Finish"] = {es = "Farmeo automático de oro / Finalización automática", en = "Auto Farm Gold / Auto Finish"},
-    ["Completa el recorrido automáticamente para obtener oro."] = {es = "Completa el recorrido automáticamente para obtener oro.", en = "Runs through stages with optimized delays and prevents duplicate executions."},
-    ["Auto Finish ahora"] = {es = "Finalizar ahora", en = "Auto Finish Now"},
-    ["Completa el recorrido una vez."] = {es = "Completa el recorrido una vez.", en = "Runs one optimized pass without overlapping Auto Farm."},
-    ["FINALIZAR"] = {es = "FINALIZAR", en = "FINISH"},
-    ["Auto Collect"] = {es = "Recolección automática", en = "Auto Collect"},
-    ["Recoge automáticamente recompensas y objetos cercanos."] = {es = "Intenta recoger objetos, cofres y prompts cercanos automáticamente.", en = "Automatically tries to collect nearby pickups, chests and prompts."},
-    ["Auto Launch"] = {es = "Lanzamiento automático", en = "Auto Launch"},
-    ["Lanza el barco automáticamente cuando sea necesario."] = {es = "Lanza el barco automáticamente cuando sea necesario.", en = "Finds the launch button/remote and activates it automatically."},
-    ["Auto Quest compatible"] = {es = "Misión automática compatible", en = "Compatible Auto Quest"},
-    ["Completa automáticamente la misión seleccionada cuando esté disponible."] = {es = "Intenta completar automáticamente el objetivo de la misión seleccionada.", en = "Attempts to automatically complete the selected quest objective."},
-    ["Quest Selector"] = {es = "Selector de misiones", en = "Quest Selector"},
-    ["Elige la misión que quieres automatizar."] = {es = "Busca objetivos de misión disponibles y permite elegir cuál automatizar.", en = "Finds available quest objectives and lets you choose which one to automate."},
-    ["No se detectaron quests compatibles"] = {es = "No se detectaron misiones compatibles", en = "No compatible quests detected"},
-    ["No hay misiones compatibles disponibles."] = {es = "Activa una misión desde el menú de Quests y vuelve a buscar.", en = "Start a quest from the Quests menu and search again."},
-    ["SELECCIONAR"] = {es = "SELECCIONAR", en = "SELECT"},
-    ["FARM STATS"] = {es = "ESTADÍSTICAS DE FARMEO", en = "FARM STATS"},
-    ["Esperando datos de oro..."] = {es = "Esperando datos de oro...", en = "Waiting for gold data..."},
-    ["BARCO"] = {es = "BARCO", en = "BOAT"},
-    ["Control de vuelo y velocidad del asiento/barco que estés usando."] = {es = "Control de vuelo y velocidad del asiento/barco que estés usando.", en = "Flight and speed controls for the seat/boat you are using."},
-    ["Boat Fly"] = {es = "Vuelo del barco", en = "Boat Fly"},
-    ["WASD para moverte, Espacio para subir y Ctrl para bajar."] = {es = "WASD para moverte, Espacio para subir y Ctrl para bajar.", en = "Use WASD to move, Space to go up and Ctrl to go down."},
-    ["Boat Speed"] = {es = "Velocidad del barco", en = "Boat Speed"},
-    ["Aplica un boost de velocidad mientras conduces un asiento del barco."] = {es = "Aplica un aumento de velocidad mientras conduces un asiento del barco.", en = "Applies a speed boost while you are driving a boat seat."},
-    ["Potencia del barco"] = {es = "Potencia del barco", en = "Boat Power"},
-    ["Velocidad usada por Boat Fly, Boat Speed y Auto Pilot."] = {es = "Velocidad usada por Vuelo del barco, Velocidad del barco y Piloto automático.", en = "Speed used by Boat Fly, Boat Speed and Auto Pilot."},
-    ["Auto Pilot"] = {es = "Piloto automático", en = "Auto Pilot"},
-    ["Guía el barco automáticamente hacia el tesoro."] = {es = "Guía el barco automáticamente hacia el tesoro.", en = "Automatically steers and pushes the detected boat toward the Treasure."},
-    ["Boat Stabilizer"] = {es = "Estabilizador del barco", en = "Boat Stabilizer"},
-    ["Mantiene el barco vertical y reduce giros descontrolados."] = {es = "Mantiene el barco vertical y reduce giros descontrolados.", en = "Keeps the boat upright and reduces uncontrolled spinning."},
-    ["Boat Anti Flip"] = {es = "Anti vuelco del barco", en = "Boat Anti Flip"},
-    ["Endereza el barco automáticamente si se vuelca."] = {es = "Endereza el barco automáticamente si se vuelca.", en = "Automatically rights the boat when it detects that it has flipped."},
-    ["Boat Noclip"] = {es = "Noclip del barco", en = "Boat Noclip"},
-    ["Permite que el barco atraviese obstáculos."] = {es = "Desactiva colisiones locales de la estructura conectada al asiento/barco detectado.", en = "Disables local collisions for the assembly connected to the detected seat/boat."},
-    ["Protect Boat"] = {es = "Proteger barco", en = "Protect Boat"},
-    ["Ayuda a reducir golpes y daños durante el recorrido."] = {es = "Ayuda a reducir golpes y daños durante el recorrido.", en = "Reduces local contact on boat parts; it does not force server-side invincibility."},
-    ["Infinite Fuel"] = {es = "Combustible infinito", en = "Infinite Fuel"},
-    ["Mantiene el combustible y la energía del barco."] = {es = "Mantiene altos los valores de combustible/carga/energía detectados dentro del barco.", en = "Keeps detected Fuel/Charge/Energy values inside the boat high."},
-    ["Propeller / Thruster Control"] = {es = "Control de hélices / propulsores", en = "Propeller / Thruster Control"},
-    ["Activa la propulsión disponible del barco."] = {es = "Activa la propulsión disponible del barco.", en = "Activates the boat's available propulsion."},
-    ["ACTIVAR"] = {es = "ACTIVAR", en = "ACTIVATE"},
-    ["Auto Activate Thrusters"] = {es = "Activar propulsores automáticamente", en = "Auto Activate Thrusters"},
-    ["Mantiene la propulsión del barco activada automáticamente."] = {es = "Intenta activar automáticamente los propulsores detectados mientras esté habilitado.", en = "Automatically tries to activate detected thrusters while enabled."},
-    ["Auto Sit"] = {es = "Sentarse automáticamente", en = "Auto Sit"},
-    ["Busca un asiento cercano del barco y vuelve a sentarte automáticamente."] = {es = "Busca un asiento cercano del barco y vuelve a sentarte automáticamente.", en = "Finds a nearby boat seat and automatically sits you back down."},
-    ["Seat Lock"] = {es = "Bloqueo de asiento", en = "Seat Lock"},
-    ["Recuerda tu último asiento e intenta volver a sentarte si un obstáculo te expulsa."] = {es = "Recuerda tu último asiento e intenta volver a sentarte si un obstáculo te expulsa.", en = "Remembers your last seat and tries to sit you back down if an obstacle ejects you."},
-    ["Anti Seat"] = {es = "Anti asiento", en = "Anti Seat"},
-    ["Evita permanecer sentado cuando no quieras usar asientos."] = {es = "Evita permanecer sentado cuando no quieras usar asientos.", en = "Prevents you from staying seated when you do not want to use seats."},
-    ["Load Build / Auto Load Slot"] = {es = "Cargar construcción / Cargar slot automáticamente", en = "Load Build / Auto Load Slot"},
-    ["Carga rápidamente una construcción guardada."] = {es = "Carga rápidamente una construcción guardada.", en = "Quickly loads a saved build."},
-    ["Load Build / Slots"] = {es = "Cargar construcción / Slots", en = "Load Build / Slots"},
-    ["No encontré botones Load/Slot"] = {es = "No encontré botones Cargar/Slot", en = "I couldn't find Load/Slot buttons"},
-    ["Abre primero el menú de guardar/cargar del juego."] = {es = "Abre primero el menú de guardar/cargar del juego.", en = "Open the in-game save/load menu first."},
-    ["Cargar esta opción"] = {es = "Cargar esta opción", en = "Activate this in-game menu button"},
-    ["ABRIR SLOTS"] = {es = "ABRIR SLOTS", en = "OPEN SLOTS"},
-    ["Auto Save Build"] = {es = "Guardado automático de construcción", en = "Auto Save Build"},
-    ["Guarda rápidamente tu construcción actual."] = {es = "Activa el botón Guardar visible del menú oficial cuando esté disponible.", en = "Activates the visible Save button in the official menu when available."},
-    ["GUARDAR"] = {es = "GUARDAR", en = "SAVE"},
-    ["Instant Launch"] = {es = "Lanzamiento instantáneo", en = "Instant Launch"},
-    ["Carga y lanza el barco rápidamente."] = {es = "Carga y lanza el barco rápidamente.", en = "Tries to load the visible slot and launch the boat immediately."},
-    ["LANZAR"] = {es = "LANZAR", en = "LAUNCH"},
-    ["MOVIMIENTO"] = {es = "MOVIMIENTO", en = "MOVEMENT"},
-    ["Controles del personaje y protección básica."] = {es = "Controles del personaje y protección básica.", en = "Character controls and basic protection."},
-    ["Noclip"] = {es = "Noclip", en = "Noclip"},
-    ["Desactiva colisiones de las partes del personaje mientras esté activo."] = {es = "Desactiva colisiones de las partes del personaje mientras esté activo.", en = "Disables collisions on character parts while enabled."},
-    ["Anti Water / Anti Damage"] = {es = "Anti agua / Anti daño", en = "Anti Water / Anti Damage"},
-    ["Reduce el daño de agua y otros peligros y ayuda a volver a una zona segura."] = {es = "Bloquea peligros locales conocidos y vuelve a una posición segura si detecta daño.", en = "Blocks known local hazards and returns to a safe position if damage is detected."},
-    ["Anti Void"] = {es = "Anti vacío", en = "Anti Void"},
-    ["Si caes por debajo del límite del mapa, vuelve a la última posición segura o a tu zona de equipo."] = {es = "Si caes por debajo del límite del mapa, vuelve a la última posición segura o a tu zona de equipo.", en = "If you fall below the map limit, returns you to the last safe position or your team area."},
-    ["No Fall / Anti Fall"] = {es = "Sin caída / Anti caída", en = "No Fall / Anti Fall"},
-    ["Limita la velocidad de caída para reducir caídas bruscas y mantener una recuperación segura."] = {es = "Limita la velocidad de caída para reducir caídas bruscas y mantener una recuperación segura.", en = "Limits falling speed to reduce hard falls and maintain safer recovery."},
-    ["Infinite Jump"] = {es = "Salto infinito", en = "Infinite Jump"},
-    ["Permite volver a saltar en el aire usando Espacio."] = {es = "Permite volver a saltar en el aire usando Espacio.", en = "Lets you jump again in the air using Space."},
-    ["Player Fly"] = {es = "Vuelo del jugador", en = "Player Fly"},
-    ["Vuelo del personaje separado del Boat Fly: WASD, Espacio y Ctrl."] = {es = "Vuelo del personaje separado del vuelo del barco: WASD, Espacio y Ctrl.", en = "Character flight separate from Boat Fly: WASD, Space and Ctrl."},
-    ["Player Fly Speed"] = {es = "Velocidad de vuelo del jugador", en = "Player Fly Speed"},
-    ["Velocidad usada únicamente por Player Fly."] = {es = "Velocidad usada únicamente por el vuelo del jugador.", en = "Speed used only by Player Fly."},
-    ["Gravity"] = {es = "Gravedad", en = "Gravity"},
-    ["Ajusta la gravedad del juego."] = {es = "Ajusta la gravedad del juego.", en = "Adjusts the game's gravity."},
-    ["Character Speed"] = {es = "Velocidad del personaje", en = "Character Speed"},
-    ["Ajusta la velocidad al caminar."] = {es = "Ajusta la velocidad al caminar.", en = "Character WalkSpeed."},
-    ["Character Jump"] = {es = "Salto del personaje", en = "Character Jump"},
-    ["Ajusta la potencia de salto."] = {es = "Ajusta la potencia de salto.", en = "Character JumpPower / JumpHeight."},
-    ["TELEPORT"] = {es = "TELETRANSPORTE", en = "TELEPORT"},
-    ["Stages, cofre, posiciones guardadas y jugadores."] = {es = "Etapas, cofre, posiciones guardadas y jugadores.", en = "Stages, chest, saved positions and players."},
-    ["Ir a esta zona"] = {es = "Teletransportar al punto detectado de la etapa", en = "Teleport to the detected stage point"},
-    ["Teleport al cofre"] = {es = "Teletransporte al cofre", en = "Teleport to Chest"},
-    ["Localiza el Golden Chest / Treasure del mapa y te lleva a él."] = {es = "Localiza el Golden Chest / Treasure del mapa y te lleva a él.", en = "Finds the map Golden Chest / Treasure and teleports you to it."},
-    ["IR AL COFRE"] = {es = "IR AL COFRE", en = "GO TO CHEST"},
-    ["Teleport Last Stage"] = {es = "Teletransporte a la última etapa", en = "Teleport to Last Stage"},
-    ["Te lleva a la última zona antes del tesoro."] = {es = "Te lleva a la última etapa dinámica detectada antes del Tesoro.", en = "Takes you to the last dynamically detected stage before the Treasure."},
-    ["ÚLTIMO STAGE"] = {es = "ÚLTIMA ETAPA", en = "LAST STAGE"},
-    ["Return To Team"] = {es = "Volver al equipo", en = "Return to Team"},
-    ["Te lleva de vuelta a la zona de tu equipo."] = {es = "Te lleva de vuelta a la zona de tu equipo.", en = "Finds the spawn/area associated with your team and returns to it."},
-    ["VOLVER"] = {es = "VOLVER", en = "RETURN"},
-    ["Teleport To Boat"] = {es = "Teletransporte al barco", en = "Teleport to Boat"},
-    ["Te lleva de vuelta a tu barco."] = {es = "Vuelve a la estructura del barco/asiento más probable.", en = "Returns to the most likely boat/seat assembly."},
-    ["IR AL BARCO"] = {es = "IR AL BARCO", en = "GO TO BOAT"},
-    ["Teleport To Seat"] = {es = "Teletransporte al asiento", en = "Teleport to Seat"},
-    ["Te lleva al asiento de tu barco e intenta sentarte."] = {es = "Te lleva al asiento de tu barco e intenta sentarte.", en = "Finds a nearby seat, teleports you to it and tries to sit you down."},
-    ["SENTARSE"] = {es = "SENTARSE", en = "SIT"},
-    ["Click TP"] = {es = "TP con clic", en = "Click TP"},
-    ["Con el toggle activo, haz clic en el mundo para teletransportarte al punto seleccionado."] = {es = "Con la opción activa, haz clic en el mundo para teletransportarte al punto seleccionado.", en = "With the toggle enabled, click the world to teleport to the selected point."},
-    ["Tween TP"] = {es = "TP progresivo", en = "Tween TP"},
-    ["Convierte los teleports del hub en desplazamientos progresivos en vez de instantáneos."] = {es = "Convierte los teletransportes del panel en desplazamientos progresivos en vez de instantáneos.", en = "Turns hub teleports into smooth movement instead of instant teleports."},
-    ["Tween TP Speed"] = {es = "Velocidad del TP progresivo", en = "Tween TP Speed"},
-    ["Velocidad del desplazamiento progresivo."] = {es = "Velocidad del desplazamiento progresivo.", en = "Speed of smooth teleport movement."},
-    ["Teleport To Quests / NPCs"] = {es = "Teletransporte a misiones / NPCs", en = "Teleport to Quests / NPCs"},
-    ["Muestra misiones y NPC disponibles para teletransportarte."] = {es = "Lista NPCs, misiones y prompts relevantes detectados en el mapa.", en = "Lists relevant NPCs, quests and prompts detected in the map."},
-    ["Quests / NPCs"] = {es = "Misiones / NPCs", en = "Quests / NPCs"},
-    ["Ir a este objetivo"] = {es = "Teletransportar al objetivo detectado", en = "Teleport to the detected target"},
-    ["No se detectaron NPCs/quests"] = {es = "No se detectaron NPCs/misiones", en = "No NPCs/quests detected"},
-    ["No hay objetivos disponibles."] = {es = "No hay objetivos disponibles.", en = "The current map does not expose compatible names."},
-    ["Guardar posición"] = {es = "Guardar posición", en = "Save Position"},
-    ["Guarda tu posición actual para volver a ella más tarde."] = {es = "Guarda tu posición actual para volver a ella más tarde.", en = "Saves your current CFrame; uses a file if the executor supports it."},
-    ["Posiciones guardadas"] = {es = "Posiciones guardadas", en = "Saved Positions"},
-    ["Abre la lista para teletransportarte o eliminar posiciones."] = {es = "Abre la lista para teletransportarte o eliminar posiciones.", en = "Opens the list to teleport to or delete saved positions."},
-    ["No hay posiciones"] = {es = "No hay posiciones", en = "No saved positions"},
-    ["Usa “Guardar posición” primero."] = {es = "Usa “Guardar posición” primero.", en = "Use “Save Position” first."},
-    ["Click: teletransportar"] = {es = "Clic: teletransportar", en = "Click: teleport"},
-    ["Eliminar todas"] = {es = "Eliminar todas", en = "Delete All"},
-    ["Borra todas las posiciones guardadas."] = {es = "Borra todas las posiciones guardadas.", en = "Deletes all saved positions."},
-    ["ABRIR"] = {es = "ABRIR", en = "OPEN"},
-    ["Teleport a jugadores"] = {es = "Teletransporte a jugadores", en = "Teleport to Players"},
-    ["Busca jugadores y usa acciones rápidas sobre ellos."] = {es = "Buscador de jugadores con Teletransporte, Espectar, Seguir y Llevar barco al jugador.", en = "Player search with Teleport, Spectate, Follow and Bring Boat To Player."},
-    ["Teleport"] = {es = "Teletransportar", en = "Teleport"},
-    ["Ir junto a este jugador"] = {es = "Ir junto a este jugador", en = "Teleport next to this player"},
-    ["Spectate Player"] = {es = "Espectar jugador", en = "Spectate Player"},
-    ["Poner la cámara sobre este jugador"] = {es = "Poner la cámara sobre este jugador", en = "Set the camera to this player"},
-    ["Follow Player"] = {es = "Seguir jugador", en = "Follow Player"},
-    ["Seguir automáticamente a este jugador"] = {es = "Seguir automáticamente a este jugador", en = "Automatically follow this player"},
-    ["Bring Boat To Player"] = {es = "Llevar barco al jugador", en = "Bring Boat To Player"},
-    ["Mueve tu barco cerca de este jugador."] = {es = "Mueve tu barco detectado cerca de este jugador cuando tienes control local de la estructura.", en = "Moves your detected boat near this player when you have local control of the assembly."},
-    ["Detener Follow / Spectate"] = {es = "Detener seguimiento / espectador", en = "Stop Follow / Spectate"},
-    ["Vuelve la cámara a tu personaje y detiene el seguimiento."] = {es = "Vuelve la cámara a tu personaje y detiene el seguimiento.", en = "Returns the camera to your character and stops following."},
-    ["Jugadores"] = {es = "Jugadores", en = "Players"},
-    ["No hay otros jugadores"] = {es = "No hay otros jugadores", en = "No other players"},
-    ["Servidor vacío."] = {es = "Servidor vacío.", en = "Empty server."},
-    ["JUGADORES"] = {es = "JUGADORES", en = "PLAYERS"},
-    ["VISUALES"] = {es = "VISUALES", en = "VISUALS"},
-    ["Resalta jugadores y bloques cercanos."] = {es = "Resalta jugadores y bloques cercanos.", en = "ESP for players and nearby blocks."},
-    ["ESP de jugadores"] = {es = "ESP de jugadores", en = "Player ESP"},
-    ["Resalta a los demás jugadores y muestra sus nombres."] = {es = "Resaltado AlwaysOnTop + nombre de cada jugador.", en = "AlwaysOnTop highlight + each player name."},
-    ["ESP de bloques"] = {es = "ESP de bloques", en = "Block ESP"},
-    ["Resalta los bloques cercanos."] = {es = "Resalta los bloques cercanos.", en = "Marks up to 140 nearby blocks/parts with slow refresh to reduce load."},
-    ["RENDIMIENTO"] = {es = "RENDIMIENTO", en = "PERFORMANCE"},
-    ["Opciones para mejorar el rendimiento visual."] = {es = "Opciones locales para reducir carga gráfica sin tocar tus funciones de farmeo.", en = "Local options to reduce graphics load without affecting farm features."},
-    ["FPS Booster"] = {es = "Potenciador de FPS", en = "FPS Booster"},
-    ["Reduce efectos gráficos para mejorar los FPS."] = {es = "Reduce efectos gráficos para mejorar los FPS.", en = "Reduces particles, shadows, water and local rendering quality while enabled."},
-    ["Hide Other Boats"] = {es = "Ocultar otros barcos", en = "Hide Other Boats"},
-    ["Oculta los barcos de otros jugadores."] = {es = "Oculta localmente estructuras de otros asientos/barcos detectados.", en = "Locally hides assemblies from other detected seats/boats."},
-    ["Hide Other Players"] = {es = "Ocultar otros jugadores", en = "Hide Other Players"},
-    ["Oculta a los demás jugadores."] = {es = "Oculta a los demás jugadores.", en = "Locally hides other players’ characters."},
-    ["Remove Water Effects"] = {es = "Quitar efectos del agua", en = "Remove Water Effects"},
-    ["Reduce los efectos visuales del agua."] = {es = "Reduce los efectos visuales del agua.", en = "Locally removes Terrain water waves, reflectance and visibility."},
-    ["Remove Particles"] = {es = "Quitar partículas", en = "Remove Particles"},
-    ["Reduce partículas y efectos visuales."] = {es = "Reduce partículas y efectos visuales.", en = "Reduces particles and visual effects."},
-    ["Disable Shadows"] = {es = "Desactivar sombras", en = "Disable Shadows"},
-    ["Desactiva las sombras para mejorar el rendimiento."] = {es = "Desactiva las sombras para mejorar el rendimiento.", en = "Locally disables GlobalShadows and CastShadow."},
-    ["Low Graphics"] = {es = "Gráficos bajos", en = "Low Graphics"},
-    ["Reduce la calidad gráfica para aumentar los FPS."] = {es = "Reduce la calidad gráfica para aumentar los FPS.", en = "Forces low rendering quality and reduces heavy effects."},
-    ["SERVIDOR"] = {es = "SERVIDOR", en = "SERVER"},
-    ["Reconexión y cambio de servidor."] = {es = "Reconexión y cambio de servidor.", en = "Reconnect and server switching."},
-    ["Auto Rejoin"] = {es = "Reconexión automática", en = "Auto Rejoin"},
-    ["Vuelve a entrar automáticamente si pierdes la conexión."] = {es = "Vuelve a entrar automáticamente si pierdes la conexión.", en = "If Roblox reports a connection error, tries to return to the same server."},
-    ["Anti AFK"] = {es = "Anti AFK", en = "Anti AFK"},
-    ["Evita que te expulsen por inactividad."] = {es = "Evita que te expulsen por inactividad.", en = "Prevents inactivity kicks."},
-    ["Rejoin"] = {es = "Reconectar", en = "Rejoin"},
-    ["Vuelve a entrar al servidor actual."] = {es = "Vuelve a entrar al servidor actual.", en = "Rejoins the current server."},
-    ["REJOIN"] = {es = "RECONECTAR", en = "REJOIN"},
-    ["Server Hop"] = {es = "Cambiar servidor", en = "Server Hop"},
-    ["Busca otro servidor público con espacio disponible."] = {es = "Busca otro servidor público con espacio disponible.", en = "Finds another public server with available space."},
-    ["SERVER HOP"] = {es = "CAMBIAR SERVIDOR", en = "SERVER HOP"},
-    ["Low Player Server"] = {es = "Servidor con pocos jugadores", en = "Low Player Server"},
-    ["Busca entre los servidores públicos disponibles y entra al de menor población encontrado."] = {es = "Busca entre los servidores públicos disponibles y entra al de menor población encontrado.", en = "Searches available public servers and joins the lowest-population one found."},
-    ["Auto Crear Barco"] = {es = "Auto Crear Barco", en = "Auto Build Boat"},
-    ["Crea automáticamente uno de tres barcos usando tus bloques disponibles."] = {es = "Crea automáticamente uno de tres barcos usando tus bloques disponibles.", en = "Automatically builds one of three boats using your available blocks."},
-    ["CONSTRUIR"] = {es = "CONSTRUIR", en = "BUILD"},
-    ["Selecciona un barco"] = {es = "Selecciona un barco", en = "Select a Boat"},
-    ["Básico"] = {es = "Básico", en = "Basic"},
-    ["Lancha deportiva con quilla, casco de doble capa, proa puntiaguda, barandillas y parabrisas."] = {es = "Lancha deportiva con quilla, casco de doble capa, proa puntiaguda, barandillas y parabrisas.", en = "Small lightweight wooden boat with a seat and basic side protection."},
-    ["Intermedio"] = {es = "Intermedio", en = "Intermediate"},
-    ["Crucero V-hull de 5 anchos con cubierta completa, mamparos, bahía de motor y parabrisas."] = {es = "Crucero V-hull de 5 anchos con cubierta completa, mamparos, bahía de motor y parabrisas.", en = "Wider reinforced hull with better stability and protection."},
-    ["Avanzado"] = {es = "Avanzado", en = "Advanced"},
-    ["Yate multi-cubierta de 7 anchos: quilla profunda, proa escalonada, cabina con techo y bahía dual de motores."] = {es = "Yate multi-cubierta de 7 anchos: quilla profunda, proa escalonada, cabina con techo y bahía dual de motores.", en = "Large reinforced hull with double side protection, cabin and seat."},
-    ["Ya se está creando un barco."] = {es = "Ya se está creando un barco.", en = "A boat is already being built."},
-    ["Desactiva Auto Farm antes de crear un barco."] = {es = "Desactiva Auto Farm antes de crear un barco.", en = "Disable Auto Farm before building a boat."},
-    ["No encontré BuildingTool. Abre el modo de construcción e inténtalo otra vez."] = {es = "No encontré BuildingTool. Abre el modo de construcción e inténtalo otra vez.", en = "BuildingTool was not found. Open build mode and try again."},
-    ["No pude detectar tu zona de construcción."] = {es = "No pude detectar tu zona de construcción.", en = "I couldn't detect your build zone."},
-    ["No encontré los datos de bloques del jugador."] = {es = "No encontré los datos de bloques del jugador.", en = "Player block data was not found."},
-    ["Creando nuevo barco. El resultado dependerá de los materiales y de la cantidad que tengas de cada uno."] = {es = "Creando nuevo barco. El resultado dependerá de los materiales y de la cantidad que tengas de cada uno.", en = "Creating a new boat. The result will depend on the materials you own and how many of each you have."},
-    ["Motor añadido: "] = {es = "Motor añadido: ", en = "Engine added: "},
-    ["No tienes un motor compatible; crearé el barco sin motor."] = {es = "No tienes un motor compatible; crearé el barco sin motor.", en = "You don't have a compatible engine; the boat will be built without one."},
-    ["No tienes asiento compatible; crearé el barco sin asiento."] = {es = "No tienes asiento compatible; crearé el barco sin asiento.", en = "You don't have a compatible seat; the boat will be built without one."},
-    ["Material principal: "] = {es = "Material principal: ", en = "Main material: "},
-    [" · Bloques disponibles usados: "] = {es = " · Bloques disponibles usados: ", en = " · Available blocks used: "},
-    ["Creando barco básico..."] = {es = "Creando barco básico...", en = "Building basic boat..."},
-    ["Creando barco intermedio..."] = {es = "Creando barco intermedio...", en = "Building intermediate boat..."},
-    ["Creando barco avanzado..."] = {es = "Creando barco avanzado...", en = "Building advanced boat..."},
-    ["Barco creado correctamente."] = {es = "Barco creado correctamente.", en = "Boat built successfully."},
-    ["No se pudo completar el barco: "] = {es = "No se pudo completar el barco: ", en = "The boat could not be completed: "},
-    ["Recursos insuficientes"] = {es = "Recursos insuficientes", en = "Insufficient Resources"},
-    ["SÍ, COMPRAR Y CONTINUAR"] = {es = "SÍ, COMPRAR Y CONTINUAR", en = "YES, BUY AND CONTINUE"},
-    ["NO, CONTINUAR SIN COMPRAR"] = {es = "NO, CONTINUAR SIN COMPRAR", en = "NO, CONTINUE WITHOUT BUYING"},
-    ["HX Boat comprará únicamente con el oro del juego y continuará automáticamente."] = {es = "HX Boat comprará únicamente con el oro del juego y continuará automáticamente.", en = "HX Boat will only use your in-game Gold and continue automatically."},
-    ["Continuar con los materiales actuales; el barco puede reducirse."] = {es = "Continuar con los materiales actuales; el barco puede reducirse.", en = "Continue with current materials; the boat may be reduced."},
-    ["No tienes suficiente oro para comprar lo que falta. Se usará únicamente lo que tengas."] = {es = "No tienes suficiente oro para comprar lo que falta. Se usará únicamente lo que tengas.", en = "You don't have enough Gold to buy the missing resources. Only what you currently own will be used."},
-    ["No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida."] = {es = "No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.", en = "There aren't enough materials for the selected size; I'll build a reduced version."},
-    ["Compra automática completada. Continuando construcción..."] = {es = "Compra automática completada. Continuando construcción...", en = "Automatic purchase completed. Continuing construction..."},
-    ["No pude completar una compra automática; continuaré con los recursos disponibles."] = {es = "No pude completar una compra automática; continuaré con los recursos disponibles.", en = "I couldn't complete an automatic purchase; I'll continue with the available resources."},
-    ["Sistema de conducción añadido: Boat Motor + Car Seat."] = {es = "Sistema de conducción añadido: Boat Motor + Car Seat.", en = "Drive system added: Boat Motor + Car Seat."},
-    ["No hay Boat Motor o Car Seat disponible; el barco no tendrá conducción normal."] = {es = "No hay Boat Motor o Car Seat disponible; el barco no tendrá conducción normal.", en = "No Boat Motor or Car Seat is available; the boat won't have normal driving controls."},
-    ["Completa el recorrido automáticamente para obtener oro."] = {es = "Completa el recorrido automáticamente para obtener oro.", en = "Automatically completes the run to earn Gold."},
-    ["Completa el recorrido una vez."] = {es = "Completa el recorrido una vez.", en = "Completes the run once."},
-    ["Recoge automáticamente recompensas y objetos cercanos."] = {es = "Recoge automáticamente recompensas y objetos cercanos.", en = "Automatically collects nearby rewards and items."},
-    ["Lanza el barco automáticamente cuando sea necesario."] = {es = "Lanza el barco automáticamente cuando sea necesario.", en = "Automatically launches the boat when needed."},
-    ["Completa automáticamente la misión seleccionada cuando esté disponible."] = {es = "Completa automáticamente la misión seleccionada cuando esté disponible.", en = "Automatically completes the selected quest when available."},
-    ["Elige la misión que quieres automatizar."] = {es = "Elige la misión que quieres automatizar.", en = "Choose the quest you want to automate."},
-    ["No hay misiones compatibles disponibles."] = {es = "No hay misiones compatibles disponibles.", en = "No compatible quests are available."},
-    ["Guía el barco automáticamente hacia el tesoro."] = {es = "Guía el barco automáticamente hacia el tesoro.", en = "Automatically guides the boat toward the treasure."},
-    ["Endereza el barco automáticamente si se vuelca."] = {es = "Endereza el barco automáticamente si se vuelca.", en = "Automatically rights the boat if it flips."},
-    ["Permite que el barco atraviese obstáculos."] = {es = "Permite que el barco atraviese obstáculos.", en = "Allows the boat to pass through obstacles."},
-    ["Ayuda a reducir golpes y daños durante el recorrido."] = {es = "Ayuda a reducir golpes y daños durante el recorrido.", en = "Helps reduce impacts and damage during the run."},
-    ["Mantiene el combustible y la energía del barco."] = {es = "Mantiene el combustible y la energía del barco.", en = "Keeps the boat's fuel and energy available."},
-    ["Activa la propulsión disponible del barco."] = {es = "Activa la propulsión disponible del barco.", en = "Activates the boat's available propulsion."},
-    ["Mantiene la propulsión del barco activada automáticamente."] = {es = "Mantiene la propulsión del barco activada automáticamente.", en = "Keeps the boat's propulsion activated automatically."},
-    ["Carga rápidamente una construcción guardada."] = {es = "Carga rápidamente una construcción guardada.", en = "Quickly loads a saved build."},
-    ["Guarda rápidamente tu construcción actual."] = {es = "Guarda rápidamente tu construcción actual.", en = "Quickly saves your current build."},
-    ["Carga y lanza el barco rápidamente."] = {es = "Carga y lanza el barco rápidamente.", en = "Quickly loads and launches the boat."},
-    ["Reduce el daño de agua y otros peligros y ayuda a volver a una zona segura."] = {es = "Reduce el daño de agua y otros peligros y ayuda a volver a una zona segura.", en = "Reduces damage from water and other hazards and helps return you to safety."},
-    ["Ajusta la gravedad del juego."] = {es = "Ajusta la gravedad del juego.", en = "Adjusts the game's gravity."},
-    ["Ajusta la velocidad al caminar."] = {es = "Ajusta la velocidad al caminar.", en = "Adjusts walking speed."},
-    ["Ajusta la potencia de salto."] = {es = "Ajusta la potencia de salto.", en = "Adjusts jump power."},
-    ["Te lleva a la última zona antes del tesoro."] = {es = "Te lleva a la última zona antes del tesoro.", en = "Takes you to the last area before the treasure."},
-    ["Te lleva de vuelta a la zona de tu equipo."] = {es = "Te lleva de vuelta a la zona de tu equipo.", en = "Takes you back to your team area."},
-    ["Te lleva de vuelta a tu barco."] = {es = "Te lleva de vuelta a tu barco.", en = "Takes you back to your boat."},
-    ["Te lleva al asiento de tu barco e intenta sentarte."] = {es = "Te lleva al asiento de tu barco e intenta sentarte.", en = "Takes you to your boat seat and tries to sit you down."},
-    ["Muestra misiones y NPC disponibles para teletransportarte."] = {es = "Muestra misiones y NPC disponibles para teletransportarte.", en = "Shows quests and NPCs available for teleporting."},
-    ["Ir a este objetivo"] = {es = "Ir a este objetivo", en = "Go to this target"},
-    ["Guarda tu posición actual para volver a ella más tarde."] = {es = "Guarda tu posición actual para volver a ella más tarde.", en = "Saves your current position so you can return later."},
-    ["Busca jugadores y usa acciones rápidas sobre ellos."] = {es = "Busca jugadores y usa acciones rápidas sobre ellos.", en = "Find players and use quick actions on them."},
-    ["Mueve tu barco cerca de este jugador."] = {es = "Mueve tu barco cerca de este jugador.", en = "Moves your boat near this player."},
-    ["Resalta jugadores y bloques cercanos."] = {es = "Resalta jugadores y bloques cercanos.", en = "Highlights nearby players and blocks."},
-    ["Resalta a los demás jugadores y muestra sus nombres."] = {es = "Resalta a los demás jugadores y muestra sus nombres.", en = "Highlights other players and shows their names."},
-    ["Resalta los bloques cercanos."] = {es = "Resalta los bloques cercanos.", en = "Highlights nearby blocks."},
-    ["Opciones para mejorar el rendimiento visual."] = {es = "Opciones para mejorar el rendimiento visual.", en = "Options to improve visual performance."},
-    ["Reduce efectos gráficos para mejorar los FPS."] = {es = "Reduce efectos gráficos para mejorar los FPS.", en = "Reduces graphical effects to improve FPS."},
-    ["Oculta los barcos de otros jugadores."] = {es = "Oculta los barcos de otros jugadores.", en = "Hides other players' boats."},
-    ["Oculta a los demás jugadores."] = {es = "Oculta a los demás jugadores.", en = "Hides other players."},
-    ["Reduce los efectos visuales del agua."] = {es = "Reduce los efectos visuales del agua.", en = "Reduces water visual effects."},
-    ["Reduce partículas y efectos visuales."] = {es = "Reduce partículas y efectos visuales.", en = "Reduces particles and visual effects."},
-    ["Desactiva las sombras para mejorar el rendimiento."] = {es = "Desactiva las sombras para mejorar el rendimiento.", en = "Disables shadows to improve performance."},
-    ["Reduce la calidad gráfica para aumentar los FPS."] = {es = "Reduce la calidad gráfica para aumentar los FPS.", en = "Lowers graphics quality to increase FPS."},
-    ["Vuelve a entrar automáticamente si pierdes la conexión."] = {es = "Vuelve a entrar automáticamente si pierdes la conexión.", en = "Automatically rejoins if you lose connection."},
-    ["Evita que te expulsen por inactividad."] = {es = "Evita que te expulsen por inactividad.", en = "Prevents inactivity kicks."},
-    ["Ir a esta zona"] = {es = "Ir a esta zona", en = "Go to this area"},
-    ["Cargar esta opción"] = {es = "Cargar esta opción", en = "Load this option"},
-    ["No hay objetivos disponibles."] = {es = "No hay objetivos disponibles.", en = "No targets are available."},
-    ["Auto Reparar Barco"] = {es = "Auto Reparar Barco", en = "Auto Repair Boat"},
-    ["Repone piezas faltantes y recoloca piezas sueltas cuando sea posible."] = {es = "Repone piezas faltantes y recoloca piezas sueltas cuando sea posible.", en = "Replaces missing parts and repositions loose parts when possible."},
-    ["Auto reparación activada."] = {es = "Auto reparación activada.", en = "Auto repair enabled."},
-    ["No encontré un barco para reparar."] = {es = "No encontré un barco para reparar.", en = "I couldn't find a boat to repair."},
-    ["No encontré piezas reparables en este barco."] = {es = "No encontré piezas reparables en este barco.", en = "I couldn't find repairable parts on this boat."},
-    ["Faltan piezas de repuesto para continuar reparando."] = {es = "Faltan piezas de repuesto para continuar reparando.", en = "You need spare parts to continue repairing."},
-    ["Pieza reparada automáticamente."] = {es = "Pieza reparada automáticamente.", en = "Part repaired automatically."},
-    ["Discord copiado correctamente."] = {es = "Discord copiado correctamente.", en = "Discord copied successfully."},
-    ["Lancha deportiva con quilla, casco de doble capa, proa puntiaguda, barandillas y parabrisas."] = {es = "Lancha deportiva con quilla, casco de doble capa, proa puntiaguda, barandillas y parabrisas.", en = "Compact speedboat with a shaped bow, closed hull, side rails, raised seat and rear motor."},
-    ["Crucero V-hull de 5 anchos con cubierta completa, mamparos, bahía de motor y parabrisas."] = {es = "Crucero V-hull de 5 anchos con cubierta completa, mamparos, bahía de motor y parabrisas.", en = "Reinforced speedboat with a V-shaped bow, deck, open cockpit, windshield and rear motor."},
-    ["Yate multi-cubierta de 7 anchos: quilla profunda, proa escalonada, cabina con techo y bahía dual de motores."] = {es = "Yate multi-cubierta de 7 anchos: quilla profunda, proa escalonada, cabina con techo y bahía dual de motores.", en = "Large boat with a stepped bow, full deck, open cabin, windshield and twin rear motors."},
-    ["AUTO CREAR"] = {es = "AUTO CREAR", en = "AUTO BUILD"},
-    ["CREACIÓN AUTOMÁTICA"] = {es = "CREACIÓN AUTOMÁTICA", en = "AUTO BUILD"},
-    ["Crea barcos, carros y aviones adaptándose a los materiales disponibles."] = {es = "Crea barcos, carros y aviones adaptándose a los materiales disponibles.", en = "Build boats, cars and planes adapted to your available materials."},
-    ["Auto Crear Carro"] = {es = "Auto Crear Carro", en = "Auto Build Car"},
-    ["Crea automáticamente un carro funcional en tres niveles usando tus materiales disponibles."] = {es = "Crea automáticamente un carro funcional en tres niveles usando tus materiales disponibles.", en = "Automatically builds a functional car in three levels using your available materials."},
-    ["Auto Crear Avión"] = {es = "Auto Crear Avión", en = "Auto Build Plane"},
-    ["Crea automáticamente un avión en tres niveles usando tus materiales y componentes disponibles."] = {es = "Crea automáticamente un avión en tres niveles usando tus materiales y componentes disponibles.", en = "Automatically builds a plane in three levels using your available materials and components."},
-    ["Selecciona un carro"] = {es = "Selecciona un carro", en = "Select a Car"},
-    ["Selecciona un avión"] = {es = "Selecciona un avión", en = "Select a Plane"},
-    ["Auto compacto con chasis de largueros, capó, paragolpes, laterales y parabrisas."] = {es = "Auto compacto con chasis de largueros, capó, paragolpes, laterales y parabrisas.", en = "Compact car with chassis, four wheels, driver seat and lightweight body."},
-    ["Sedán reforzado: chasis ancho, capó largo, cabina con pilares, techo parcial y maletero."] = {es = "Sedán reforzado: chasis ancho, capó largo, cabina con pilares, techo parcial y maletero.", en = "Reinforced car with wide chassis, bodywork, windshield, partial roof and four wheels."},
-    ["SUV/largo reforzado: cabina completa con techo, pilares, luneta trasera y paragolpes duales."] = {es = "SUV/largo reforzado: cabina completa con techo, pilares, luneta trasera y paragolpes duales.", en = "Large car with reinforced chassis, full cabin, windshield, roof and six wheels when available."},
-    ["Monoplano ligero: fuselaje ahusado, ala con raíz reforzada, estabilizador y deriva."] = {es = "Monoplano ligero: fuselaje ahusado, ala con raíz reforzada, estabilizador y deriva.", en = "Light plane with fuselage, wings, tail, pilot seat and rear propulsion."},
-    ["Avión intermedio: fuselaje dual, ala de gran envergadura, cabina acristalada y empenaje completo."] = {es = "Avión intermedio: fuselaje dual, ala de gran envergadura, cabina acristalada y empenaje completo.", en = "Reinforced plane with wider wings, stabilizers, cockpit and twin propulsion when available."},
-    ["Aeronave avanzada: fuselaje grueso multi-capa, alas estratificadas, invernadero de cabina y cola completa."] = {es = "Aeronave avanzada: fuselaje grueso multi-capa, alas estratificadas, invernadero de cabina y cola completa.", en = "Large plane with reinforced fuselage, extended wings, cockpit, full tail and multiple propulsion."},
-    ["Creando nuevo carro. El resultado dependerá de los materiales y componentes que tengas."] = {es = "Creando nuevo carro. El resultado dependerá de los materiales y componentes que tengas.", en = "Building a new car. The result will depend on the materials and components you own."},
-    ["Creando nuevo avión. El resultado dependerá de los materiales y componentes que tengas."] = {es = "Creando nuevo avión. El resultado dependerá de los materiales y componentes que tengas.", en = "Building a new plane. The result will depend on the materials and components you own."},
-    ["Carro creado correctamente."] = {es = "Carro creado correctamente.", en = "Car built successfully."},
-    ["Avión creado correctamente."] = {es = "Avión creado correctamente.", en = "Plane built successfully."},
-    ["No se pudo completar el carro: "] = {es = "No se pudo completar el carro: ", en = "The car could not be completed: "},
-    ["No se pudo completar el avión: "] = {es = "No se pudo completar el avión: ", en = "The plane could not be completed: "},
-    ["No tienes suficientes ruedas o asiento de manejo; el carro puede crearse sin conducción completa."] = {es = "No tienes suficientes ruedas o asiento de manejo; el carro puede crearse sin conducción completa.", en = "You don't have enough wheels or a driver seat; the car may be built without full driving controls."},
-    ["No tienes asiento de piloto o propulsión; el avión puede crearse sin vuelo completo."] = {es = "No tienes asiento de piloto o propulsión; el avión puede crearse sin vuelo completo.", en = "You don't have a pilot seat or propulsion; the plane may be built without full flight controls."},
-    ["Sistema de conducción del carro añadido."] = {es = "Sistema de conducción del carro añadido.", en = "Car driving system added."},
-    ["Sistema de vuelo del avión añadido."] = {es = "Sistema de vuelo del avión añadido.", en = "Plane flight system added."},
-    ["Ya se está creando un vehículo."] = {es = "Ya se está creando un vehículo.", en = "A vehicle is already being built."},
-    ["Desactiva Auto Farm antes de crear un vehículo."] = {es = "Desactiva Auto Farm antes de crear un vehículo.", en = "Disable Auto Farm before building a vehicle."},
-    ["Continuar con los materiales actuales; el vehículo puede reducirse."] = {es = "Continuar con los materiales actuales; el vehículo puede reducirse.", en = "Continue with current materials; the vehicle may be reduced."},
-    ["Farmear para completar"] = {es = "Farmear para completar", en = "Farm to Complete"},
-    ["FARMEAR Y COMPRAR"] = {es = "FARMEAR Y COMPRAR", en = "FARM AND BUY"},
-    ["CONTINUAR SIN FARMEAR"] = {es = "CONTINUAR SIN FARMEAR", en = "CONTINUE WITHOUT FARMING"},
-    ["Te faltan recursos y tu oro actual no alcanza para comprarlos. HX Boat puede farmear hasta conseguir el oro necesario, comprar automáticamente lo faltante y continuar."] = {es = "Te faltan recursos y tu oro actual no alcanza para comprarlos. HX Boat puede farmear hasta conseguir el oro necesario, comprar automáticamente lo faltante y continuar.", en = "You are missing resources and your current Gold is not enough to buy them. HX Boat can farm until it has enough Gold, automatically buy what is missing, and continue."},
-    ["Farmeando oro para completar la construcción..."] = {es = "Farmeando oro para completar la construcción...", en = "Farming Gold to complete the build..."},
-    ["Oro suficiente. Comprando automáticamente los recursos faltantes..."] = {es = "Oro suficiente. Comprando automáticamente los recursos faltantes...", en = "Enough Gold collected. Automatically buying the missing resources..."},
-    ["No pude conseguir suficiente oro para continuar automáticamente."] = {es = "No pude conseguir suficiente oro para continuar automáticamente.", en = "I couldn't collect enough Gold to continue automatically."},
-    ["Ya se está farmeando oro para una construcción."] = {es = "Ya se está farmeando oro para una construcción.", en = "Gold is already being farmed for a build."},
-    ["Selecciona tu dispositivo"] = {es = "Selecciona tu dispositivo", en = "Select your device"},
-    ["Elige cómo quieres que HX Boat adapte la interfaz."] = {es = "Elige cómo quieres que HX Boat adapte la interfaz.", en = "Choose how HX Boat should adapt the interface."},
-    ["COMPUTADORA"] = {es = "COMPUTADORA", en = "COMPUTER"},
-    ["CELULAR"] = {es = "CELULAR", en = "MOBILE"},
-    ["AUTOMÁTICO"] = {es = "AUTOMÁTICO", en = "AUTOMATIC"},
-    ["Usar interfaz para computadora."] = {es = "Usar interfaz para computadora.", en = "Use the computer interface."},
-    ["Usar interfaz compacta para celular."] = {es = "Usar interfaz compacta para celular.", en = "Use the compact mobile interface."},
-    ["Detectar automáticamente el dispositivo."] = {es = "Detectar automáticamente el dispositivo.", en = "Automatically detect the device."},
-    ["¿Cómo quieres usar Automático?"] = {es = "¿Cómo quieres usar Automático?", en = "How do you want to use Automatic?"},
-    ["SOLO ESTA VEZ"] = {es = "SOLO ESTA VEZ", en = "THIS TIME ONLY"},
-    ["USAR SIEMPRE"] = {es = "USAR SIEMPRE", en = "ALWAYS USE"},
-    ["Detectará el dispositivo únicamente en esta ejecución."] = {es = "Detectará el dispositivo únicamente en esta ejecución.", en = "It will detect the device only for this run."},
-    ["Guardará Automático y lo usará en futuras ejecuciones."] = {es = "Guardará Automático y lo usará en futuras ejecuciones.", en = "Automatic will be saved and used on future runs."},
-    ["Auto Crear Helicóptero"] = {es = "Auto Crear Helicóptero", en = "Auto Build Helicopter"},
-    ["Crea un helicóptero con fuselaje, patines, cola, rotor visual y control de vuelo."] = {es = "Crea un helicóptero con fuselaje, patines, cola, rotor visual y control de vuelo.", en = "Builds a helicopter with fuselage, skids, tail, visual rotor and flight controls."},
-    ["Auto Crear Submarino"] = {es = "Auto Crear Submarino", en = "Auto Build Submarine"},
-    ["Crea un submarino reforzado con casco cerrado, cabina y propulsión trasera."] = {es = "Crea un submarino reforzado con casco cerrado, cabina y propulsión trasera.", en = "Builds a reinforced submarine with an enclosed hull, cabin and rear propulsion."},
-    ["Auto Crear Moto"] = {es = "Auto Crear Moto", en = "Auto Build Motorcycle"},
-    ["Crea una moto compacta con chasis, dos ruedas y asiento de manejo."] = {es = "Crea una moto compacta con chasis, dos ruedas y asiento de manejo.", en = "Builds a compact motorcycle with chassis, two wheels and driver seat."},
-    ["Auto Crear Tanque"] = {es = "Auto Crear Tanque", en = "Auto Build Tank"},
-    ["Crea un tanque reforzado con chasis ancho, ruedas laterales y torreta visual."] = {es = "Crea un tanque reforzado con chasis ancho, ruedas laterales y torreta visual.", en = "Builds a reinforced tank with a wide chassis, side wheels and visual turret."},
-    ["Auto Crear Cohete"] = {es = "Auto Crear Cohete", en = "Auto Build Rocket"},
-    ["Crea un cohete vertical con fuselaje, punta, aletas y propulsión inferior."] = {es = "Crea un cohete vertical con fuselaje, punta, aletas y propulsión inferior.", en = "Builds a vertical rocket with fuselage, nose, fins and lower propulsion."},
-    ["Auto Crear Barco de Farm"] = {es = "Auto Crear Barco de Farm", en = "Auto Build Farm Boat"},
-    ["Crea un barco compacto pensado para recorrer stages con poco peso y buena protección."] = {es = "Crea un barco compacto pensado para recorrer stages con poco peso y buena protección.", en = "Builds a compact boat designed for stage runs with low weight and good protection."},
-    ["Auto Crear Base/Plataforma"] = {es = "Auto Crear Base/Plataforma", en = "Auto Build Base/Platform"},
-    ["Crea una plataforma estable para construir o usar como base."] = {es = "Crea una plataforma estable para construir o usar como base.", en = "Builds a stable platform for building or using as a base."},
-    ["Selecciona un helicóptero"] = {es = "Selecciona un helicóptero", en = "Select a Helicopter"},
-    ["Selecciona un submarino"] = {es = "Selecciona un submarino", en = "Select a Submarine"},
-    ["Selecciona una moto"] = {es = "Selecciona una moto", en = "Select a Motorcycle"},
-    ["Selecciona un tanque"] = {es = "Selecciona un tanque", en = "Select a Tank"},
-    ["Selecciona un cohete"] = {es = "Selecciona un cohete", en = "Select a Rocket"},
-    ["Selecciona un barco de farm"] = {es = "Selecciona un barco de farm", en = "Select a Farm Boat"},
-    ["Selecciona una base"] = {es = "Selecciona una base", en = "Select a Base"},
-    ["Versión básica, pequeña y económica."] = {es = "Versión básica, pequeña y económica.", en = "Basic, small and economical version."},
-    ["Versión intermedia con más estructura y protección."] = {es = "Versión intermedia con más estructura y protección.", en = "Intermediate version with more structure and protection."},
-    ["Versión avanzada con mayor tamaño, refuerzo y componentes."] = {es = "Versión avanzada con mayor tamaño, refuerzo y componentes.", en = "Advanced version with larger size, reinforcement and components."},
-    ["Creando vehículo automáticamente..."] = {es = "Creando vehículo automáticamente...", en = "Automatically building vehicle..."},
-    ["Construcción creada correctamente."] = {es = "Construcción creada correctamente.", en = "Build created successfully."},
-    ["No se pudo completar la construcción: "] = {es = "No se pudo completar la construcción: ", en = "The build could not be completed: "},
-    ["Faltan componentes para que este vehículo funcione completamente."] = {es = "Faltan componentes para que este vehículo funcione completamente.", en = "Some components are missing for this vehicle to work completely."},
-    ["No detecté objetivos de misión"] = {es = "No detecté objetivos de misión", en = "No quest objectives detected"},
-    ["Activa una misión desde el menú de Quests y pulsa BUSCAR otra vez."] = {es = "Activa una misión desde el menú de Quests y pulsa BUSCAR otra vez.", en = "Start a quest from the Quests menu and press SEARCH again."},
-    ["Selector de Misiones"] = {es = "Selector de Misiones", en = "Quest Selector"},
-    ["Detectando misiones..."] = {es = "Detectando misiones...", en = "Detecting quests..."},
-    ["Escaneando objetivos del mapa"] = {es = "Escaneando objetivos del mapa", en = "Scanning map objectives"},
-    ["Detectando... "] = {es = "Detectando... ", en = "Detecting... "},
-    [" encontrados"] = {es = " encontrados", en = " found"},
-    ["Detección completada"] = {es = "Detección completada", en = "Detection complete"},
-    ["Misión seleccionada: "] = {es = "Misión seleccionada: ", en = "Selected quest: "},
-    ["Objetivo: "] = {es = "Objetivo: ", en = "Objective: "},
-    ["Volver a detectar"] = {es = "Volver a detectar", en = "Scan Again"},
-    ["Repite el escaneo para actualizar los objetivos disponibles."] = {es = "Repite el escaneo para actualizar los objetivos disponibles.", en = "Runs the scan again to refresh the available objectives."},
-    ["0 DETECTADOS"] = {es = "0 DETECTADOS", en = "0 DETECTED"},
-    ["No se encontró ningún objetivo de la misión seleccionada."] = {es = "No se encontró ningún objetivo de la misión seleccionada.", en = "No objective was found for the selected quest."},
-    ["VOLVER A INTENTAR"] = {es = "VOLVER A INTENTAR", en = "TRY AGAIN"},
-    ["CANCELAR"] = {es = "CANCELAR", en = "CANCEL"},
-    ["Selecciona la misión que quieres buscar o automatizar."] = {es = "Selecciona la misión que quieres buscar o automatizar.", en = "Select the quest you want to find or automate."},
-    ["Misión activa para búsqueda: "] = {es = "Misión activa para búsqueda: ", en = "Quest selected for search: "},
-    ["Primero selecciona una misión para mejorar la detección."] = {es = "Primero selecciona una misión para mejorar la detección.", en = "Select a quest first to improve detection."},
-    ["Cargando..."] = {es = "Cargando...", en = "Loading..."},
-    ["Tiempo: "] = {es = "Tiempo: ", en = "Time: "},
-    ["Detectando objetivos"] = {es = "Detectando objetivos", en = "Detecting objectives"},
-    ["Construyendo..."] = {es = "Construyendo...", en = "Building..."},
-    ["Completando recorrido..."] = {es = "Completando recorrido...", en = "Completing run..."},
-    ["Farmeando para construir..."] = {es = "Farmeando para construir...", en = "Farming for build..."},
-    ["Buscando servidor..."] = {es = "Buscando servidor...", en = "Searching for server..."},
-    ["Preparando construcción"] = {es = "Preparando construcción", en = "Preparing build"},
-    ["Buscando objetivo de "] = {es = "Buscando objetivo de ", en = "Searching objective for "},
-    ["0 objetivos encontrados"] = {es = "0 objetivos encontrados", en = "0 objectives found"},
-    ["Preparando reparación..."] = {es = "Preparando reparación...", en = "Preparing repair..."},
-    ["Buscando construcciones guardadas..."] = {es = "Buscando construcciones guardadas...", en = "Searching saved builds..."},
-    ["Buscando botón de guardado..."] = {es = "Buscando botón de guardado...", en = "Searching save control..."},
-    ["Preparando lanzamiento..."] = {es = "Preparando lanzamiento...", en = "Preparing launch..."},
-    ["Buscando..."] = {es = "Buscando...", en = "Searching..."},
-    ["Máximo 10 segundos"] = {es = "Máximo 10 segundos", en = "Maximum 10 seconds"},
-    ["Búsqueda cancelada"] = {es = "Búsqueda cancelada", en = "Search cancelled"},
-    ["BUSCAR"] = {es = "BUSCAR", en = "SEARCH"},
-}
-
-ENV.__HX_TR = function(value)
-    local raw = tostring(value or "")
-    local pair = ENV.__HX_TEXTS and ENV.__HX_TEXTS[raw]
-    if pair then
-        return ENV.__HX_LANG == "en" and pair.en or pair.es
-    end
-
-    -- Dynamic labels/messages.
-    local n = string.match(raw, "^Posición (%d+)$")
-    if n then return ENV.__HX_LANG == "en" and ("Position " .. n) or ("Posición " .. n) end
-    n = string.match(raw, "^Position (%d+)$")
-    if n then return ENV.__HX_LANG == "en" and ("Position " .. n) or ("Posición " .. n) end
-    n = string.match(raw, "^Posición (%d+) guardada$")
-    if n then return ENV.__HX_LANG == "en" and ("Position " .. n .. " saved") or ("Posición " .. n .. " guardada") end
-    n = string.match(raw, "^Position (%d+) saved$")
-    if n then return ENV.__HX_LANG == "en" and ("Position " .. n .. " saved") or ("Posición " .. n .. " guardada") end
-    n = string.match(raw, "^Position (%d+) guardada$")
-    if n then return ENV.__HX_LANG == "en" and ("Position " .. n .. " saved") or ("Posición " .. n .. " guardada") end
-
-    if string.sub(raw, 1, 23) == "Propulsores activados: " then
-        local tail = string.sub(raw, 24)
-        return ENV.__HX_LANG == "en" and ("Thrusters activated: " .. tail) or raw
-    end
-    if string.sub(raw, 1, 17) == "Follow activado: " then
-        local tail = string.sub(raw, 18)
-        return ENV.__HX_LANG == "en" and ("Follow enabled: " .. tail) or ("Seguimiento activado: " .. tail)
-    end
-    if string.sub(raw, 1, 15) == "Error interno: " then
-        local tail = string.sub(raw, 16)
-        return ENV.__HX_LANG == "en" and ("Internal error: " .. tail) or raw
-    end
-
-    return raw
-end
-
-do
-    local settingsFile = "HX_Boat_Settings.json"
-    local remembered = ENV.__HX_REMEMBERED_LANG
-    ENV.__HX_LANG = nil
-
-    if remembered == "es" or remembered == "en" then
-        ENV.__HX_LANG = remembered
-    elseif readfile and isfile and isfile(settingsFile) then
-        pcall(function()
-            local data = HttpService:JSONDecode(readfile(settingsFile))
-            if type(data) == "table" and data.remember == true and (data.language == "es" or data.language == "en") then
-                ENV.__HX_LANG = data.language
-                ENV.__HX_REMEMBERED_LANG = data.language
-            end
+    local function spawnShootingStar()
+        local ss = Instance.new("Frame")
+        ss.Name = "ShootingStar"
+        ss.BorderSizePixel = 0
+        ss.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        ss.BackgroundTransparency = 0.05
+        ss.Size = UDim2.fromOffset(2.5, 2.5)
+        ss.AnchorPoint = Vector2.new(0.5, 0.5)
+        ss.ZIndex = 3
+        local startX = rng:NextNumber(0.02, 0.98)
+        ss.Position = UDim2.new(startX, 0, -0.06, 0)
+        local c = Instance.new("UICorner", ss)
+        c.CornerRadius = UDim.new(1, 0)
+        local trail = Instance.new("Frame")
+        trail.AnchorPoint = Vector2.new(0.5, 0)
+        trail.Position = UDim2.new(0.5, 0, 0, 0)
+        trail.Size = UDim2.fromOffset(2, rng:NextNumber(26, 48))
+        trail.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        trail.BackgroundTransparency = 0.25
+        trail.BorderSizePixel = 0
+        trail.Parent = ss
+        local tc = Instance.new("UICorner", trail)
+        tc.CornerRadius = UDim.new(1, 0)
+        local tg = Instance.new("UIGradient", trail)
+        tg.Rotation = 90
+        tg.Transparency = NumberSequence.new{
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(1, 1)
+        }
+        ss.Parent = starsFolder
+        local dur = rng:NextNumber(0.4, 0.95)
+        local endX = startX + rng:NextNumber(-0.22, 0.22)
+        TweenService:Create(ss, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(endX, 0, 1.12, 0),
+            BackgroundTransparency = 1
+        }):Play()
+        TweenService:Create(trail, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            BackgroundTransparency = 1
+        }):Play()
+        task.delay(dur + 0.05, function()
+            if ss then ss:Destroy() end
         end)
     end
 
-    if not ENV.__HX_LANG then
-        local picker = Instance.new("CanvasGroup")
-        picker.Name = "HX_LanguagePicker"
-        picker.AnchorPoint = Vector2.new(0.5, 0.5)
-        picker.Position = UDim2.fromScale(0.5, 0.5)
-        picker.Size = UDim2.fromOffset(430, 280)
-        picker.BackgroundTransparency = 1
-        picker.GroupTransparency = 1
-        picker.ZIndex = 500
-        picker.Parent = Gui
-
-        local pickerScale = Instance.new("UIScale")
-        pickerScale.Scale = 0.90
-        pickerScale.Parent = picker
-
-        local shell = Instance.new("Frame")
-        shell.Size = UDim2.fromScale(1, 1)
-        shell.BackgroundColor3 = Theme.accent
-        shell.BorderSizePixel = 0
-        shell.ClipsDescendants = true
-        shell.ZIndex = picker.ZIndex
-        shell.Parent = picker
-        corner(shell, 28)
-
-        local surface = Instance.new("Frame")
-        surface.Position = UDim2.fromOffset(4, 4)
-        surface.Size = UDim2.new(1, -8, 1, -8)
-        surface.BackgroundColor3 = Theme.bg
-        surface.BorderSizePixel = 0
-        surface.ClipsDescendants = true
-        surface.ZIndex = shell.ZIndex + 1
-        surface.Parent = shell
-        corner(surface, 24)
-
-        local dots = Instance.new("Frame")
-        dots.Size = UDim2.fromScale(1, 1)
-        dots.BackgroundTransparency = 1
-        dots.BorderSizePixel = 0
-        dots.ClipsDescendants = true
-        dots.ZIndex = surface.ZIndex + 1
-        dots.Parent = surface
-
-        local rng = Random.new(727425)
-        local pickerAlive = true
-        local function moveDot(dot)
-            if not pickerAlive or not dot.Parent then return end
-            local tw = TweenService:Create(dot, TweenInfo.new(rng:NextNumber(9, 17), Enum.EasingStyle.Linear), {
-                Position = UDim2.fromScale(rng:NextNumber(-0.02, 1.02), rng:NextNumber(-0.02, 1.02))
-            })
-            tw:Play()
-            tw.Completed:Connect(function()
-                if pickerAlive and dot.Parent then moveDot(dot) end
-            end)
-        end
-
-        for i = 1, (UserInputService.TouchEnabled and 42 or 62) do
-            local dot = Instance.new("Frame")
-            local size = rng:NextInteger(1, 4)
-            dot.AnchorPoint = Vector2.new(0.5, 0.5)
-            dot.Size = UDim2.fromOffset(size, size)
-            dot.Position = UDim2.fromScale(rng:NextNumber(), rng:NextNumber())
-            dot.BackgroundColor3 = Theme.accent
-            dot.BackgroundTransparency = rng:NextNumber(0.20, 0.72)
-            dot.BorderSizePixel = 0
-            dot.ZIndex = dots.ZIndex + 1
-            dot.Parent = dots
-            corner(dot, 4)
-            moveDot(dot)
-        end
-
-        local shade = Instance.new("Frame")
-        shade.Size = UDim2.fromScale(1, 1)
-        shade.BackgroundColor3 = Theme.panel
-        shade.BackgroundTransparency = 0.24
-        shade.BorderSizePixel = 0
-        shade.ZIndex = surface.ZIndex + 3
-        shade.Parent = surface
-        corner(shade, 24)
-
-        local logoTitle = Instance.new("TextLabel")
-        logoTitle.BackgroundTransparency = 1
-        logoTitle.Position = UDim2.fromOffset(24, 26)
-        logoTitle.Size = UDim2.new(1, -48, 0, 28)
-        logoTitle.Font = Enum.Font.GothamBlack
-        logoTitle.Text = "HX Boat"
-        logoTitle.TextColor3 = Theme.text
-        logoTitle.TextSize = 20
-        logoTitle.ZIndex = shade.ZIndex + 2
-        logoTitle.Parent = surface
-
-        local chooseTitle = Instance.new("TextLabel")
-        chooseTitle.BackgroundTransparency = 1
-        chooseTitle.Position = UDim2.fromOffset(24, 58)
-        chooseTitle.Size = UDim2.new(1, -48, 0, 34)
-        chooseTitle.Font = Enum.Font.GothamSemibold
-        chooseTitle.Text = "Selecciona el idioma  •  Select language"
-        chooseTitle.TextColor3 = Theme.muted
-        chooseTitle.TextSize = 12
-        chooseTitle.ZIndex = shade.ZIndex + 2
-        chooseTitle.Parent = surface
-
-        local remember = false
-        local rememberButton = Instance.new("TextButton")
-        rememberButton.AnchorPoint = Vector2.new(0.5, 0)
-        rememberButton.Position = UDim2.new(0.5, 0, 0, 190)
-        rememberButton.Size = UDim2.fromOffset(230, 36)
-        rememberButton.BackgroundColor3 = Theme.panel2
-        rememberButton.BorderSizePixel = 0
-        rememberButton.AutoButtonColor = false
-        rememberButton.Font = Enum.Font.GothamSemibold
-        rememberButton.Text = "○  Recordar / Remember me"
-        rememberButton.TextColor3 = Theme.text
-        rememberButton.TextSize = 11
-        rememberButton.ZIndex = shade.ZIndex + 3
-        rememberButton.Parent = surface
-        corner(rememberButton, 18)
-
-        local function finishLanguage(language)
-            ENV.__HX_LANG = language
-            ENV.__HX_LANGUAGE_PICKED_THIS_RUN = true
-            if remember then
-                ENV.__HX_REMEMBERED_LANG = language
-                if writefile then
-                    pcall(function()
-                        writefile(settingsFile, HttpService:JSONEncode({language = language, remember = true}))
-                    end)
+    -- más estrellas fugaces, a veces en ráfagas
+    task.spawn(function()
+        while galaxy and galaxy.Parent do
+            task.wait(rng:NextNumber(0.45, 1.4))
+            if galaxy and galaxy.Parent and not menu:GetAttribute("H3XA_Minimized") then
+                local burst = rng:NextInteger(1, 3)
+                for _ = 1, burst do
+                    spawnShootingStar()
+                    task.wait(rng:NextNumber(0.05, 0.18))
                 end
+            end
+        end
+    end)
+
+    local RunService = game:GetService("RunService")
+    if getgenv().H3XA_GalaxyConn then
+        pcall(function() getgenv().H3XA_GalaxyConn:Disconnect() end)
+    end
+    getgenv().H3XA_GalaxyConn = RunService.RenderStepped:Connect(function(dt)
+        if not galaxy or not galaxy.Parent then return end
+        if menu:GetAttribute("H3XA_Minimized") then return end
+        local t = os.clock()
+        for _, st in ipairs(staticStars) do
+            local inst = st.inst
+            if inst and inst.Parent then
+                local tw = (math.sin(t * st.twinkle + st.phase) + 1) * 0.5
+                inst.BackgroundTransparency = math.clamp(st.baseT + tw * 0.4, 0.05, 0.9)
+            end
+        end
+        for i = #fallingStars, 1, -1 do
+            local st = fallingStars[i]
+            local inst = st.inst
+            if not inst or not inst.Parent then
+                table.remove(fallingStars, i)
             else
-                ENV.__HX_REMEMBERED_LANG = nil
-                if delfile and isfile and isfile(settingsFile) then pcall(delfile, settingsFile) end
-            end
-
-            pickerAlive = false
-            TweenService:Create(picker, TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {GroupTransparency = 1}):Play()
-            TweenService:Create(pickerScale, TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Scale = 0.94}):Play()
-            task.delay(0.16, function() if picker.Parent then picker:Destroy() end end)
-        end
-
-        local function languageButton(label, language, x)
-            local button = Instance.new("TextButton")
-            button.AnchorPoint = Vector2.new(0.5, 0)
-            button.Position = UDim2.new(0.5, x, 0, 112)
-            button.Size = UDim2.fromOffset(168, 56)
-            button.BackgroundColor3 = Theme.accent
-            button.BorderSizePixel = 0
-            button.AutoButtonColor = false
-            button.Font = Enum.Font.GothamBlack
-            button.Text = label
-            button.TextColor3 = Theme.bg
-            button.TextSize = 13
-            button.ZIndex = shade.ZIndex + 3
-            button.Parent = surface
-            corner(button, 18)
-
-            local scale = Instance.new("UIScale")
-            scale.Scale = 1
-            scale.Parent = button
-            button.MouseEnter:Connect(function() tween(scale, {Scale = 1.035}, 0.10) end)
-            button.MouseLeave:Connect(function() tween(scale, {Scale = 1}, 0.10) end)
-            button.Activated:Connect(function()
-                tween(scale, {Scale = 0.94}, 0.06)
-                finishLanguage(language)
-            end)
-        end
-
-        rememberButton.Activated:Connect(function()
-            remember = not remember
-            rememberButton.Text = (remember and "●  " or "○  ") .. "Recordar / Remember me"
-            tween(rememberButton, {BackgroundColor3 = remember and Theme.soft or Theme.panel2}, 0.10)
-        end)
-
-        languageButton("ESPAÑOL", "es", -92)
-        languageButton("ENGLISH", "en", 92)
-
-        TweenService:Create(picker, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
-        TweenService:Create(pickerScale, TweenInfo.new(0.30, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
-
-        while alive and not ENV.__HX_LANG do task.wait() end
-    end
-end
-
---====================================================
--- Device / dispositivo
---====================================================
-do
-    local deviceFile = "HX_Boat_Device.json"
-    ENV.__HX_DEVICE = nil
-    ENV.__HX_DEVICE_MODE = nil
-
-    local function detectDevice()
-        local camera = Workspace.CurrentCamera
-        local viewportX = camera and camera.ViewportSize.X or 1280
-        local touch = UserInputService.TouchEnabled
-        local keyboard = UserInputService.KeyboardEnabled
-        local mouse = UserInputService.MouseEnabled
-
-        -- Phone/tablet detection. Touch laptops with a normal desktop-size
-        -- viewport and mouse/keyboard stay in the computer layout.
-        if touch and ((not keyboard and not mouse) or viewportX < 900) then
-            return "mobile"
-        end
-        return "desktop"
-    end
-
-    -- "Usar siempre" only remembers Automatic. Manual COMPUTER/MOBILE choices
-    -- remain one-session choices, exactly as selected by the user.
-    if readfile and isfile and isfile(deviceFile) then
-        pcall(function()
-            local saved = HttpService:JSONDecode(readfile(deviceFile))
-            if type(saved) == "table" and saved.automaticAlways == true then
-                ENV.__HX_DEVICE_MODE = "automatic"
-                ENV.__HX_DEVICE = detectDevice()
-            end
-        end)
-    end
-
-    if not ENV.__HX_DEVICE then
-        if ENV.__HX_LANGUAGE_PICKED_THIS_RUN then
-            task.wait(0.18)
-            ENV.__HX_LANGUAGE_PICKED_THIS_RUN = nil
-        end
-
-        local picker = Instance.new("CanvasGroup")
-        picker.Name = "HX_DevicePicker"
-        picker.AnchorPoint = Vector2.new(0.5, 0.5)
-        picker.Position = UDim2.fromScale(0.5, 0.5)
-        picker.Size = UDim2.fromOffset(430, 330)
-        picker.BackgroundTransparency = 1
-        picker.GroupTransparency = 1
-        picker.ZIndex = 510
-        picker.Parent = Gui
-
-        local pickerScale = Instance.new("UIScale")
-        pickerScale.Scale = 0.90
-        pickerScale.Parent = picker
-
-        local shell = Instance.new("Frame")
-        shell.Size = UDim2.fromScale(1, 1)
-        shell.BackgroundColor3 = Theme.accent
-        shell.BorderSizePixel = 0
-        shell.ClipsDescendants = true
-        shell.ZIndex = picker.ZIndex
-        shell.Parent = picker
-        corner(shell, 28)
-
-        local surface = Instance.new("Frame")
-        surface.Position = UDim2.fromOffset(4, 4)
-        surface.Size = UDim2.new(1, -8, 1, -8)
-        surface.BackgroundColor3 = Theme.bg
-        surface.BorderSizePixel = 0
-        surface.ClipsDescendants = true
-        surface.ZIndex = shell.ZIndex + 1
-        surface.Parent = shell
-        corner(surface, 24)
-
-        local dots = Instance.new("Frame")
-        dots.Size = UDim2.fromScale(1, 1)
-        dots.BackgroundTransparency = 1
-        dots.BorderSizePixel = 0
-        dots.ClipsDescendants = true
-        dots.ZIndex = surface.ZIndex + 1
-        dots.Parent = surface
-
-        local rng = Random.new(334417)
-        local pickerAlive = true
-        local function moveDot(dot)
-            if not pickerAlive or not dot.Parent then return end
-            local tw = TweenService:Create(dot, TweenInfo.new(rng:NextNumber(9, 17), Enum.EasingStyle.Linear), {
-                Position = UDim2.fromScale(rng:NextNumber(-0.02, 1.02), rng:NextNumber(-0.02, 1.02))
-            })
-            tw:Play()
-            tw.Completed:Connect(function()
-                if pickerAlive and dot.Parent then moveDot(dot) end
-            end)
-        end
-
-        for i = 1, 48 do
-            local dot = Instance.new("Frame")
-            local size = rng:NextInteger(1, 4)
-            dot.AnchorPoint = Vector2.new(0.5, 0.5)
-            dot.Size = UDim2.fromOffset(size, size)
-            dot.Position = UDim2.fromScale(rng:NextNumber(), rng:NextNumber())
-            dot.BackgroundColor3 = Theme.accent
-            dot.BackgroundTransparency = rng:NextNumber(0.20, 0.72)
-            dot.BorderSizePixel = 0
-            dot.ZIndex = dots.ZIndex + 1
-            dot.Parent = dots
-            corner(dot, 4)
-            moveDot(dot)
-        end
-
-        local shade = Instance.new("Frame")
-        shade.Size = UDim2.fromScale(1, 1)
-        shade.BackgroundColor3 = Theme.panel
-        shade.BackgroundTransparency = 0.22
-        shade.BorderSizePixel = 0
-        shade.ZIndex = surface.ZIndex + 3
-        shade.Parent = surface
-        corner(shade, 24)
-
-        local title = Instance.new("TextLabel")
-        title.BackgroundTransparency = 1
-        title.Position = UDim2.fromOffset(24, 22)
-        title.Size = UDim2.new(1, -48, 0, 30)
-        title.Font = Enum.Font.GothamBlack
-        title.Text = ENV.__HX_TR("Selecciona tu dispositivo")
-        title.TextColor3 = Theme.text
-        title.TextSize = 18
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.ZIndex = shade.ZIndex + 2
-        title.Parent = surface
-
-        local subtitle = Instance.new("TextLabel")
-        subtitle.BackgroundTransparency = 1
-        subtitle.Position = UDim2.fromOffset(24, 52)
-        subtitle.Size = UDim2.new(1, -48, 0, 28)
-        subtitle.Font = Enum.Font.Gotham
-        subtitle.Text = ENV.__HX_TR("Elige cómo quieres que HX Boat adapte la interfaz.")
-        subtitle.TextColor3 = Theme.muted
-        subtitle.TextSize = 10
-        subtitle.TextWrapped = true
-        subtitle.TextXAlignment = Enum.TextXAlignment.Left
-        subtitle.ZIndex = shade.ZIndex + 2
-        subtitle.Parent = surface
-
-        local choiceHolder = Instance.new("Frame")
-        choiceHolder.Position = UDim2.fromOffset(24, 90)
-        choiceHolder.Size = UDim2.new(1, -48, 1, -112)
-        choiceHolder.BackgroundTransparency = 1
-        choiceHolder.ZIndex = shade.ZIndex + 2
-        choiceHolder.Parent = surface
-
-        local list = Instance.new("UIListLayout")
-        list.Padding = UDim.new(0, 9)
-        list.SortOrder = Enum.SortOrder.LayoutOrder
-        list.Parent = choiceHolder
-
-        local function closePicker()
-            pickerAlive = false
-            tween(picker, {GroupTransparency = 1}, 0.16)
-            tween(pickerScale, {Scale = 0.94}, 0.16)
-            task.delay(0.16, function()
-                if picker.Parent then picker:Destroy() end
-            end)
-        end
-
-        local function clearChoices()
-            for _, child in ipairs(choiceHolder:GetChildren()) do
-                if not child:IsA("UIListLayout") then child:Destroy() end
-            end
-        end
-
-        local function chooseDevice(mode)
-            ENV.__HX_DEVICE_MODE = mode
-            ENV.__HX_DEVICE = mode == "mobile" and "mobile" or "desktop"
-
-            if delfile and isfile and isfile(deviceFile) then
-                pcall(delfile, deviceFile)
-            end
-
-            closePicker()
-        end
-
-        local function makeChoice(label, description, callback)
-            local button = Instance.new("TextButton")
-            button.Size = UDim2.new(1, 0, 0, 61)
-            button.BackgroundColor3 = Theme.accent
-            button.BorderSizePixel = 0
-            button.AutoButtonColor = false
-            button.Text = ""
-            button.ClipsDescendants = true
-            button.ZIndex = choiceHolder.ZIndex + 1
-            button.Parent = choiceHolder
-            corner(button, 17)
-
-            local inner = Instance.new("Frame")
-            inner.Position = UDim2.fromOffset(2, 2)
-            inner.Size = UDim2.new(1, -4, 1, -4)
-            inner.BackgroundColor3 = Theme.panel2
-            inner.BorderSizePixel = 0
-            inner.ZIndex = button.ZIndex + 1
-            inner.Parent = button
-            corner(inner, 15)
-
-            local mainText = Instance.new("TextLabel")
-            mainText.Position = UDim2.fromOffset(14, 8)
-            mainText.Size = UDim2.new(1, -28, 0, 20)
-            mainText.BackgroundTransparency = 1
-            mainText.Font = Enum.Font.GothamBlack
-            mainText.Text = ENV.__HX_TR(label)
-            mainText.TextColor3 = Theme.text
-            mainText.TextSize = 12
-            mainText.TextXAlignment = Enum.TextXAlignment.Left
-            mainText.ZIndex = inner.ZIndex + 1
-            mainText.Parent = inner
-
-            local subText = Instance.new("TextLabel")
-            subText.Position = UDim2.fromOffset(14, 29)
-            subText.Size = UDim2.new(1, -28, 0, 18)
-            subText.BackgroundTransparency = 1
-            subText.Font = Enum.Font.Gotham
-            subText.Text = ENV.__HX_TR(description)
-            subText.TextColor3 = Theme.muted
-            subText.TextSize = 9
-            subText.TextWrapped = true
-            subText.TextXAlignment = Enum.TextXAlignment.Left
-            subText.ZIndex = inner.ZIndex + 1
-            subText.Parent = inner
-
-            local scale = Instance.new("UIScale")
-            scale.Scale = 1
-            scale.Parent = button
-
-            button.MouseEnter:Connect(function()
-                tween(inner, {BackgroundColor3 = Theme.soft}, 0.10)
-                tween(scale, {Scale = 1.015}, 0.10)
-            end)
-            button.MouseLeave:Connect(function()
-                tween(inner, {BackgroundColor3 = Theme.panel2}, 0.10)
-                tween(scale, {Scale = 1}, 0.10)
-            end)
-            button.Activated:Connect(function()
-                tween(scale, {Scale = 0.97}, 0.06)
-                task.spawn(callback)
-            end)
-        end
-
-        local function showAutomaticChoice()
-            clearChoices()
-            title.Text = ENV.__HX_TR("¿Cómo quieres usar Automático?")
-            subtitle.Text = ENV.__HX_TR("Detectar automáticamente el dispositivo.")
-
-            makeChoice(
-                "SOLO ESTA VEZ",
-                "Detectará el dispositivo únicamente en esta ejecución.",
-                function()
-                    ENV.__HX_DEVICE_MODE = "automatic_once"
-                    ENV.__HX_DEVICE = detectDevice()
-
-                    if delfile and isfile and isfile(deviceFile) then
-                        pcall(delfile, deviceFile)
-                    end
-                    closePicker()
+                local p = inst.Position
+                local ny = p.Y.Scale + st.speed * dt
+                local nx = p.X.Scale + st.drift * dt
+                if ny > 1.08 then
+                    ny = rng:NextNumber(-0.14, -0.02)
+                    nx = rng:NextNumber(0, 1)
+                    st.speed = rng:NextNumber(0.035, 0.22)
+                    st.drift = rng:NextNumber(-0.035, 0.035)
                 end
-            )
-
-            makeChoice(
-                "USAR SIEMPRE",
-                "Guardará Automático y lo usará en futuras ejecuciones.",
-                function()
-                    ENV.__HX_DEVICE_MODE = "automatic"
-                    ENV.__HX_DEVICE = detectDevice()
-
-                    if writefile then
-                        pcall(function()
-                            writefile(deviceFile, HttpService:JSONEncode({
-                                automaticAlways = true
-                            }))
-                        end)
-                    end
-                    closePicker()
-                end
-            )
-        end
-
-        makeChoice("COMPUTADORA", "Usar interfaz para computadora.", function()
-            chooseDevice("desktop")
-        end)
-
-        makeChoice("CELULAR", "Usar interfaz compacta para celular.", function()
-            chooseDevice("mobile")
-        end)
-
-        makeChoice("AUTOMÁTICO", "Detectar automáticamente el dispositivo.", showAutomaticChoice)
-
-        tween(picker, {GroupTransparency = 0}, 0.22)
-        tween(pickerScale, {Scale = 1}, 0.28)
-
-        while alive and not ENV.__HX_DEVICE do task.wait() end
-    end
-end
-
--- Only build the full hub inside Build A Boat For Treasure.
--- In every other place, show a lightweight animated redirect panel and stop here.
-if game.PlaceId ~= 537413528 then
-    local Gate = Instance.new("Frame")
-    Gate.Name = "BABFT_OnlyGate"
-    Gate.AnchorPoint = Vector2.new(0.5, 0.5)
-    Gate.Position = UDim2.fromScale(0.5, 0.5)
-    Gate.Size = ENV.__HX_DEVICE == "mobile" and UDim2.fromOffset(390, 205) or UDim2.fromOffset(500, 250)
-    Gate.BackgroundTransparency = 1
-    Gate.BorderSizePixel = 0
-    Gate.ZIndex = 200
-    Gate.Parent = Gui
-
-    local GateScale = Instance.new("UIScale")
-    GateScale.Scale = 0.90
-    GateScale.Parent = Gate
-
-    local GateShell = Instance.new("Frame")
-    GateShell.Size = UDim2.fromScale(1, 1)
-    GateShell.BackgroundColor3 = Theme.accent
-    GateShell.BorderSizePixel = 0
-    GateShell.ClipsDescendants = true
-    GateShell.ZIndex = Gate.ZIndex
-    GateShell.Parent = Gate
-    corner(GateShell, 28)
-
-    local GateSurface = Instance.new("Frame")
-    GateSurface.Position = UDim2.fromOffset(4, 4)
-    GateSurface.Size = UDim2.new(1, -8, 1, -8)
-    GateSurface.BackgroundColor3 = Theme.bg
-    GateSurface.BorderSizePixel = 0
-    GateSurface.ClipsDescendants = true
-    GateSurface.ZIndex = Gate.ZIndex + 1
-    GateSurface.Parent = GateShell
-    corner(GateSurface, 23)
-
-    local GateDots = Instance.new("Frame")
-    GateDots.Size = UDim2.fromScale(1, 1)
-    GateDots.BackgroundTransparency = 1
-    GateDots.BorderSizePixel = 0
-    GateDots.ClipsDescendants = true
-    GateDots.ZIndex = GateSurface.ZIndex + 1
-    GateDots.Parent = GateSurface
-
-    local gateRng = Random.new(913742)
-    local gateDotsAlive = true
-    local gateTweens = {}
-    local function gateTarget()
-        return UDim2.fromScale(gateRng:NextNumber(-0.025, 1.025), gateRng:NextNumber(-0.025, 1.025))
-    end
-    local function animateGateDot(dot)
-        if not gateDotsAlive or not dot or not dot.Parent then return end
-        local tw = TweenService:Create(
-            dot,
-            TweenInfo.new(gateRng:NextNumber(8.5, 18.0), Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
-            {Position = gateTarget()}
-        )
-        gateTweens[dot] = tw
-        tw:Play()
-        local conn
-        conn = tw.Completed:Connect(function()
-            if conn then conn:Disconnect() end
-            gateTweens[dot] = nil
-            if gateDotsAlive and dot.Parent then animateGateDot(dot) end
-        end)
-    end
-
-    for i = 1, (ENV.__HX_DEVICE == "mobile" and 55 or 110) do
-        local dot = Instance.new("Frame")
-        local roll = gateRng:NextInteger(1, 100)
-        local size = roll <= 5 and 5 or (roll <= 18 and 4 or (roll <= 45 and 3 or (roll <= 74 and 2 or 1)))
-        dot.Name = "GateDot_" .. i
-        dot.AnchorPoint = Vector2.new(0.5, 0.5)
-        dot.Size = UDim2.fromOffset(size, size)
-        dot.Position = gateTarget()
-        dot.BackgroundColor3 = Theme.accent
-        dot.BackgroundTransparency = gateRng:NextNumber(0.10, 0.66)
-        dot.BorderSizePixel = 0
-        dot.ZIndex = GateDots.ZIndex + 1
-        dot.Parent = GateDots
-        if size >= 3 then corner(dot, math.ceil(size / 2)) end
-        animateGateDot(dot)
-    end
-
-    local GateShade = Instance.new("Frame")
-    GateShade.Size = UDim2.fromScale(1, 1)
-    GateShade.BackgroundColor3 = Theme.panel
-    GateShade.BackgroundTransparency = 0.28
-    GateShade.BorderSizePixel = 0
-    GateShade.ZIndex = GateSurface.ZIndex + 3
-    GateShade.Parent = GateSurface
-    corner(GateShade, 24)
-
-    local GateTitle = Instance.new("TextLabel")
-    GateTitle.BackgroundTransparency = 1
-    GateTitle.Position = UDim2.fromOffset(28, 40)
-    GateTitle.Size = UDim2.new(1, -56, 0, 34)
-    GateTitle.Font = Enum.Font.GothamBlack
-    GateTitle.Text = "BUILD A BOAT FOR TREASURE"
-    GateTitle.TextColor3 = Theme.text
-    GateTitle.TextSize = 20
-    GateTitle.TextXAlignment = Enum.TextXAlignment.Center
-    GateTitle.ZIndex = GateShade.ZIndex + 2
-    GateTitle.Parent = GateSurface
-
-    local GateText = Instance.new("TextLabel")
-    GateText.BackgroundTransparency = 1
-    GateText.Position = UDim2.fromOffset(34, 82)
-    GateText.Size = UDim2.new(1, -68, 0, 48)
-    GateText.Font = Enum.Font.GothamMedium
-    GateText.Text = ENV.__HX_TR("Este script funciona únicamente en Build A Boat For Treasure.")
-    GateText.TextWrapped = true
-    GateText.TextColor3 = Theme.muted
-    GateText.TextSize = 13
-    GateText.TextXAlignment = Enum.TextXAlignment.Center
-    GateText.TextYAlignment = Enum.TextYAlignment.Center
-    GateText.ZIndex = GateShade.ZIndex + 2
-    GateText.Parent = GateSurface
-
-    local Go = Instance.new("TextButton")
-    Go.AnchorPoint = Vector2.new(0.5, 0)
-    Go.Position = UDim2.new(0.5, 0, 0, 155)
-    Go.Size = UDim2.fromOffset(200, 46)
-    Go.BackgroundColor3 = Theme.accent
-    Go.BorderSizePixel = 0
-    Go.AutoButtonColor = false
-    Go.Font = Enum.Font.GothamBold
-    Go.Text = ENV.__HX_TR("IR AL JUEGO")
-    Go.TextColor3 = Theme.bg
-    Go.TextSize = 12
-    Go.ZIndex = GateShade.ZIndex + 3
-    Go.Parent = GateSurface
-    corner(Go, 18)
-
-    local GoScale = Instance.new("UIScale")
-    GoScale.Scale = 1
-    GoScale.Parent = Go
-
-    local GateClose = Instance.new("TextButton")
-    GateClose.AnchorPoint = Vector2.new(1, 0)
-    GateClose.Position = UDim2.new(1, -14, 0, 14)
-    GateClose.Size = UDim2.fromOffset(34, 34)
-    GateClose.BackgroundColor3 = Theme.panel2
-    GateClose.BorderSizePixel = 0
-    GateClose.AutoButtonColor = false
-    GateClose.Font = Enum.Font.GothamBold
-    GateClose.Text = "×"
-    GateClose.TextColor3 = Theme.text
-    GateClose.TextSize = 17
-    GateClose.ZIndex = GateShade.ZIndex + 4
-    GateClose.Parent = GateSurface
-    corner(GateClose, 17)
-
-    local closingGate = false
-    local function closeGate()
-        if closingGate then return end
-        closingGate = true
-        gateDotsAlive = false
-        tween(GateScale, {Scale = 0.90}, 0.18)
-        tween(GateSurface, {BackgroundTransparency = 0.35}, 0.18)
-        task.delay(0.17, function()
-            for _, tw in pairs(gateTweens) do pcall(function() tw:Cancel() end) end
-            if Gui then pcall(function() Gui:Destroy() end) end
-        end)
-    end
-
-    Go.MouseEnter:Connect(function() tween(GoScale, {Scale = 1.055}, 0.12) end)
-    Go.MouseLeave:Connect(function() tween(GoScale, {Scale = 1}, 0.12) end)
-    Go.Activated:Connect(function()
-        tween(GoScale, {Scale = 0.94}, 0.08)
-        task.delay(0.08, function()
-            if Gui and Gui.Parent then
-                pcall(function() TeleportService:Teleport(537413528, LP) end)
-                tween(GoScale, {Scale = 1}, 0.12)
+                inst.Position = UDim2.new(nx, 0, ny, 0)
+                local tw = (math.sin(t * st.twinkle + st.phase) + 1) * 0.5
+                inst.BackgroundTransparency = math.clamp(st.baseT + tw * 0.35, 0.02, 0.85)
             end
+        end
+        while #fallingStars < STAR_COUNT do
+            spawnStar(false)
+        end
+    end)
+
+    Converted["_List"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Converted["_List"].BackgroundTransparency = 1
+    Converted["_UICorner19"].CornerRadius = UDim.new(0, 22)
+    local listStroke = Converted["_List"]:FindFirstChildOfClass("UIStroke")
+    if listStroke then
+        listStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        listStroke.LineJoinMode = Enum.LineJoinMode.Round
+        listStroke.Color = Color3.fromRGB(255, 255, 255)
+        listStroke.Thickness = 1.4
+        listStroke.Transparency = 0
+    else
+        listStroke = Instance.new("UIStroke")
+        listStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        listStroke.LineJoinMode = Enum.LineJoinMode.Round
+        listStroke.Color = Color3.fromRGB(255, 255, 255)
+        listStroke.Thickness = 1.4
+        listStroke.Transparency = 0
+        listStroke.Parent = Converted["_List"]
+    end
+
+    -- Brand logo (header zone — List/Area empiezan debajo, Y>=76)
+    local brandLogo = Instance.new("ImageLabel")
+    brandLogo.Name = "BrandLogo"
+    brandLogo.BackgroundTransparency = 1
+    brandLogo.Position = UDim2.fromOffset(24, 16)
+    brandLogo.Size = UDim2.fromOffset(44, 44)
+    brandLogo.Image = "rbxassetid://72742584610344"
+    brandLogo.ScaleType = Enum.ScaleType.Fit
+    brandLogo.ZIndex = 40
+    brandLogo.Parent = menu
+
+    -- Title next to logo
+    local brandTitle = Instance.new("TextLabel")
+    brandTitle.Name = "BrandTitle"
+    brandTitle.BackgroundTransparency = 1
+    brandTitle.Position = UDim2.fromOffset(76, 18)
+    brandTitle.Size = UDim2.fromOffset(200, 40)
+    brandTitle.Font = Enum.Font.GothamBold
+    brandTitle.Text = "HX MM2"
+    brandTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    brandTitle.TextSize = 26
+    brandTitle.TextXAlignment = Enum.TextXAlignment.Left
+    brandTitle.TextYAlignment = Enum.TextYAlignment.Center
+    brandTitle.TextStrokeTransparency = 1
+    brandTitle.ZIndex = 40
+    brandTitle.Parent = menu
+
+    -- Thin white top glow
+    local topGlow = Instance.new("Frame")
+    topGlow.Name = "TopGlow"
+    topGlow.AnchorPoint = Vector2.new(0.5, 0)
+    topGlow.Position = UDim2.new(0.5, 0, 0, 0)
+    topGlow.Size = UDim2.new(0.72, 0, 0, 2)
+    topGlow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    topGlow.BackgroundTransparency = 1
+    topGlow.Visible = false
+    topGlow.BorderSizePixel = 0
+    topGlow.ZIndex = 14
+    topGlow.Parent = menu
+    local topGlowCorner = Instance.new("UICorner")
+    topGlowCorner.CornerRadius = UDim.new(1, 0)
+    topGlowCorner.Parent = topGlow
+
+    -- Header controls: [Lang] [–] [×]
+    local controlBar = Instance.new("Frame")
+    controlBar.Name = "HeaderControls"
+    controlBar.AnchorPoint = Vector2.new(1, 0)
+    controlBar.Position = UDim2.new(1, -18, 0, 18)
+    controlBar.Size = UDim2.fromOffset(126, 36)
+    controlBar.BackgroundTransparency = 1
+    controlBar.ZIndex = 50
+    controlBar.Parent = menu
+
+    local controlLayout = Instance.new("UIListLayout")
+    controlLayout.FillDirection = Enum.FillDirection.Horizontal
+    controlLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    controlLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    controlLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    controlLayout.Padding = UDim.new(0, 6)
+    controlLayout.Parent = controlBar
+
+    local function makeHeaderIconBtn(name, order, iconText)
+        local btn = Instance.new("TextButton")
+        btn.Name = name
+        btn.LayoutOrder = order
+        btn.Size = UDim2.fromOffset(36, 36)
+        btn.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+        btn.BackgroundTransparency = 0.4
+        btn.BorderSizePixel = 0
+        btn.AutoButtonColor = false
+        btn.Font = Enum.Font.GothamBold
+        btn.Text = iconText
+        btn.TextColor3 = Color3.fromRGB(240, 240, 245)
+        btn.TextSize = 16
+        btn.TextStrokeTransparency = 1
+        btn.ZIndex = 51
+        btn.Parent = controlBar
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 16)
+        c.Parent = btn
+        local s = Instance.new("UIStroke")
+        s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        s.Color = Color3.fromRGB(255, 255, 255)
+        s.Thickness = 1
+        s.Transparency = 0.82
+        s.Parent = btn
+        return btn, s
+    end
+
+    -- Language (left) — LayoutOrder 0
+    local langBtn, langStroke = makeHeaderIconBtn("LangBtn", 0, "文")
+
+    -- Minimize (derecha del idioma) — LayoutOrder 1
+    local minimizeBtn = Instance.new("TextButton")
+    minimizeBtn.Name = "MinimizeBtn"
+    minimizeBtn.LayoutOrder = 1
+    minimizeBtn.Size = UDim2.fromOffset(36, 36)
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+    minimizeBtn.BackgroundTransparency = 0.4
+    minimizeBtn.BorderSizePixel = 0
+    minimizeBtn.AutoButtonColor = false
+    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.Text = "–"
+    minimizeBtn.TextColor3 = Color3.fromRGB(240, 240, 245)
+    minimizeBtn.TextSize = 22
+    minimizeBtn.TextStrokeTransparency = 1
+    minimizeBtn.ZIndex = 51
+    minimizeBtn.Parent = controlBar
+
+    local minCorner = Instance.new("UICorner")
+    minCorner.CornerRadius = UDim.new(0, 16)
+    minCorner.Parent = minimizeBtn
+
+    local minStroke = Instance.new("UIStroke")
+    minStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    minStroke.Color = Color3.fromRGB(255, 255, 255)
+    minStroke.Thickness = 1
+    minStroke.Transparency = 0.82
+    minStroke.Parent = minimizeBtn
+
+    -- Close (RIGHT) — LayoutOrder 2
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseAll"
+    closeButton.LayoutOrder = 2
+    closeButton.Size = UDim2.fromOffset(36, 36)
+    closeButton.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+    closeButton.BackgroundTransparency = 0.4
+    closeButton.BorderSizePixel = 0
+    closeButton.AutoButtonColor = false
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Text = "×"
+    closeButton.TextColor3 = Color3.fromRGB(240, 240, 245)
+    closeButton.TextSize = 22
+    closeButton.TextStrokeTransparency = 1
+    closeButton.ZIndex = 51
+    closeButton.Parent = controlBar
+
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 16)
+    closeCorner.Parent = closeButton
+
+    local closeStroke = Instance.new("UIStroke")
+    closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    closeStroke.Color = Color3.fromRGB(255, 255, 255)
+    closeStroke.Thickness = 1
+    closeStroke.Transparency = 0.82
+    closeStroke.Parent = closeButton
+
+    local function hoverBtn(btn, stroke)
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.16, Enum.EasingStyle.Quint), {
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                BackgroundTransparency = 0.15,
+                TextColor3 = Color3.fromRGB(15, 15, 18)
+            }):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.16), {Transparency = 0.55}):Play()
         end)
-    end)
-    GateClose.MouseEnter:Connect(function() tween(GateClose, {BackgroundColor3 = Theme.soft}, 0.10) end)
-    GateClose.MouseLeave:Connect(function() tween(GateClose, {BackgroundColor3 = Theme.panel2}, 0.10) end)
-    GateClose.Activated:Connect(closeGate)
-
-    ENV.__BABFT_NIGHTFALL_CLEANUP = closeGate
-
-    Gate.Position = UDim2.new(0.5, 0, 0.5, 18)
-    GateSurface.BackgroundTransparency = 0.28
-    tween(Gate, {Position = UDim2.fromScale(0.5, 0.5)}, 0.28)
-    tween(GateScale, {Scale = 1}, 0.28)
-    tween(GateSurface, {BackgroundTransparency = 0}, 0.28)
-    return
-end
-
-local PANEL_W, PANEL_H = ENV.__HX_DEVICE == "mobile" and 460 or 650, ENV.__HX_DEVICE == "mobile" and 320 or 440
-local PANEL_MIN_W, PANEL_MIN_H = ENV.__HX_DEVICE == "mobile" and 430 or 610, ENV.__HX_DEVICE == "mobile" and 300 or 410
-local TOP_H, SIDE_W = ENV.__HX_DEVICE == "mobile" and 48 or 58, ENV.__HX_DEVICE == "mobile" and 122 or 158
-
--- Main is now only the movable container.
--- No UIStroke is used on the outer panel: the rounded border is made from
--- two nested rounded frames so square stroke artifacts cannot appear.
-local Main = Instance.new("CanvasGroup")
-Main.Name = "Main"
-Main.Size = UDim2.fromOffset(PANEL_W, PANEL_H)
-Main.Position = UDim2.new(0.5, -PANEL_W/2, 0.5, -PANEL_H/2)
-Main.BackgroundTransparency = 1
-Main.GroupTransparency = 0
-Main.BorderSizePixel = 0
-Main.ClipsDescendants = false
-Main.ZIndex = 10
-Main.Parent = Gui
-
-do
-    local scale = Instance.new("UIScale")
-    scale.Name = "MotionScale"
-    scale.Scale = 1
-    scale.Parent = Main
-end
-
-local PanelShell = Instance.new("Frame")
-PanelShell.Name = "RoundedShell"
-PanelShell.Size = UDim2.fromScale(1, 1)
-PanelShell.BackgroundColor3 = Theme.accent
-PanelShell.BackgroundTransparency = 0
-PanelShell.BorderSizePixel = 0
-PanelShell.ClipsDescendants = true
-PanelShell.ZIndex = Main.ZIndex
-PanelShell.Parent = Main
-corner(PanelShell, 28)
-
-local PanelSurface = Instance.new("Frame")
-PanelSurface.Name = "RoundedSurface"
-PanelSurface.Position = UDim2.fromOffset(4, 4)
-PanelSurface.Size = UDim2.new(1, -8, 1, -8)
-PanelSurface.BackgroundColor3 = Theme.bg
-PanelSurface.BackgroundTransparency = 0
-PanelSurface.BorderSizePixel = 0
-PanelSurface.ClipsDescendants = true
-PanelSurface.ZIndex = Main.ZIndex + 1
-PanelSurface.Parent = PanelShell
-corner(PanelSurface, 23)
-
--- Smooth animated background: white dots only.
-local StarField = Instance.new("Frame")
-StarField.Name = "MovingDotsBackground"
-StarField.Size = UDim2.fromScale(1, 1)
-StarField.BackgroundTransparency = 1
-StarField.BorderSizePixel = 0
-StarField.ClipsDescendants = true
-StarField.ZIndex = PanelSurface.ZIndex + 1
-StarField.Parent = PanelSurface
-
-local DOT_COUNT = ENV.__HX_DEVICE == "mobile" and 58 or 120
-local dotRng = Random.new(913742)
-local movingDots = {}
-
-local function randomDotTarget()
-    return UDim2.fromScale(dotRng:NextNumber(-0.025, 1.025), dotRng:NextNumber(-0.025, 1.025))
-end
-
-local function animateDot(data)
-    if not alive or not data.object or not data.object.Parent then return end
-
-    local dot = data.object
-    local target = randomDotTarget()
-    local duration = dotRng:NextNumber(8.5, 18.0)
-
-    local tw = TweenService:Create(
-        dot,
-        TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut),
-        {Position = target}
-    )
-    data.tween = tw
-    tw:Play()
-
-    local conn
-    conn = tw.Completed:Connect(function()
-        if conn then conn:Disconnect() end
-        data.tween = nil
-        if alive and dot.Parent then
-            animateDot(data)
-        end
-    end)
-end
-
-for i = 1, DOT_COUNT do
-    local dot = Instance.new("Frame")
-    local roll = dotRng:NextInteger(1, 100)
-    local size
-    if roll <= 4 then
-        size = 6
-    elseif roll <= 12 then
-        size = 5
-    elseif roll <= 26 then
-        size = 4
-    elseif roll <= 47 then
-        size = 3
-    elseif roll <= 73 then
-        size = 2
-    else
-        size = 1
+        btn.MouseLeave:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.16, Enum.EasingStyle.Quint), {
+                BackgroundColor3 = Color3.fromRGB(10, 10, 14),
+                BackgroundTransparency = 0.4,
+                TextColor3 = Color3.fromRGB(240, 240, 245)
+            }):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.16), {Transparency = 0.82}):Play()
+        end)
     end
+    hoverBtn(minimizeBtn, minStroke)
+    hoverBtn(closeButton, closeStroke)
+    hoverBtn(langBtn, langStroke)
 
-    dot.Name = "Dot_" .. i
-    dot.AnchorPoint = Vector2.new(0.5, 0.5)
-    dot.Size = UDim2.fromOffset(size, size)
-    dot.Position = randomDotTarget()
-    dot.BackgroundColor3 = Color3.new(1, 1, 1)
-    dot.BackgroundTransparency = dotRng:NextNumber(0.08, 0.62)
-    dot.BorderSizePixel = 0
-    dot.ZIndex = StarField.ZIndex + 1
-    dot.Parent = StarField
-
-    if size >= 3 then
-        corner(dot, math.ceil(size / 2))
-    end
-
-    local data = {object = dot, tween = nil}
-    movingDots[#movingDots + 1] = data
-    animateDot(data)
-end
-
-track(Main:GetPropertyChangedSignal("Visible"):Connect(function()
-    for _, data in ipairs(movingDots) do
-        local tw = data.tween
-        if tw then
-            if Main.Visible then
-                pcall(function() tw:Play() end)
-            else
-                pcall(function() tw:Pause() end)
-            end
-        elseif Main.Visible and alive and data.object and data.object.Parent then
-            animateDot(data)
-        end
-    end
-end))
-
-local Top = Instance.new("Frame")
-Top.Name = "TopBar"
-Top.Size = UDim2.new(1, 0, 0, TOP_H)
-Top.BackgroundColor3 = Theme.panel
-Top.BackgroundTransparency = 0.10
-Top.BorderSizePixel = 0
-Top.ZIndex = PanelSurface.ZIndex + 3
-Top.Parent = PanelSurface
-corner(Top, 20)
-
-local Title = Instance.new("TextLabel")
-Title.BackgroundTransparency = 1
-Title.Position = UDim2.fromOffset(ENV.__HX_DEVICE == "mobile" and 50 or 62, 0)
-Title.Size = UDim2.new(1, ENV.__HX_DEVICE == "mobile" and -250 or -315, 1, 0)
-Title.Font = Enum.Font.GothamBlack
-Title.Text = "HX Boat"
-Title.TextColor3 = Theme.text
-Title.TextSize = ENV.__HX_DEVICE == "mobile" and 15 or 18
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.ZIndex = Top.ZIndex + 1
-Title.Parent = Top
-
--- Header logo: same asset used by the floating restore button.
-ENV.__HX_HeaderLogo = Instance.new("ImageLabel")
-ENV.__HX_HeaderLogo.Name = "HeaderLogo"
-ENV.__HX_HeaderLogo.AnchorPoint = Vector2.new(0, 0.5)
-ENV.__HX_HeaderLogo.Position = UDim2.new(0, ENV.__HX_DEVICE == "mobile" and 13 or 18, 0.5, 0)
-ENV.__HX_HeaderLogo.Size = UDim2.fromOffset(ENV.__HX_DEVICE == "mobile" and 27 or 34, ENV.__HX_DEVICE == "mobile" and 27 or 34)
-ENV.__HX_HeaderLogo.BackgroundTransparency = 1
-ENV.__HX_HeaderLogo.BorderSizePixel = 0
-ENV.__HX_HeaderLogo.Image = "rbxassetid://72742584610344"
-ENV.__HX_HeaderLogo.ImageColor3 = Color3.new(1, 1, 1)
-ENV.__HX_HeaderLogo.ScaleType = Enum.ScaleType.Fit
-ENV.__HX_HeaderLogo.ZIndex = Top.ZIndex + 3
-ENV.__HX_HeaderLogo.Parent = Top
-
--- Discord button.
-ENV.__HX_DiscordButton = Instance.new("TextButton")
-ENV.__HX_DiscordButton.Name = "DiscordButton"
-ENV.__HX_DiscordButton.AnchorPoint = Vector2.new(1, 0.5)
-ENV.__HX_DiscordButton.Position = UDim2.new(1, ENV.__HX_DEVICE == "mobile" and -88 or -102, 0.5, 0)
-ENV.__HX_DiscordButton.Size = UDim2.fromOffset(ENV.__HX_DEVICE == "mobile" and 76 or 92, ENV.__HX_DEVICE == "mobile" and 28 or 34)
-ENV.__HX_DiscordButton.BackgroundColor3 = Theme.accent
-ENV.__HX_DiscordButton.BackgroundTransparency = 0.02
-ENV.__HX_DiscordButton.BorderSizePixel = 0
-ENV.__HX_DiscordButton.AutoButtonColor = false
-ENV.__HX_DiscordButton.Font = Enum.Font.GothamBlack
-ENV.__HX_DiscordButton.Text = "DISCORD"
-ENV.__HX_DiscordButton.TextColor3 = Theme.bg
-ENV.__HX_DiscordButton.TextSize = ENV.__HX_DEVICE == "mobile" and 8 or 10
-ENV.__HX_DiscordButton.ZIndex = Top.ZIndex + 4
-ENV.__HX_DiscordButton.Parent = Top
-corner(ENV.__HX_DiscordButton, 17)
-
-do
-    local scale = Instance.new("UIScale")
-    scale.Name = "HoverScale"
-    scale.Scale = 1
-    scale.Parent = ENV.__HX_DiscordButton
-end
-
-track(ENV.__HX_DiscordButton.MouseEnter:Connect(function()
-    tween(ENV.__HX_DiscordButton, {BackgroundColor3 = Color3.fromRGB(224, 224, 224)}, 0.10)
-    local scale = ENV.__HX_DiscordButton:FindFirstChild("HoverScale")
-    if scale then tween(scale, {Scale = 1.035}, 0.10) end
-end))
-
-track(ENV.__HX_DiscordButton.MouseLeave:Connect(function()
-    tween(ENV.__HX_DiscordButton, {BackgroundColor3 = Theme.accent}, 0.11)
-    local scale = ENV.__HX_DiscordButton:FindFirstChild("HoverScale")
-    if scale then tween(scale, {Scale = 1}, 0.11) end
-end))
-
-track(ENV.__HX_DiscordButton.MouseButton1Down:Connect(function()
-    local scale = ENV.__HX_DiscordButton:FindFirstChild("HoverScale")
-    if scale then tween(scale, {Scale = 0.94}, 0.055) end
-end))
-
-track(ENV.__HX_DiscordButton.MouseButton1Up:Connect(function()
-    local scale = ENV.__HX_DiscordButton:FindFirstChild("HoverScale")
-    if scale then tween(scale, {Scale = 1}, 0.08) end
-end))
-
-track(ENV.__HX_DiscordButton.Activated:Connect(function()
-    local invite = "https://discord.gg/sewRzHAG5J"
-    local copied = false
-
-    if setclipboard then
-        copied = pcall(setclipboard, invite)
-    elseif toclipboard then
-        copied = pcall(toclipboard, invite)
-    end
-
-    -- Some executors/clients allow opening a browser window directly.
-    local opened = pcall(function()
-        GuiService:OpenBrowserWindow(invite)
-    end)
-
-    if copied then
-        toast("Discord copiado correctamente.")
-    elseif not opened then
-        toast("https://discord.gg/sewRzHAG5J")
-    end
-end))
-
-local Sub = Instance.new("TextLabel")
-Sub.BackgroundTransparency = 1
-Sub.Position = UDim2.fromOffset(18, 32)
-Sub.Size = UDim2.new(1, -185, 0, 15)
-Sub.Font = Enum.Font.GothamMedium
-Sub.Text = ""
-Sub.Visible = false
-Sub.TextColor3 = Theme.muted
-Sub.TextSize = 9
-Sub.TextXAlignment = Enum.TextXAlignment.Left
-Sub.ZIndex = Top.ZIndex + 1
-Sub.Parent = Top
-
-local HeaderLine = Instance.new("Frame")
-HeaderLine.Position = UDim2.new(0, 14, 1, -1)
-HeaderLine.Size = UDim2.new(1, -28, 0, 1)
-HeaderLine.BackgroundColor3 = Theme.accent
-HeaderLine.BackgroundTransparency = 0.68
-HeaderLine.BorderSizePixel = 0
-HeaderLine.ZIndex = Top.ZIndex + 1
-HeaderLine.Parent = Top
-
-local Status = Instance.new("TextLabel")
-Status.AnchorPoint = Vector2.new(1, 0.5)
-Status.Position = UDim2.new(1, -92, 0.5, 0)
-Status.Size = UDim2.fromOffset(78, 22)
-Status.BackgroundTransparency = 1
-Status.Font = Enum.Font.GothamBold
-Status.Text = ""
-Status.Visible = false
-Status.TextColor3 = Theme.muted
-Status.TextSize = 8
-Status.TextXAlignment = Enum.TextXAlignment.Right
-Status.ZIndex = Top.ZIndex + 2
-Status.Parent = Top
-
-local function topButton(text, x, color)
-    local b = Instance.new("TextButton")
-    b.AnchorPoint = Vector2.new(1, 0.5)
-    b.Position = UDim2.new(1, x, 0.5, 0)
-    b.Size = UDim2.fromOffset(ENV.__HX_DEVICE == "mobile" and 28 or 34, ENV.__HX_DEVICE == "mobile" and 28 or 34)
-    b.BackgroundColor3 = Theme.accent
-    b.BackgroundTransparency = 0.02
-    b.BorderSizePixel = 0
-    b.AutoButtonColor = false
-    b.Font = Enum.Font.GothamBlack
-    b.Text = text
-    b.TextColor3 = Theme.bg
-    b.TextSize = ENV.__HX_DEVICE == "mobile" and (text == "×" and 16 or 15) or (text == "×" and 19 or 18)
-    b.ZIndex = Top.ZIndex + 3
-    b.Parent = Top
-    corner(b, 17)
-
-    local scale = Instance.new("UIScale")
-    scale.Scale = 1
-    scale.Parent = b
-
-    track(b.MouseEnter:Connect(function()
-        tween(b, {BackgroundColor3 = Color3.fromRGB(224, 224, 224)}, 0.10)
-        tween(scale, {Scale = 1.055}, 0.10)
-    end))
-    track(b.MouseLeave:Connect(function()
-        tween(b, {BackgroundColor3 = Theme.accent}, 0.11)
-        tween(scale, {Scale = 1}, 0.11)
-    end))
-    track(b.MouseButton1Down:Connect(function()
-        tween(scale, {Scale = 0.88}, 0.055)
-    end))
-    track(b.MouseButton1Up:Connect(function()
-        tween(scale, {Scale = 1}, 0.09)
-    end))
-    return b
-end
-
-local Close = topButton("×", ENV.__HX_DEVICE == "mobile" and -10 or -14, Theme.danger)
-local Minimize = topButton("−", ENV.__HX_DEVICE == "mobile" and -44 or -56, Theme.text)
-
-local Sidebar = Instance.new("Frame")
-Sidebar.Position = UDim2.fromOffset(0, TOP_H)
-Sidebar.Size = UDim2.new(0, SIDE_W, 1, -TOP_H)
-Sidebar.BackgroundColor3 = Theme.panel
-Sidebar.BackgroundTransparency = 0.05
-Sidebar.BorderSizePixel = 0
-Sidebar.ZIndex = PanelSurface.ZIndex + 2
-Sidebar.Parent = PanelSurface
-corner(Sidebar, 20)
-
--- Divider is deliberately OUTSIDE the list container so UIListLayout can
--- never reposition it or push the category buttons off-screen.
-local SideDivider = Instance.new("Frame")
-SideDivider.AnchorPoint = Vector2.new(1, 0)
-SideDivider.Position = UDim2.new(1, -1, 0, 9)
-SideDivider.Size = UDim2.new(0, 1, 1, -18)
-SideDivider.BackgroundColor3 = Theme.accent
-SideDivider.BackgroundTransparency = 0.68
-SideDivider.BorderSizePixel = 0
-SideDivider.ZIndex = Sidebar.ZIndex + 1
-SideDivider.Parent = Sidebar
-
-local NavContainer = Instance.new("Frame")
-NavContainer.Name = "NavContainer"
-NavContainer.Position = UDim2.fromOffset(10, 10)
-NavContainer.Size = UDim2.new(1, -21, 1, -20)
-NavContainer.BackgroundTransparency = 1
-NavContainer.BorderSizePixel = 0
-NavContainer.ZIndex = Sidebar.ZIndex + 2
-NavContainer.Parent = Sidebar
-
-local SideList = Instance.new("UIListLayout")
-SideList.Padding = UDim.new(0, ENV.__HX_DEVICE == "mobile" and 2 or 5)
-SideList.SortOrder = Enum.SortOrder.LayoutOrder
-SideList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-SideList.Parent = NavContainer
-
-local NavTitle = Instance.new("TextLabel")
-NavTitle.LayoutOrder = -20
-NavTitle.Size = UDim2.new(1, 0, 0, ENV.__HX_DEVICE == "mobile" and 18 or 24)
-NavTitle.BackgroundTransparency = 1
-NavTitle.Font = Enum.Font.GothamBlack
-NavTitle.Text = ENV.__HX_TR("CATEGORÍAS")
-NavTitle.TextColor3 = Theme.text
-NavTitle.TextSize = ENV.__HX_DEVICE == "mobile" and 8 or 9
-NavTitle.TextXAlignment = Enum.TextXAlignment.Left
-NavTitle.ZIndex = NavContainer.ZIndex + 2
-NavTitle.Parent = NavContainer
-
-local ContentHolder = Instance.new("Frame")
-ContentHolder.Position = UDim2.fromOffset(SIDE_W, TOP_H)
-ContentHolder.Size = UDim2.new(1, -SIDE_W, 1, -TOP_H)
-ContentHolder.BackgroundTransparency = 1
-ContentHolder.BorderSizePixel = 0
-ContentHolder.ZIndex = PanelSurface.ZIndex + 2
-ContentHolder.Parent = PanelSurface
-
-local pages = {}
-local categoryButtons = {}
-local currentPage
-
-local categories = {
-    {"FARM", "Farm"},
-    {"AUTO CREAR", "AutoBuild"},
-    {"BARCO", "Boat"},
-    {"MOVIMIENTO", "Movement"},
-    {"TELEPORT", "Teleport"},
-    {"VISUALES", "Visuals"},
-    {"SERVIDOR", "Server"},
-}
-
-local function makePage(key)
-    local sc = Instance.new("ScrollingFrame")
-    sc.Name = key
-    sc.Size = UDim2.fromScale(1, 1)
-    sc.BackgroundTransparency = 1
-    sc.BorderSizePixel = 0
-    sc.ScrollBarThickness = 2
-    sc.ScrollBarImageColor3 = Theme.accent
-    sc.CanvasSize = UDim2.fromOffset(0, 0)
-    sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    sc.Visible = false
-    sc.ZIndex = ContentHolder.ZIndex + 1
-    sc.Parent = ContentHolder
-
-    local pageScale = Instance.new("UIScale")
-    pageScale.Name = "PageMotion"
-    pageScale.Scale = 1
-    pageScale.Parent = sc
-
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0, 11)
-    pad.PaddingBottom = UDim.new(0, 14)
-    pad.PaddingLeft = UDim.new(0, 12)
-    pad.PaddingRight = UDim.new(0, 12)
-    pad.Parent = sc
-
-    local list = Instance.new("UIListLayout")
-    list.Padding = UDim.new(0, 7)
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-    list.Parent = sc
-
-    pages[key] = sc
-    return sc
-end
-
-for _, item in ipairs(categories) do makePage(item[2]) end
-
-local function renderCategoryButton(key, selected, hovered)
-    local b = categoryButtons[key]
-    if not b then return end
-
-    local surface = b:FindFirstChild("Surface")
-    local label = b:FindFirstChild("Label")
-    local arrow = b:FindFirstChild("Arrow")
-
-    b.BackgroundColor3 = Theme.accent
-
-    if selected then
-        if surface then tween(surface, {BackgroundColor3 = Theme.accent}, 0.09) end
-        if label then tween(label, {TextColor3 = Theme.bg}, 0.09) end
-        if arrow then tween(arrow, {TextColor3 = Theme.bg}, 0.09) end
-    else
-        local idleColor = hovered and Color3.fromRGB(20, 20, 20) or Color3.fromRGB(5, 5, 5)
-        if surface then tween(surface, {BackgroundColor3 = idleColor}, 0.09) end
-        if label then tween(label, {TextColor3 = Theme.text}, 0.09) end
-        if arrow then tween(arrow, {TextColor3 = Theme.text}, 0.09) end
-    end
-end
-
-local function selectPage(key)
-    if currentPage == key then return end
-    currentPage = key
-
-    -- Kill any previous visual state first. No delayed hide and no lateral
-    -- movement, so rapid category changes cannot leave pages half-shifted.
-    for k, p in pairs(pages) do
-        p.Position = UDim2.fromOffset(0, 0)
-        local pageScale = p:FindFirstChild("PageMotion")
-        if pageScale then pageScale.Scale = 1 end
-        p.Visible = false
-    end
-
-    local nextPage = pages[key]
-    if nextPage then
-        local pageScale = nextPage:FindFirstChild("PageMotion")
-        if pageScale then pageScale.Scale = 0.985 end
-        nextPage.ScrollBarImageTransparency = 1
-        nextPage.Visible = true
-
-        if pageScale then tween(pageScale, {Scale = 1}, 0.12) end
-        tween(nextPage, {ScrollBarImageTransparency = 0}, 0.12)
-    end
-
-    for k in pairs(categoryButtons) do
-        renderCategoryButton(k, k == key, false)
-    end
-end
-
-for i, item in ipairs(categories) do
-    local label, key = item[1], item[2]
-
-    -- The button itself is the white rounded outline. A nested rounded surface
-    -- creates the dark interior; no UIStroke is required.
-    local b = Instance.new("TextButton")
-    b.Name = "Category_" .. key
-    b.LayoutOrder = i
-    b.Size = UDim2.new(1, 0, 0, ENV.__HX_DEVICE == "mobile" and 29 or 40)
-    b.BackgroundColor3 = Theme.accent
-    b.BackgroundTransparency = 0
-    b.BorderSizePixel = 0
-    b.ClipsDescendants = true
-    b.AutoButtonColor = false
-    b.Text = ""
-    b.ZIndex = NavContainer.ZIndex + 4
-    b.Parent = NavContainer
-    corner(b, 16)
-
-    local surface = Instance.new("Frame")
-    surface.Name = "Surface"
-    surface.Position = UDim2.fromOffset(2, 2)
-    surface.Size = UDim2.new(1, -4, 1, -4)
-    surface.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
-    surface.BorderSizePixel = 0
-    surface.ClipsDescendants = true
-    surface.ZIndex = b.ZIndex + 1
-    surface.Parent = b
-    corner(surface, 13)
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Name = "Label"
-    lbl.Position = UDim2.fromOffset(ENV.__HX_DEVICE == "mobile" and 9 or 14, 0)
-    lbl.Size = UDim2.new(1, ENV.__HX_DEVICE == "mobile" and -29 or -38, 1, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamBlack
-    lbl.Text = ENV.__HX_TR(label)
-    lbl.TextColor3 = Theme.text
-    lbl.TextSize = ENV.__HX_DEVICE == "mobile" and 8 or 10
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.ZIndex = b.ZIndex + 3
-    lbl.Parent = b
-
-    local arrow = Instance.new("TextLabel")
-    arrow.Name = "Arrow"
-    arrow.AnchorPoint = Vector2.new(1, 0.5)
-    arrow.Position = UDim2.new(1, -7, 0.5, 0)
-    arrow.Size = UDim2.fromOffset(13, 20)
-    arrow.BackgroundTransparency = 1
-    arrow.Font = Enum.Font.GothamBlack
-    arrow.Text = ">"
-    arrow.TextColor3 = Theme.text
-    arrow.TextSize = ENV.__HX_DEVICE == "mobile" and 9 or 11
-    arrow.ZIndex = b.ZIndex + 3
-    arrow.Parent = b
-
-    categoryButtons[key] = b
-    renderCategoryButton(key, false, false)
-
-    track(b.MouseEnter:Connect(function()
-        if currentPage ~= key then renderCategoryButton(key, false, true) end
-    end))
-    track(b.MouseLeave:Connect(function()
-        if currentPage ~= key then renderCategoryButton(key, false, false) end
-    end))
-    track(b.Activated:Connect(function()
-        selectPage(key)
-    end))
-end
-
-local Credit = Instance.new("TextLabel")
-Credit.LayoutOrder = 100
-Credit.Size = UDim2.new(1, 0, 0, 34)
-Credit.BackgroundTransparency = 1
-Credit.Font = Enum.Font.GothamMedium
-Credit.Text = ""
-Credit.Visible = false
-Credit.TextColor3 = Color3.fromRGB(125, 125, 125)
-Credit.TextSize = 8
-Credit.TextWrapped = true
-Credit.ZIndex = NavContainer.ZIndex + 2
-Credit.Parent = NavContainer
-
---====================================================
--- Components
---====================================================
-local function makeSection(page, titleText, desc)
-    local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, 0, 0, 52)
-    holder.AutomaticSize = Enum.AutomaticSize.Y
-    holder.BackgroundTransparency = 1
-    holder.BorderSizePixel = 0
-    holder.ZIndex = page.ZIndex + 1
-    holder.Parent = page
-
-    local t = Instance.new("TextLabel")
-    t.Size = UDim2.new(1, 0, 0, 22)
-    t.BackgroundTransparency = 1
-    t.Font = Enum.Font.GothamBold
-    t.Text = ENV.__HX_TR(titleText)
-    t.TextColor3 = Theme.text
-    t.TextSize = 14
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    t.ZIndex = holder.ZIndex + 1
-    t.Parent = holder
-
-    local d = Instance.new("TextLabel")
-    d.Position = UDim2.fromOffset(0, 24)
-    d.Size = UDim2.new(1, 0, 0, 22)
-    d.BackgroundTransparency = 1
-    d.Font = Enum.Font.Gotham
-    d.Text = ENV.__HX_TR(desc or "")
-    d.TextColor3 = Theme.muted
-    d.TextSize = 11
-    d.TextWrapped = true
-    d.TextXAlignment = Enum.TextXAlignment.Left
-    d.TextYAlignment = Enum.TextYAlignment.Top
-    d.ZIndex = holder.ZIndex + 1
-    d.Parent = holder
-    return holder
-end
-
-local function makeRow(page, titleText, desc)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 68)
-    row.BackgroundColor3 = Theme.bg
-    row.BackgroundTransparency = 0.10
-    row.BorderSizePixel = 0
-    row.ClipsDescendants = true
-    row.ZIndex = page.ZIndex + 2
-    row.Parent = page
-    corner(row, 18)
-
-    local accentBar = Instance.new("Frame")
-    accentBar.Position = UDim2.fromOffset(0, 10)
-    accentBar.Size = UDim2.new(0, 2, 1, -20)
-    accentBar.BackgroundColor3 = Theme.accent
-    accentBar.BackgroundTransparency = 0.35
-    accentBar.BorderSizePixel = 0
-    accentBar.ZIndex = row.ZIndex + 1
-    accentBar.Parent = row
-    corner(accentBar, 2)
-
-    local t = Instance.new("TextLabel")
-    t.Position = UDim2.fromOffset(14, 11)
-    t.Size = UDim2.new(1, -150, 0, 20)
-    t.BackgroundTransparency = 1
-    t.Font = Enum.Font.GothamSemibold
-    t.Text = ENV.__HX_TR(titleText)
-    t.TextColor3 = Theme.text
-    t.TextSize = 13
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    t.ZIndex = row.ZIndex + 1
-    t.Parent = row
-
-    local d = Instance.new("TextLabel")
-    d.Position = UDim2.fromOffset(14, 33)
-    d.Size = UDim2.new(1, -150, 0, 21)
-    d.BackgroundTransparency = 1
-    d.Font = Enum.Font.Gotham
-    d.Text = ENV.__HX_TR(desc or "")
-    d.TextColor3 = Theme.muted
-    d.TextSize = 10
-    d.TextWrapped = true
-    d.TextXAlignment = Enum.TextXAlignment.Left
-    d.TextYAlignment = Enum.TextYAlignment.Top
-    d.ZIndex = row.ZIndex + 1
-    d.Parent = row
-    return row, t, d
-end
-
-local function actionButton(page, titleText, desc, callback, buttonText)
-    local row = makeRow(page, titleText, desc)
-    local b = Instance.new("TextButton")
-    b.AnchorPoint = Vector2.new(1, 0.5)
-    b.Position = UDim2.new(1, -12, 0.5, 0)
-    b.Size = UDim2.fromOffset(112, 38)
-    b.BackgroundColor3 = Theme.accent
-    b.BorderSizePixel = 0
-    b.AutoButtonColor = false
-    b.Font = Enum.Font.GothamBold
-    b.Text = ENV.__HX_TR(buttonText or "EJECUTAR")
-    b.TextColor3 = Theme.bg
-    b.TextSize = 10
-    b.ZIndex = row.ZIndex + 3
-    b.Parent = row
-    corner(b, 16)
-    local bScale = Instance.new("UIScale")
-    bScale.Scale = 1
-    bScale.Parent = b
-    track(b.MouseEnter:Connect(function()
-        tween(b, {BackgroundColor3 = Theme.text}, 0.10)
-        tween(bScale, {Scale = 1.035}, 0.10)
-    end))
-    track(b.MouseLeave:Connect(function()
-        tween(b, {BackgroundColor3 = Theme.accent}, 0.10)
-        tween(bScale, {Scale = 1}, 0.10)
-    end))
-    track(b.Activated:Connect(function()
-        tween(bScale, {Scale = 0.94}, 0.07)
-        task.delay(0.07, function() if alive and bScale.Parent then tween(bScale, {Scale = 1}, 0.11) end end)
+    -- Reabrir selector de idioma
+    langBtn.MouseButton1Click:Connect(function()
         task.spawn(function()
-            local ok, err = pcall(callback)
-            if not ok then toast("Error: " .. tostring(err)) end
-        end)
-    end))
-    return b, row
-end
-
-local function toggleRow(page, titleText, desc, stateKey, default, callback)
-    activeStates[stateKey] = default == true
-    local row = makeRow(page, titleText, desc)
-    local toggle = Instance.new("TextButton")
-    toggle.AnchorPoint = Vector2.new(1, 0.5)
-    toggle.Position = UDim2.new(1, -14, 0.5, 0)
-    toggle.Size = UDim2.fromOffset(50, 26)
-    toggle.BorderSizePixel = 0
-    toggle.AutoButtonColor = false
-    toggle.Text = ""
-    toggle.ZIndex = row.ZIndex + 3
-    toggle.Parent = row
-    corner(toggle, 13)
-
-    local dot = Instance.new("Frame")
-    dot.AnchorPoint = Vector2.new(0, 0.5)
-    dot.Size = UDim2.fromOffset(18, 18)
-    dot.BorderSizePixel = 0
-    dot.ZIndex = toggle.ZIndex + 1
-    dot.Parent = toggle
-    corner(dot, 9)
-
-    local function render(instant)
-        local on = activeStates[stateKey]
-        local propsToggle = {BackgroundColor3 = on and Theme.accent or Theme.soft}
-        local propsDot = {
-            Position = on and UDim2.new(1, -22, 0.5, 0) or UDim2.new(0, 4, 0.5, 0),
-            BackgroundColor3 = on and Theme.bg or Theme.muted
-        }
-        if instant then
-            for k,v in pairs(propsToggle) do toggle[k] = v end
-            for k,v in pairs(propsDot) do dot[k] = v end
-        else
-            tween(toggle, propsToggle, 0.16)
-            tween(dot, propsDot, 0.16)
-        end
-    end
-
-    render(true)
-    activeStates._toggleRenderers = activeStates._toggleRenderers or {}
-    activeStates._toggleRenderers[stateKey] = render
-
-    track(toggle.Activated:Connect(function()
-        activeStates[stateKey] = not activeStates[stateKey]
-
-        if not activeStates[stateKey]
-            and activeStates._activeSearchStateKey == stateKey
-            and activeStates._cancelActiveSearch then
-            activeStates._cancelActiveSearch()
-        end
-
-        render(false)
-        if callback then
-            task.spawn(function()
-                callback(activeStates[stateKey])
-                if alive and toggle.Parent then render(false) end
-            end)
-        end
-    end))
-    return toggle, row
-end
-
-local function sliderRow(page, titleText, desc, minValue, maxValue, defaultValue, step, callback)
-    local row, title = makeRow(page, titleText, desc)
-    row.Size = UDim2.new(1, 0, 0, 84)
-    title.Size = UDim2.new(1, -90, 0, 20)
-
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.AnchorPoint = Vector2.new(1, 0)
-    valueLabel.Position = UDim2.new(1, -16, 0, 11)
-    valueLabel.Size = UDim2.fromOffset(70, 20)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextColor3 = Theme.text
-    valueLabel.TextSize = 12
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valueLabel.ZIndex = row.ZIndex + 2
-    valueLabel.Parent = row
-
-    local bar = Instance.new("Frame")
-    bar.Position = UDim2.new(0, 16, 1, -20)
-    bar.Size = UDim2.new(1, -32, 0, 5)
-    bar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    bar.BorderSizePixel = 0
-    bar.ZIndex = row.ZIndex + 2
-    bar.Parent = row
-    corner(bar, 3)
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.fromScale(0, 1)
-    fill.BackgroundColor3 = Theme.accent
-    fill.BorderSizePixel = 0
-    fill.ZIndex = bar.ZIndex + 1
-    fill.Parent = bar
-    corner(fill, 3)
-
-    local knob = Instance.new("Frame")
-    knob.AnchorPoint = Vector2.new(0.5, 0.5)
-    knob.Position = UDim2.new(0, 0, 0.5, 0)
-    knob.Size = UDim2.fromOffset(14, 14)
-    knob.BackgroundColor3 = Theme.accent
-    knob.BorderSizePixel = 0
-    knob.ZIndex = fill.ZIndex + 1
-    knob.Parent = bar
-    corner(knob, 7)
-
-    local current = defaultValue
-    local dragging = false
-    local function quantize(v)
-        local q = math.floor(((v - minValue) / step) + 0.5) * step + minValue
-        return math.clamp(q, minValue, maxValue)
-    end
-    local function setValue(v, fire)
-        current = quantize(v)
-        local alpha = (current - minValue) / (maxValue - minValue)
-        fill.Size = UDim2.fromScale(alpha, 1)
-        knob.Position = UDim2.new(alpha, 0, 0.5, 0)
-        valueLabel.Text = tostring(current)
-        if fire and callback then callback(current) end
-    end
-    local function fromInput(input)
-        local alpha = math.clamp((input.Position.X - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
-        setValue(minValue + (maxValue - minValue) * alpha, true)
-    end
-
-    track(bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            fromInput(input)
-        end
-    end))
-    track(UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            fromInput(input)
-        end
-    end))
-    track(UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-    end))
-
-    setValue(defaultValue, true)
-    return {Get = function() return current end, Set = function(v) setValue(v, true) end}, row
-end
-
---====================================================
--- Modal / dynamic lists
---====================================================
-local ModalShade = Instance.new("TextButton")
-ModalShade.Name = "ModalShade"
-ModalShade.Size = UDim2.fromScale(1, 1)
-ModalShade.BackgroundColor3 = Color3.new(0, 0, 0)
-ModalShade.BackgroundTransparency = 0.38
-ModalShade.BorderSizePixel = 0
-ModalShade.Text = ""
-ModalShade.AutoButtonColor = false
-ModalShade.Visible = false
-ModalShade.ZIndex = 70
-ModalShade.Parent = PanelSurface
-
-local Modal = Instance.new("Frame")
-Modal.AnchorPoint = Vector2.new(0.5, 0.5)
-Modal.Position = UDim2.fromScale(0.5, 0.5)
-Modal.Size = ENV.__HX_DEVICE == "mobile" and UDim2.fromOffset(330, 250) or UDim2.fromOffset(430, 360)
-Modal.BackgroundColor3 = Theme.bg
-Modal.BorderSizePixel = 0
-Modal.ClipsDescendants = true
-Modal.Visible = false
-Modal.ZIndex = ModalShade.ZIndex + 1
-Modal.Parent = PanelSurface
-corner(Modal, 24)
-
-do
-    local scale = Instance.new("UIScale")
-    scale.Name = "MotionScale"
-    scale.Scale = 1
-    scale.Parent = Modal
-end
-Modal:SetAttribute("AnimationToken", 0)
-
-local ModalTitle = Instance.new("TextLabel")
-ModalTitle.Position = UDim2.fromOffset(16, 12)
-ModalTitle.Size = UDim2.new(1, -62, 0, 28)
-ModalTitle.BackgroundTransparency = 1
-ModalTitle.Font = Enum.Font.GothamBold
-ModalTitle.TextColor3 = Theme.text
-ModalTitle.TextSize = ENV.__HX_DEVICE == "mobile" and 12 or 15
-ModalTitle.TextXAlignment = Enum.TextXAlignment.Left
-ModalTitle.ZIndex = Modal.ZIndex + 2
-ModalTitle.Parent = Modal
-
-local ModalClose = Instance.new("TextButton")
-ModalClose.AnchorPoint = Vector2.new(1, 0)
-ModalClose.Position = UDim2.new(1, -10, 0, 10)
-ModalClose.Size = UDim2.fromOffset(ENV.__HX_DEVICE == "mobile" and 27 or 32, ENV.__HX_DEVICE == "mobile" and 27 or 32)
-ModalClose.BackgroundColor3 = Theme.bg
-ModalClose.BorderSizePixel = 0
-ModalClose.Font = Enum.Font.GothamBold
-ModalClose.Text = "×"
-ModalClose.TextColor3 = Theme.text
-ModalClose.TextSize = 15
-ModalClose.ZIndex = Modal.ZIndex + 3
-ModalClose.Parent = Modal
-corner(ModalClose, 16)
-
-local ModalScroll = Instance.new("ScrollingFrame")
-ModalScroll.Position = UDim2.fromOffset(12, 52)
-ModalScroll.Size = UDim2.new(1, -24, 1, -64)
-ModalScroll.BackgroundTransparency = 1
-ModalScroll.BorderSizePixel = 0
-ModalScroll.ScrollBarThickness = 3
-ModalScroll.ScrollBarImageColor3 = Theme.accent
-ModalScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ModalScroll.CanvasSize = UDim2.fromOffset(0, 0)
-ModalScroll.ZIndex = Modal.ZIndex + 2
-ModalScroll.Parent = Modal
-
-local ModalList = Instance.new("UIListLayout")
-ModalList.Padding = UDim.new(0, 7)
-ModalList.SortOrder = Enum.SortOrder.LayoutOrder
-ModalList.Parent = ModalScroll
-
-local function closeModal()
-    if activeStates._cancelPanelSearch then
-        activeStates._cancelPanelSearch()
-    end
-
-    if not Modal.Visible then
-        ModalShade.Visible = false
-        return
-    end
-    Modal:SetAttribute("AnimationToken", (Modal:GetAttribute("AnimationToken") or 0) + 1)
-    local token = Modal:GetAttribute("AnimationToken")
-    tween(Modal.MotionScale, {Scale = 0.94}, 0.13)
-    tween(Modal, {Position = UDim2.new(0.5, 0, 0.5, 10), BackgroundTransparency = 0.22}, 0.13)
-    tween(ModalShade, {BackgroundTransparency = 1}, 0.13)
-    task.delay(0.12, function()
-        if token ~= Modal:GetAttribute("AnimationToken") then return end
-        Modal.Visible = false
-        ModalShade.Visible = false
-        Modal.Position = UDim2.fromScale(0.5, 0.5)
-        Modal.BackgroundTransparency = 0
-        Modal.MotionScale.Scale = 1
-        ModalShade.BackgroundTransparency = 0.38
-    end)
-end
-
-local function clearModal()
-    for _, c in ipairs(ModalScroll:GetChildren()) do
-        if not c:IsA("UIListLayout") then c:Destroy() end
-    end
-end
-
-local function modalButton(text, subtext, callback, danger)
-    -- White rounded outer shell so every option is clearly separated.
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -4, 0, 54)
-    b.BackgroundColor3 = Theme.accent
-    b.BackgroundTransparency = 0
-    b.BorderSizePixel = 0
-    b.ClipsDescendants = true
-    b.AutoButtonColor = false
-    b.Text = ""
-    b.ZIndex = ModalScroll.ZIndex + 2
-    b.Parent = ModalScroll
-    corner(b, 16)
-
-    -- Dark inner surface leaves a clean 2px white rounded border.
-    local surface = Instance.new("Frame")
-    surface.Name = "Surface"
-    surface.Position = UDim2.fromOffset(2, 2)
-    surface.Size = UDim2.new(1, -4, 1, -4)
-    surface.BackgroundColor3 = Theme.panel2
-    surface.BackgroundTransparency = 0
-    surface.BorderSizePixel = 0
-    surface.ClipsDescendants = true
-    surface.ZIndex = b.ZIndex + 1
-    surface.Parent = b
-    corner(surface, 14)
-
-    local t = Instance.new("TextLabel")
-    t.Name = "Title"
-    t.Position = UDim2.fromOffset(13, 7)
-    t.Size = UDim2.new(1, -26, 0, 18)
-    t.BackgroundTransparency = 1
-    t.Font = Enum.Font.GothamSemibold
-    t.Text = ENV.__HX_TR(text)
-    t.TextColor3 = danger and Theme.danger or Theme.text
-    t.TextSize = 12
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    t.ZIndex = surface.ZIndex + 1
-    t.Parent = surface
-
-    local s = Instance.new("TextLabel")
-    s.Name = "Description"
-    s.Position = UDim2.fromOffset(13, 28)
-    s.Size = UDim2.new(1, -26, 0, 17)
-    s.BackgroundTransparency = 1
-    s.Font = Enum.Font.Gotham
-    s.Text = ENV.__HX_TR(subtext or "")
-    s.TextColor3 = Theme.muted
-    s.TextSize = 9
-    s.TextWrapped = true
-    s.TextXAlignment = Enum.TextXAlignment.Left
-    s.TextYAlignment = Enum.TextYAlignment.Center
-    s.ZIndex = surface.ZIndex + 1
-    s.Parent = surface
-
-    local modalBtnScale = Instance.new("UIScale")
-    modalBtnScale.Scale = 1
-    modalBtnScale.Parent = b
-
-    track(b.MouseEnter:Connect(function()
-        tween(surface, {BackgroundColor3 = Color3.fromRGB(18, 18, 18)}, 0.10)
-        tween(modalBtnScale, {Scale = 1.012}, 0.10)
-    end))
-    track(b.MouseLeave:Connect(function()
-        tween(surface, {BackgroundColor3 = Theme.panel2}, 0.10)
-        tween(modalBtnScale, {Scale = 1}, 0.10)
-    end))
-    track(b.Activated:Connect(function()
-        tween(modalBtnScale, {Scale = 0.985}, 0.055)
-        task.delay(0.055, function()
-            if alive and modalBtnScale.Parent then
-                tween(modalBtnScale, {Scale = 1}, 0.09)
-            end
-        end)
-        task.spawn(callback)
-    end))
-    return b
-end
-
-local function modalSearchBox(placeholder, callback)
-    local box = Instance.new("TextBox")
-    box.Name = "SearchBox"
-    box.LayoutOrder = -1000
-    box.Size = UDim2.new(1, -4, 0, 42)
-    box.BackgroundColor3 = Theme.panel2
-    box.BorderSizePixel = 0
-    box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Gotham
-    box.PlaceholderText = ENV.__HX_TR(placeholder or "Buscar...")
-    box.PlaceholderColor3 = Theme.muted
-    box.Text = ""
-    box.TextColor3 = Theme.text
-    box.TextSize = 12
-    box.TextXAlignment = Enum.TextXAlignment.Left
-    box.ZIndex = ModalScroll.ZIndex + 3
-    box.Parent = ModalScroll
-    corner(box, 16)
-
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 13)
-    pad.PaddingRight = UDim.new(0, 13)
-    pad.Parent = box
-
-    track(box:GetPropertyChangedSignal("Text"):Connect(function()
-        if callback then callback(box.Text) end
-    end))
-    return box
-end
-
-local function openModal(titleText, builder)
-    if activeStates._cancelPanelSearch then
-        activeStates._cancelPanelSearch()
-    end
-    Modal:SetAttribute("AnimationToken", (Modal:GetAttribute("AnimationToken") or 0) + 1)
-    clearModal()
-    ModalTitle.Text = ENV.__HX_TR(titleText)
-    builder()
-    ModalShade.Visible = true
-    Modal.Visible = true
-    ModalShade.BackgroundTransparency = 1
-    Modal.Position = UDim2.new(0.5, 0, 0.5, 14)
-    Modal.Size = ENV.__HX_DEVICE == "mobile" and UDim2.fromOffset(330, 250) or UDim2.fromOffset(430, 360)
-    Modal.BackgroundTransparency = 0.18
-    Modal.MotionScale.Scale = 0.92
-    tween(ModalShade, {BackgroundTransparency = 0.38}, 0.18)
-    tween(Modal, {Position = UDim2.fromScale(0.5, 0.5), BackgroundTransparency = 0}, 0.20)
-    tween(Modal.MotionScale, {Scale = 1}, 0.22)
-end
-
-activeStates._beginTimedStatus = function(titleText, detailText)
-    activeStates._timedStatusToken = (tonumber(activeStates._timedStatusToken) or 0) + 1
-    local token = activeStates._timedStatusToken
-
-    if ENV.__HX_TimedStatus and ENV.__HX_TimedStatus.Parent then
-        ENV.__HX_TimedStatus:Destroy()
-    end
-
-    local holder = Instance.new("Frame")
-    holder.Name = "HX_TimedStatus"
-    holder.AnchorPoint = Vector2.new(0.5, 0)
-    holder.Position = UDim2.new(0.5, 0, 0, ENV.__HX_DEVICE == "mobile" and 8 or 14)
-    holder.Size = ENV.__HX_DEVICE == "mobile"
-        and UDim2.fromOffset(285, 68)
-        or UDim2.fromOffset(350, 76)
-    holder.BackgroundColor3 = Theme.accent
-    holder.BorderSizePixel = 0
-    holder.ZIndex = 14000
-    holder.Parent = Gui
-    corner(holder, 18)
-    ENV.__HX_TimedStatus = holder
-
-    local surface = Instance.new("Frame")
-    surface.Position = UDim2.fromOffset(2, 2)
-    surface.Size = UDim2.new(1, -4, 1, -4)
-    surface.BackgroundColor3 = Theme.bg
-    surface.BorderSizePixel = 0
-    surface.ZIndex = holder.ZIndex + 1
-    surface.Parent = holder
-    corner(surface, 16)
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Position = UDim2.fromOffset(14, 8)
-    title.Size = UDim2.new(1, -28, 0, 20)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBlack
-    title.Text = ENV.__HX_TR(titleText or "Cargando...")
-    title.TextColor3 = Theme.text
-    title.TextSize = ENV.__HX_DEVICE == "mobile" and 10 or 12
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = surface.ZIndex + 1
-    title.Parent = surface
-
-    local detail = Instance.new("TextLabel")
-    detail.Name = "Detail"
-    detail.Position = UDim2.fromOffset(14, 29)
-    detail.Size = UDim2.new(1, -110, 0, 24)
-    detail.BackgroundTransparency = 1
-    detail.Font = Enum.Font.Gotham
-    detail.Text = ENV.__HX_TR(detailText or "")
-    detail.TextColor3 = Theme.muted
-    detail.TextSize = ENV.__HX_DEVICE == "mobile" and 8 or 9
-    detail.TextWrapped = true
-    detail.TextXAlignment = Enum.TextXAlignment.Left
-    detail.TextYAlignment = Enum.TextYAlignment.Center
-    detail.ZIndex = surface.ZIndex + 1
-    detail.Parent = surface
-
-    local timer = Instance.new("TextLabel")
-    timer.Name = "Timer"
-    timer.AnchorPoint = Vector2.new(1, 0.5)
-    timer.Position = UDim2.new(1, -14, 0.5, 11)
-    timer.Size = UDim2.fromOffset(90, 24)
-    timer.BackgroundTransparency = 1
-    timer.Font = Enum.Font.GothamBlack
-    timer.Text = ENV.__HX_TR("Tiempo: ") .. "0.0s"
-    timer.TextColor3 = Theme.text
-    timer.TextSize = ENV.__HX_DEVICE == "mobile" and 9 or 10
-    timer.TextXAlignment = Enum.TextXAlignment.Right
-    timer.ZIndex = surface.ZIndex + 1
-    timer.Parent = surface
-
-    local scale = Instance.new("UIScale")
-    scale.Scale = 0.94
-    scale.Parent = holder
-    holder.BackgroundTransparency = 1
-    surface.BackgroundTransparency = 1
-    tween(holder, {BackgroundTransparency = 0}, 0.14)
-    tween(surface, {BackgroundTransparency = 0}, 0.14)
-    tween(scale, {Scale = 1}, 0.16)
-
-    local started = os.clock()
-    task.spawn(function()
-        while alive
-            and activeStates._timedStatusToken == token
-            and holder.Parent do
-
-            timer.Text = ENV.__HX_TR("Tiempo: ") .. string.format("%.1fs", os.clock() - started)
-            task.wait(0.10)
-        end
-    end)
-
-    return token
-end
-
-activeStates._setTimedStatus = function(token, titleText, detailText)
-    if activeStates._timedStatusToken ~= token then return end
-    local holder = ENV.__HX_TimedStatus
-    if not holder or not holder.Parent then return end
-    local surface = holder:FindFirstChildWhichIsA("Frame")
-    if not surface then return end
-
-    local title = surface:FindFirstChild("Title")
-    local detail = surface:FindFirstChild("Detail")
-    if title and titleText then title.Text = ENV.__HX_TR(titleText) end
-    if detail and detailText then detail.Text = ENV.__HX_TR(detailText) end
-end
-
-activeStates._endTimedStatus = function(token)
-    if token and activeStates._timedStatusToken ~= token then return end
-
-    if not token then
-        activeStates._timedStatusToken = (tonumber(activeStates._timedStatusToken) or 0) + 1
-    else
-        activeStates._timedStatusToken = activeStates._timedStatusToken + 1
-    end
-
-    local holder = ENV.__HX_TimedStatus
-    ENV.__HX_TimedStatus = nil
-    if holder and holder.Parent then
-        local scale = holder:FindFirstChildOfClass("UIScale")
-        tween(holder, {BackgroundTransparency = 1}, 0.10)
-        for _, child in ipairs(holder:GetDescendants()) do
-            if child:IsA("Frame") then
-                tween(child, {BackgroundTransparency = 1}, 0.10)
-            elseif child:IsA("TextLabel") then
-                tween(child, {TextTransparency = 1}, 0.10)
-            end
-        end
-        if scale then tween(scale, {Scale = 0.96}, 0.10) end
-        task.delay(0.11, function()
-            if holder.Parent then holder:Destroy() end
-        end)
-    end
-end
-
-
---====================================================
--- Cancellable searches / 10 second timeout
---====================================================
-activeStates._cancelActiveSearch = function()
-    activeStates._searchToken = (tonumber(activeStates._searchToken) or 0) + 1
-    activeStates._activeSearchPanelBound = false
-    activeStates._activeSearchStateKey = nil
-    activeStates._activeSearchLabel = nil
-    if activeStates._activeSearchStatusToken then
-        activeStates._endTimedStatus(activeStates._activeSearchStatusToken)
-        activeStates._activeSearchStatusToken = nil
-    end
-end
-
-activeStates._cancelPanelSearch = function()
-    if activeStates._activeSearchPanelBound then
-        activeStates._cancelActiveSearch()
-    end
-    activeStates._questUiScanToken = (tonumber(activeStates._questUiScanToken) or 0) + 1
-end
-
-activeStates._showNotFoundPanel = function(searchLabel, retryCallback, cancelCallback)
-    activeStates._cancelActiveSearch()
-
-    if ENV.__HX_NotFoundShade and ENV.__HX_NotFoundShade.Parent then
-        ENV.__HX_NotFoundShade:Destroy()
-    end
-    if ENV.__HX_QuestZeroShade and ENV.__HX_QuestZeroShade.Parent then
-        ENV.__HX_QuestZeroShade:Destroy()
-        ENV.__HX_QuestZeroShade = nil
-    end
-
-    -- Close any old modal first. The new panel lives directly under Gui.
-    closeModal()
-
-    local shade = Instance.new("TextButton")
-    shade.Name = "HX_NotFoundShade"
-    shade.Size = UDim2.fromScale(1, 1)
-    shade.Position = UDim2.fromScale(0, 0)
-    shade.BackgroundColor3 = Color3.new(0, 0, 0)
-    shade.BackgroundTransparency = 0.30
-    shade.BorderSizePixel = 0
-    shade.Text = ""
-    shade.AutoButtonColor = false
-    shade.Active = true
-    shade.Modal = true
-    shade.ZIndex = 22000
-    shade.Parent = Gui
-    ENV.__HX_NotFoundShade = shade
-
-    local panel = Instance.new("Frame")
-    panel.Name = "HX_NotFoundPanel"
-    panel.AnchorPoint = Vector2.new(0.5, 0.5)
-    panel.Position = UDim2.fromScale(0.5, 0.5)
-    panel.Size = ENV.__HX_DEVICE == "mobile"
-        and UDim2.fromOffset(310, 190)
-        or UDim2.fromOffset(400, 220)
-    panel.BackgroundColor3 = Theme.accent
-    panel.BorderSizePixel = 0
-    panel.ZIndex = shade.ZIndex + 1
-    panel.Parent = shade
-    corner(panel, 24)
-
-    local surface = Instance.new("Frame")
-    surface.Position = UDim2.fromOffset(3, 3)
-    surface.Size = UDim2.new(1, -6, 1, -6)
-    surface.BackgroundColor3 = Theme.bg
-    surface.BorderSizePixel = 0
-    surface.ZIndex = panel.ZIndex + 1
-    surface.Parent = panel
-    corner(surface, 21)
-
-    local title = Instance.new("TextLabel")
-    title.Position = UDim2.fromOffset(18, 18)
-    title.Size = UDim2.new(1, -36, 0, 52)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBlack
-    title.Text = ENV.__HX_LANG == "en"
-        and ("NOT FOUND: " .. tostring(searchLabel or "OBJECT"))
-        or ("NO SE HA ENCONTRADO: " .. tostring(searchLabel or "OBJETO"))
-    title.TextColor3 = Theme.text
-    title.TextSize = ENV.__HX_DEVICE == "mobile" and 15 or 18
-    title.TextWrapped = true
-    title.TextXAlignment = Enum.TextXAlignment.Center
-    title.TextYAlignment = Enum.TextYAlignment.Center
-    title.ZIndex = surface.ZIndex + 1
-    title.Parent = surface
-
-    local subtitle = Instance.new("TextLabel")
-    subtitle.Position = UDim2.fromOffset(22, 72)
-    subtitle.Size = UDim2.new(1, -44, 0, 40)
-    subtitle.BackgroundTransparency = 1
-    subtitle.Font = Enum.Font.Gotham
-    subtitle.Text = ENV.__HX_LANG == "en"
-        and "The 10-second search finished without finding it."
-        or "La búsqueda de 10 segundos terminó sin encontrarlo."
-    subtitle.TextColor3 = Theme.muted
-    subtitle.TextSize = ENV.__HX_DEVICE == "mobile" and 9 or 10
-    subtitle.TextWrapped = true
-    subtitle.TextXAlignment = Enum.TextXAlignment.Center
-    subtitle.TextYAlignment = Enum.TextYAlignment.Center
-    subtitle.ZIndex = surface.ZIndex + 1
-    subtitle.Parent = surface
-
-    local buttons = Instance.new("Frame")
-    buttons.AnchorPoint = Vector2.new(0.5, 1)
-    buttons.Position = UDim2.new(0.5, 0, 1, -17)
-    buttons.Size = UDim2.new(1, -34, 0, 46)
-    buttons.BackgroundTransparency = 1
-    buttons.ZIndex = surface.ZIndex + 1
-    buttons.Parent = surface
-
-    local layout = Instance.new("UIListLayout")
-    layout.FillDirection = Enum.FillDirection.Horizontal
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    layout.Padding = UDim.new(0, 10)
-    layout.Parent = buttons
-
-    local panelScale = Instance.new("UIScale")
-    panelScale.Scale = 0.92
-    panelScale.Parent = panel
-
-    local function destroyNotFound()
-        if ENV.__HX_NotFoundShade == shade then
-            ENV.__HX_NotFoundShade = nil
-        end
-        if shade.Parent then shade:Destroy() end
-    end
-
-    local function makeNFButton(label, callback)
-        local button = Instance.new("TextButton")
-        button.Size = UDim2.new(0.5, -5, 1, 0)
-        button.BackgroundColor3 = Theme.accent
-        button.BorderSizePixel = 0
-        button.AutoButtonColor = false
-        button.Font = Enum.Font.GothamBlack
-        button.Text = ENV.__HX_TR(label)
-        button.TextColor3 = Theme.bg
-        button.TextSize = ENV.__HX_DEVICE == "mobile" and 8 or 10
-        button.ZIndex = buttons.ZIndex + 1
-        button.Parent = buttons
-        corner(button, 15)
-
-        button.Activated:Connect(function()
-            destroyNotFound()
-            if callback then
-                task.delay(0.08, callback)
-            end
-        end)
-    end
-
-    makeNFButton("VOLVER A INTENTAR", retryCallback)
-    makeNFButton("CANCELAR", cancelCallback)
-
-    tween(panelScale, {Scale = 1}, 0.16)
-end
-
-activeStates._runSearch10 = function(searchLabel, finder, onFound, retryCallback, panelBound, stateKey, cancelCallback)
-    activeStates._cancelActiveSearch()
-
-    activeStates._searchToken = (tonumber(activeStates._searchToken) or 0) + 1
-    local token = activeStates._searchToken
-    local modalToken = panelBound and Modal:GetAttribute("AnimationToken") or nil
-    local started = os.clock()
-
-    activeStates._activeSearchPanelBound = panelBound == true
-    activeStates._activeSearchStateKey = stateKey
-    activeStates._activeSearchLabel = searchLabel
-
-    local statusToken = activeStates._beginTimedStatus(
-        "Buscando...",
-        tostring(searchLabel or "") .. " · 0.0s / 10.0s"
-    )
-    activeStates._activeSearchStatusToken = statusToken
-
-    while alive
-        and activeStates._searchToken == token
-        and (os.clock() - started) < 10 do
-
-        if panelBound then
-            if Modal:GetAttribute("AnimationToken") ~= modalToken then
-                activeStates._cancelActiveSearch()
-                return false, "cancelled"
-            end
-        end
-
-        if stateKey and not activeStates[stateKey] then
-            activeStates._cancelActiveSearch()
-            return false, "cancelled"
-        end
-
-        local okFind, result = pcall(finder)
-        if okFind and result ~= nil and result ~= false then
-            if activeStates._searchToken ~= token then
-                return false, "cancelled"
-            end
-
-            activeStates._endTimedStatus(statusToken)
-            activeStates._activeSearchStatusToken = nil
-            activeStates._activeSearchPanelBound = false
-            activeStates._activeSearchStateKey = nil
-            activeStates._activeSearchLabel = nil
-
-            if onFound then
-                pcall(onFound, result)
-            end
-            return true, "found"
-        end
-
-        local elapsed = math.min(os.clock() - started, 10)
-        activeStates._setTimedStatus(
-            statusToken,
-            "Buscando...",
-            tostring(searchLabel or "") .. " · " .. string.format("%.1fs / 10.0s", elapsed)
-        )
-        task.wait(0.35)
-    end
-
-    if not alive or activeStates._searchToken ~= token then
-        return false, "cancelled"
-    end
-
-    activeStates._endTimedStatus(statusToken)
-    activeStates._activeSearchStatusToken = nil
-    activeStates._activeSearchPanelBound = false
-    activeStates._activeSearchStateKey = nil
-    activeStates._activeSearchLabel = nil
-
-    activeStates._showNotFoundPanel(searchLabel, retryCallback, cancelCallback)
-    return false, "timeout"
-end
-
-activeStates._runAsyncSearch10 = function(searchLabel, worker, onFound, retryCallback, stateKey, cancelCallback)
-    activeStates._cancelActiveSearch()
-
-    activeStates._searchToken = (tonumber(activeStates._searchToken) or 0) + 1
-    local token = activeStates._searchToken
-    local started = os.clock()
-    local done = false
-    local result = nil
-
-    activeStates._activeSearchPanelBound = false
-    activeStates._activeSearchStateKey = stateKey
-    activeStates._activeSearchLabel = searchLabel
-
-    local statusToken = activeStates._beginTimedStatus(
-        "Buscando...",
-        tostring(searchLabel or "") .. " · 0.0s / 10.0s"
-    )
-    activeStates._activeSearchStatusToken = statusToken
-
-    task.spawn(function()
-        local okWorker, workerResult = pcall(worker)
-        if activeStates._searchToken == token then
-            done = true
-            if okWorker then result = workerResult end
-        end
-    end)
-
-    while alive
-        and activeStates._searchToken == token
-        and (os.clock() - started) < 10 do
-
-        if stateKey and not activeStates[stateKey] then
-            activeStates._cancelActiveSearch()
-            return false, "cancelled"
-        end
-
-        if done and result ~= nil and result ~= false then
-            activeStates._endTimedStatus(statusToken)
-            activeStates._activeSearchStatusToken = nil
-            activeStates._activeSearchStateKey = nil
-            activeStates._activeSearchLabel = nil
-
-            if onFound then pcall(onFound, result) end
-            return true, "found"
-        end
-
-        local elapsed = math.min(os.clock() - started, 10)
-        activeStates._setTimedStatus(
-            statusToken,
-            "Buscando...",
-            tostring(searchLabel or "") .. " · " .. string.format("%.1fs / 10.0s", elapsed)
-        )
-        task.wait(0.10)
-    end
-
-    if not alive or activeStates._searchToken ~= token then
-        return false, "cancelled"
-    end
-
-    activeStates._endTimedStatus(statusToken)
-    activeStates._activeSearchStatusToken = nil
-    activeStates._activeSearchStateKey = nil
-    activeStates._activeSearchLabel = nil
-
-    activeStates._showNotFoundPanel(searchLabel, retryCallback, cancelCallback)
-    return false, "timeout"
-end
-
-track(ModalClose.Activated:Connect(closeModal))
-track(ModalShade.Activated:Connect(closeModal))
-
---====================================================
--- Draggable main + floating restore button
---====================================================
-local function makeDraggable(handle, target)
-    local dragging = false
-    local dragStart
-    local startPos
-    local dragInput
-
-    track(handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = target.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
-            end)
-        end
-    end))
-
-    track(handle.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-    end))
-
-    track(UserInputService.InputChanged:Connect(function(input)
-        if dragging and input == dragInput then
-            local delta = input.Position - dragStart
-            target.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end))
-end
-
-makeDraggable(Top, Main)
-
-local Bubble = Instance.new("ImageButton")
-Bubble.Name = "RestoreBubble"
-Bubble.Size = UDim2.fromOffset(60, 60)
-Bubble.Position = UDim2.new(1, -88, 0.5, -29)
-Bubble.BackgroundColor3 = Theme.bg
-Bubble.BackgroundTransparency = 0.04
-Bubble.BorderSizePixel = 0
-Bubble.AutoButtonColor = false
-Bubble.Image = "rbxassetid://72742584610344"
-Bubble.ImageColor3 = Color3.new(1, 1, 1)
-Bubble.ImageTransparency = 0
-Bubble.ScaleType = Enum.ScaleType.Fit
-Bubble.Visible = false
-Bubble.ZIndex = 90
-Bubble.Parent = Gui
-corner(Bubble, 30)
-
-local bubbleDragging = false
-local bubbleStart
-local bubbleStartPos
-local bubbleMoved = false
-local bubbleDragInput
-track(Bubble.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        bubbleDragging = true
-        bubbleMoved = false
-        bubbleStart = input.Position
-        bubbleStartPos = Bubble.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then bubbleDragging = false end
-        end)
-    end
-end))
-track(Bubble.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then bubbleDragInput = input end
-end))
-track(UserInputService.InputChanged:Connect(function(input)
-    if bubbleDragging and input == bubbleDragInput then
-        local delta = input.Position - bubbleStart
-        if delta.Magnitude > 4 then bubbleMoved = true end
-        Bubble.Position = UDim2.new(
-            bubbleStartPos.X.Scale, bubbleStartPos.X.Offset + delta.X,
-            bubbleStartPos.Y.Scale, bubbleStartPos.Y.Offset + delta.Y
-        )
-    end
-end))
-track(Bubble.Activated:Connect(function()
-    if bubbleMoved or Main:GetAttribute("Restoring") then return end
-    Main:SetAttribute("Restoring", true)
-
-    TweenService:Create(
-        Bubble,
-        TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-        {
-            Size = UDim2.fromOffset(50, 50),
-            ImageTransparency = 0.28,
-            BackgroundTransparency = 0.18
-        }
-    ):Play()
-
-    task.delay(0.085, function()
-        if not alive then return end
-
-        Bubble.Visible = false
-        Bubble.Size = UDim2.fromOffset(60, 60)
-        Bubble.ImageTransparency = 0
-        Bubble.BackgroundTransparency = 0.04
-
-        -- Preserve the exact position where the user left the panel.
-        -- Only opacity is animated, so it cannot drift or slip under itself.
-        Main.GroupTransparency = 1
-        Main.Visible = true
-        PanelShell.BackgroundTransparency = 0.45
-
-        TweenService:Create(
-            Main,
-            TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-            {GroupTransparency = 0}
-        ):Play()
-        TweenService:Create(
-            PanelShell,
-            TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-            {BackgroundTransparency = 0}
-        ):Play()
-
-        task.delay(0.22, function()
-            if alive and Main then
-                Main.GroupTransparency = 0
-                Main:SetAttribute("Restoring", false)
-            end
-        end)
-    end)
-end))
-
---====================================================
--- Feature implementations
---====================================================
-local walkSpeed = 16
-local jumpPower = 50
-ENV.__HX_boatSpeed = 120
-ENV.__HX_tweenTPSpeed = 180
-ENV.__HX_safeCFrame = nil
-ENV.__HX_lastHealth = nil
-ENV.__HX_initialGravity = Workspace.Gravity
-ENV.__HX_initialGlobalShadows = Lighting.GlobalShadows
-ENV.__HX_initialQuality = nil
-ENV.__HX_initialTerrain = {
-    WaterWaveSize = Workspace.Terrain.WaterWaveSize,
-    WaterWaveSpeed = Workspace.Terrain.WaterWaveSpeed,
-    WaterReflectance = Workspace.Terrain.WaterReflectance,
-    WaterTransparency = Workspace.Terrain.WaterTransparency,
-}
-pcall(function() ENV.__HX_initialQuality = settings().Rendering.QualityLevel end)
-
-ENV.__HX_farmStartedAt = nil
-ENV.__HX_farmAccumulated = 0
-ENV.__HX_sessionGoldStart = nil
-ENV.__HX_lastKnownGold = nil
-ENV.__HX_sessionGoldEarned = 0
-ENV.__HX_playerFlySpeed = 90
-ENV.__HX_lastSeatAttempt = 0
-
-local function getFarmElapsed()
-    local elapsed = ENV.__HX_farmAccumulated
-    if ENV.__HX_farmStartedAt then elapsed += os.clock() - ENV.__HX_farmStartedAt end
-    return elapsed
-end
-
-local function getGoldValue()
-    if cachedGoldValueObject and cachedGoldValueObject.Parent then
-        return tonumber(cachedGoldValueObject.Value)
-    end
-
-    local leaderstats = LP:FindFirstChild("leaderstats")
-    if leaderstats then
-        for _, v in ipairs(leaderstats:GetChildren()) do
-            if (v:IsA("IntValue") or v:IsA("NumberValue")) and containsAny(v.Name, {"gold", "oro"}) then
-                cachedGoldValueObject = v
-                return tonumber(v.Value)
-            end
-        end
-    end
-    for _, v in ipairs(LP:GetDescendants()) do
-        if (v:IsA("IntValue") or v:IsA("NumberValue")) and containsAny(v.Name, {"gold", "oro"}) then
-            cachedGoldValueObject = v
-            return tonumber(v.Value)
-        end
-    end
-    return nil
-end
-
-local function getTeamSpawn()
-    local now = os.clock()
-    local team = LP.Team
-    local teamKey = team and (team.Name .. ":" .. tostring(team.TeamColor)) or "none"
-    if worldCache.teamSpawn and worldCache.teamSpawn.Parent and worldCache.teamKey == teamKey and (now - worldCache.teamSpawnAt) < 8 then
-        return worldCache.teamSpawn
-    end
-
-    local found
-    for _, d in ipairs(Workspace:GetDescendants()) do
-        if d:IsA("SpawnLocation") then
-            if team and not d.Neutral and d.TeamColor == team.TeamColor then found = d break end
-            if team and containsAny(d.Name, {lower(team.Name), "spawn", "zone"}) then found = found or d end
-        end
-    end
-    if not found and team then
-        local teamName = lower(team.Name)
-        local best, bestScore
-        for _, d in ipairs(Workspace:GetDescendants()) do
-            if d:IsA("BasePart") then
-                local n = lower(d.Name .. " " .. (d.Parent and d.Parent.Name or ""))
-                local score = 0
-                if string.find(n, teamName, 1, true) then score += 5 end
-                if containsAny(n, {"zone", "build", "spawn", "team"}) then score += 3 end
-                if score > 0 and (not bestScore or score > bestScore) then best, bestScore = d, score end
-            end
-        end
-        found = best
-    end
-
-    worldCache.teamSpawn = found
-    worldCache.teamSpawnAt = now
-    worldCache.teamKey = teamKey
-    return found
-end
-local function getNearestSeat(maxDistance)
-    local root = getRoot()
-    if not root then return nil end
-    maxDistance = maxDistance or 450
-    local now = os.clock()
-    local cached = worldCache.nearestSeat
-    if cached and cached.Parent and (cached.Position - root.Position).Magnitude <= maxDistance and (now - worldCache.seatAt) < 2.5 then
-        return cached
-    end
-    if (now - worldCache.seatAt) < 2.5 and worldCache.seatRadius >= maxDistance then return nil end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local char = getChar()
-    if char then params.FilterDescendantsInstances = {char} end
-    params.MaxParts = 350
-
-    local best, dist = nil, maxDistance
-    local ok, nearby = pcall(function()
-        return Workspace:GetPartBoundsInRadius(root.Position, maxDistance, params)
-    end)
-    if ok and nearby then
-        for _, d in ipairs(nearby) do
-            if (d:IsA("VehicleSeat") or d:IsA("Seat")) and not isCharacterPart(d) then
-                local m = (d.Position - root.Position).Magnitude
-                if m < dist then best, dist = d, m end
-            end
-        end
-    end
-
-    worldCache.nearestSeat = best
-    worldCache.seatAt = now
-    worldCache.seatRadius = maxDistance
-    return best
-end
-
-local function getBoatRoot()
-    local now = os.clock()
-    local seat = getSeat()
-    if seat and seat.Parent then
-        lastSeat = seat
-        local root = seat.AssemblyRootPart or seat
-        worldCache.boatRoot = root
-        worldCache.boatRootAt = now
-        return root
-    end
-
-    if lastSeat and lastSeat.Parent then
-        local root = lastSeat.AssemblyRootPart or lastSeat
-        worldCache.boatRoot = root
-        worldCache.boatRootAt = now
-        return root
-    end
-
-    if worldCache.boatRoot and worldCache.boatRoot.Parent and (now - worldCache.boatRootAt) < 1.25 then
-        return worldCache.boatRoot
-    end
-
-    seat = getNearestSeat(500)
-    if seat then
-        lastSeat = seat
-        local root = seat.AssemblyRootPart or seat
-        worldCache.boatRoot = root
-        worldCache.boatRootAt = now
-        return root
-    end
-
-    worldCache.boatRoot = nil
-    worldCache.boatRootAt = now
-    return nil
-end
-
-local function getBoatParts()
-    local root = getBoatRoot()
-    if not root then return {}, nil end
-    local parts = {root}
-    local ok, connected = pcall(function() return root:GetConnectedParts(true) end)
-    if ok and type(connected) == "table" then parts = connected end
-    return parts, root
-end
-
-local function setPartCache(cache, part, property, value)
-    if cache[part] == nil then
-        local ok, old = pcall(function() return part[property] end)
-        if ok then cache[part] = old end
-    end
-    pcall(function() part[property] = value end)
-end
-
-local function restorePartCache(cache, property)
-    for part, old in pairs(cache) do
-        if part and part.Parent then pcall(function() part[property] = old end) end
-    end
-    table.clear(cache)
-end
-
-local function setNoclip(enabled)
-    if not enabled then
-        for part, old in pairs(characterCollisionCache) do
-            if part and part.Parent then pcall(function() part.CanCollide = old end) end
-        end
-        table.clear(characterCollisionCache)
-    end
-end
-
-local function setAntiHazard(enabled)
-    if not enabled then
-        for part, old in pairs(hazardTouchCache) do
-            if part and part.Parent then pcall(function() part.CanTouch = old end) end
-        end
-        table.clear(hazardTouchCache)
-        return
-    end
-
-    local descendants = Workspace:GetDescendants()
-    for i, d in ipairs(descendants) do
-        if d:IsA("BasePart") and containsAny(d.Name, {"water", "lava", "acid", "toxic", "damage", "kill", "hazard"}) then
-            if hazardTouchCache[d] == nil then hazardTouchCache[d] = d.CanTouch end
-            pcall(function() d.CanTouch = false end)
-        end
-        if i % 300 == 0 then task.wait() end
-    end
-end
-
-local function destroyFlyObjects()
-    for _, obj in pairs(flyObjects) do if obj then pcall(function() obj:Destroy() end) end end
-    table.clear(flyObjects)
-end
-
-local function ensureBoatFlyObjects(seat)
-    if flyObjects.seat == seat and flyObjects.velocity and flyObjects.velocity.Parent then return end
-    destroyFlyObjects()
-
-    local vel = Instance.new("BodyVelocity")
-    vel.Name = "BABFT_BoatFlyVelocity"
-    vel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    vel.P = 30000
-    vel.Velocity = Vector3.zero
-    vel.Parent = seat
-
-    local gyro = Instance.new("BodyGyro")
-    gyro.Name = "BABFT_BoatFlyGyro"
-    gyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    gyro.P = 30000
-    gyro.D = 700
-    gyro.CFrame = seat.CFrame
-    gyro.Parent = seat
-
-    flyObjects.seat = seat
-    flyObjects.velocity = vel
-    flyObjects.gyro = gyro
-end
-
-local function getMoveVector()
-    Camera = Workspace.CurrentCamera or Camera
-    if not Camera then return Vector3.zero end
-
-    local dir = Vector3.zero
-    local look = Camera.CFrame.LookVector
-    local right = Camera.CFrame.RightVector
-    local flatLook = Vector3.new(look.X, 0, look.Z)
-    local flatRight = Vector3.new(right.X, 0, right.Z)
-    if flatLook.Magnitude > 0.01 then flatLook = flatLook.Unit end
-    if flatRight.Magnitude > 0.01 then flatRight = flatRight.Unit end
-
-    -- Keyboard
-    if pressed.W or UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += flatLook end
-    if pressed.S or UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= flatLook end
-    if pressed.D or UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += flatRight end
-    if pressed.A or UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= flatRight end
-    if pressed.Space or UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.yAxis end
-    if pressed.Ctrl or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
-        dir -= Vector3.yAxis
-    end
-
-    -- Mobile / gamepad thumbstick (critical for not getting stuck)
-    local okMove, moveVec = pcall(function()
-        return UserInputService:GetMoveVector()
-    end)
-    if okMove and moveVec and moveVec.Magnitude > 0.08 then
-        dir = dir + (flatLook * -moveVec.Z) + (flatRight * moveVec.X)
-    end
-
-    if dir.Magnitude > 0.01 then
-        return dir.Unit
-    end
-    return Vector3.zero
-end
-
-local keyMap = {
-    [Enum.KeyCode.W] = "W", [Enum.KeyCode.A] = "A", [Enum.KeyCode.S] = "S", [Enum.KeyCode.D] = "D",
-    [Enum.KeyCode.Space] = "Space", [Enum.KeyCode.LeftControl] = "Ctrl", [Enum.KeyCode.RightControl] = "Ctrl"
-}
-track(UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    local k = keyMap[input.KeyCode]
-    if k then pressed[k] = true end
-
-    if activeStates.infiniteJump and input.KeyCode == Enum.KeyCode.Space then
-        local hum = getHum()
-        local root = getRoot()
-        if hum and hum.Health > 0 and root then
-            pcall(function()
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                local v = root.AssemblyLinearVelocity
-                root.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, 50), v.Z)
-            end)
-        end
-    end
-
-    if activeStates.clickTP and input.UserInputType == Enum.UserInputType.MouseButton1 then
-        local pos = input.Position
-        local function inside(obj)
-            if not obj or not obj.Visible then return false end
-            local a, z = obj.AbsolutePosition, obj.AbsoluteSize
-            return pos.X >= a.X and pos.X <= a.X + z.X and pos.Y >= a.Y and pos.Y <= a.Y + z.Y
-        end
-        if not inside(Main) and not inside(Bubble) then
-            local mouse = LP:GetMouse()
-            if mouse and mouse.Hit then task.spawn(function() tpToCFrame(mouse.Hit * CFrame.new(0, 3, 0)) end) end
-        end
-    end
-end))
-track(UserInputService.InputEnded:Connect(function(input)
-    local k = keyMap[input.KeyCode]
-    if k then pressed[k] = false end
-end))
-
--- Infinite Jump for mobile / continuous (JumpRequest fires every jump attempt)
-track(UserInputService.JumpRequest:Connect(function()
-    if not alive or not activeStates.infiniteJump then return end
-    local hum = getHum()
-    local root = getRoot()
-    if not hum or not root or hum.Health <= 0 then return end
-    pcall(function()
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
-        local v = root.AssemblyLinearVelocity
-        root.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, 52), v.Z)
-    end)
-end))
-
-local function doAutoCollect()
-    local root = getRoot()
-    if not root then return end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local char = getChar()
-    if char then params.FilterDescendantsInstances = {char} end
-    params.MaxParts = 220
-
-    local ok, nearby = pcall(function()
-        return Workspace:GetPartBoundsInRadius(root.Position, 280, params)
-    end)
-    if not ok or not nearby then return end
-
-    local touched = 0
-    for _, d in ipairs(nearby) do
-        if d:IsA("BasePart") then
-            if containsAny(d.Name, {"gold", "collect", "pickup", "treasure", "chest"}) and firetouchinterest then
+            local env = (getgenv and getgenv()) or _G
+            local choice = createLanguageSelector(true)
+            if choice == "ES" or choice == "EN" then
+                env.H3XA_MM2_LANGUAGE = choice
+                H3XA_MM2_LANGUAGE = choice
                 pcall(function()
-                    firetouchinterest(root, d, 0)
-                    firetouchinterest(root, d, 1)
+                    if getgenv().H3XA_MM2FUNCTIONS and getgenv().H3XA_MM2FUNCTIONS.refreshlist then
+                        getgenv().H3XA_MM2FUNCTIONS.refreshlist()
+                    end
+                    if getgenv().H3XA_MM2FUNCTIONS and getgenv().H3XA_MM2FUNCTIONS.refresharea then
+                        getgenv().H3XA_MM2FUNCTIONS.refresharea()
+                    end
                 end)
-                touched += 1
             end
+        end)
+    end)
 
-            if fireproximityprompt then
-                local prompt = d:FindFirstChildOfClass("ProximityPrompt")
-                if prompt and prompt.Enabled and (d.Position - root.Position).Magnitude <= prompt.MaxActivationDistance + 8 then
-                    pcall(fireproximityprompt, prompt)
+    -- Solid minimize: dark icon only, no white panel, no spring fight
+    local isMinimized = false
+    local savedPos = UDim2.fromScale(0.5, 0.5)
+    -- Posición recordada del icono flotante (independiente del panel centrado)
+    local iconPos = nil
+    local envDev = (getgenv and getgenv()) or _G
+    local isMobileUI = (envDev.H3XA_MM2_DEVICE == "MOBILE") or (H3XA_MM2_DEVICE == "MOBILE")
+    local FULL_SIZE = isMobileUI and UDim2.fromOffset(560, 380) or UDim2.fromOffset(720, 470)
+    local ICON_SIZE = isMobileUI and UDim2.fromOffset(52, 52) or UDim2.fromOffset(56, 56)
+
+    local function hideContent()
+        for _, name in ipairs({"List", "Area", "HubName", "HubDesc", "HubCredits", "CloseArea", "Stub", "BrandLogo", "BrandTitle", "TopGlow", "BottomGlow", "GalaxyBG"}) do
+            local obj = menu:FindFirstChild(name)
+            if obj then obj.Visible = false end
+        end
+        -- hide any other Stub duplicates
+        for _, child in ipairs(menu:GetChildren()) do
+            if child.Name == "Stub" then child.Visible = false end
+        end
+        controlBar.Visible = false
+    end
+
+    local function showContent()
+        local list = menu:FindFirstChild("List")
+        local area = menu:FindFirstChild("Area")
+        local brand = menu:FindFirstChild("BrandLogo")
+        local brandTitle = menu:FindFirstChild("BrandTitle")
+        local topG = menu:FindFirstChild("TopGlow")
+        if list then list.Visible = true end
+        if area then area.Visible = true end
+        if brand then brand.Visible = true end
+        if brandTitle then brandTitle.Visible = true end
+        if topG then topG.Visible = true end
+        -- keep old HubName / HubDesc hidden
+        local hubName = menu:FindFirstChild("HubName")
+        local hubDesc = menu:FindFirstChild("HubDesc")
+        if hubName then hubName.Visible = false end
+        if hubDesc then hubDesc.Visible = false end
+        controlBar.Visible = true
+    end
+
+    local function doMinimize()
+        if isMinimized then return end
+        isMinimized = true
+        -- Si ya había una posición de icono, volver ahí; si no, usar la actual
+        if not iconPos then
+            iconPos = menu.Position
+        end
+        savedPos = iconPos
+        menu:SetAttribute("H3XA_Minimized", true)
+
+        local cg = menu:FindFirstChild("CanvasGroup")
+        local stroke = menu:FindFirstChildOfClass("UIStroke")
+        local gradient = menu:FindFirstChildOfClass("UIGradient")
+
+        hideContent()
+        local dragBarObj = menu:FindFirstChild("DragBar")
+        if dragBarObj then dragBarObj.Visible = false end
+        local galaxyBG = menu:FindFirstChild("GalaxyBG")
+        if galaxyBG then galaxyBG.Visible = false end
+
+        -- Sin borde negro: totalmente transparente + sin stroke
+        if stroke then
+            stroke.Enabled = false
+            stroke.Transparency = 1
+        end
+        if gradient then gradient.Enabled = false end
+
+        menu.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        menu.BackgroundTransparency = 1
+        local corner = menu:FindFirstChildOfClass("UICorner")
+        if corner then corner.CornerRadius = UDim.new(1, 0) end
+
+        if cg then
+            cg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            cg.BackgroundTransparency = 1
+            cg.GroupTransparency = 0
+            cg.Visible = true
+            cg.Interactable = true
+            local opener = cg:FindFirstChild("Opener")
+            if opener then
+                opener.BackgroundTransparency = 1
+                opener.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                opener.BorderSizePixel = 0
+            end
+            local img = cg:FindFirstChild("ImageLabel")
+            if img then
+                img.BackgroundTransparency = 1
+                img.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                img.BorderSizePixel = 0
+                img.Visible = true
+                img.Size = UDim2.fromOffset(40, 40)
+            end
+            local tl = cg:FindFirstChild("TextLabel")
+            if tl then tl.Visible = false end
+            -- quitar cualquier UIStroke del canvas minimizado
+            for _, d in ipairs(cg:GetDescendants()) do
+                if d:IsA("UIStroke") then
+                    d.Enabled = false
+                    d.Transparency = 1
                 end
             end
         end
-        if touched >= 18 then break end
-    end
-end
 
-local function rejoin()
-    pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP)
+        TweenService:Create(menu, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Size = ICON_SIZE,
+            Position = iconPos,
+            BackgroundTransparency = 1
+        }):Play()
+    end
+
+    local function doRestore()
+        if not isMinimized then return end
+        isMinimized = false
+        menu:SetAttribute("H3XA_Minimized", false)
+
+        -- Guardar dónde quedó el icono, y abrir el panel siempre en el centro
+        iconPos = menu.Position
+        local openPos = UDim2.fromScale(0.5, 0.5)
+        savedPos = openPos
+        menu.AnchorPoint = Vector2.new(0.5, 0.5)
+
+        local cg = menu:FindFirstChild("CanvasGroup")
+        local stroke = menu:FindFirstChildOfClass("UIStroke")
+        local gradient = menu:FindFirstChildOfClass("UIGradient")
+        local corner = menu:FindFirstChildOfClass("UICorner")
+
+        if corner then corner.CornerRadius = UDim.new(0, 32) end
+        menu.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+        menu.BackgroundTransparency = 0
+
+        if stroke then
+            stroke.Enabled = true
+            stroke.Transparency = 0.72
+        end
+        if gradient then gradient.Enabled = true end
+
+        if cg then
+            TweenService:Create(cg, TweenInfo.new(0.25), {GroupTransparency = 1}):Play()
+            task.delay(0.28, function()
+                if cg and not isMinimized then
+                    cg.Visible = false
+                    cg.Interactable = false
+                end
+            end)
+        end
+
+        TweenService:Create(menu, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Size = FULL_SIZE,
+            Position = openPos
+        }):Play()
+
+        task.delay(0.2, function()
+            if not isMinimized then
+                showContent()
+                local dragBarObj = menu:FindFirstChild("DragBar")
+                if dragBarObj then dragBarObj.Visible = true end
+                local galaxyBG = menu:FindFirstChild("GalaxyBG")
+                if galaxyBG then galaxyBG.Visible = true end
+            end
+        end)
+    end
+
+    minimizeBtn.MouseButton1Click:Connect(function()
+        if isMinimized then return end
+        doMinimize()
     end)
-end
 
-local function serverHop()
-    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    local body
-    local ok, result = pcall(function() return game:HttpGet(url) end)
-    if ok then body = result end
-
-    if not body then
-        local req = (syn and syn.request) or http_request or request
-        if req then
-            local okReq, response = pcall(req, {Url = url, Method = "GET"})
-            if okReq and response then body = response.Body end
-        end
-    end
-
-    if not body then return nil end
-
-    local okJson, data = pcall(function() return HttpService:JSONDecode(body) end)
-    if not okJson or type(data) ~= "table" or type(data.data) ~= "table" then
-        return nil
-    end
-
-    local candidates = {}
-    for _, server in ipairs(data.data) do
-        if server.id ~= game.JobId and server.playing < server.maxPlayers then
-            candidates[#candidates + 1] = server
-        end
-    end
-
-    if #candidates == 0 then return nil end
-    return candidates[math.random(1, #candidates)]
-end
-
-local function clearPlayerFlyObjects()
-    for _, obj in pairs(playerFlyObjects) do
-        if obj then pcall(function() obj:Destroy() end) end
-    end
-    table.clear(playerFlyObjects)
-end
-
-local function ensurePlayerFlyObjects(root)
-    if playerFlyObjects.root == root and playerFlyObjects.velocity and playerFlyObjects.velocity.Parent then return end
-    clearPlayerFlyObjects()
-    local vel = Instance.new("BodyVelocity")
-    vel.Name = "BABFT_PlayerFlyVelocity"
-    vel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    vel.P = 30000
-    vel.Velocity = Vector3.zero
-    vel.Parent = root
-
-    local gyro = Instance.new("BodyGyro")
-    gyro.Name = "BABFT_PlayerFlyGyro"
-    gyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    gyro.P = 30000
-    gyro.D = 650
-    gyro.CFrame = root.CFrame
-    gyro.Parent = root
-
-    playerFlyObjects.root = root
-    playerFlyObjects.velocity = vel
-    playerFlyObjects.gyro = gyro
-end
-
-local function clearBoatUtilityObjects()
-    for _, obj in pairs(boatUtilityObjects) do
-        if obj and typeof(obj) == "Instance" then pcall(function() obj:Destroy() end) end
-    end
-    table.clear(boatUtilityObjects)
-end
-
-local function ensureBoatGyro(root)
-    if boatUtilityObjects.root == root and boatUtilityObjects.gyro and boatUtilityObjects.gyro.Parent then
-        return boatUtilityObjects.gyro
-    end
-    clearBoatUtilityObjects()
-    local gyro = Instance.new("BodyGyro")
-    gyro.Name = "BABFT_BoatUtilityGyro"
-    gyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    gyro.P = 45000
-    gyro.D = 900
-    gyro.CFrame = root.CFrame
-    gyro.Parent = root
-    boatUtilityObjects.root = root
-    boatUtilityObjects.gyro = gyro
-    return gyro
-end
-
-local function setBoatNoclip(enabled)
-    if not enabled then
-        activeStates._boatNoclipAt = nil
-        restorePartCache(boatCollisionCache, "CanCollide")
-        return
-    end
-    local now = os.clock()
-    if activeStates._boatNoclipAt and now - activeStates._boatNoclipAt < 3.5 then return end
-    activeStates._boatNoclipAt = now
-    local parts = getBoatParts()
-    for i, part in ipairs(parts) do
-        if part:IsA("BasePart") then setPartCache(boatCollisionCache, part, "CanCollide", false) end
-    end
-end
-
-local function setBoatProtection(enabled)
-    if not enabled then
-        activeStates._boatProtectAt = nil
-        restorePartCache(boatTouchCache, "CanTouch")
-        return
-    end
-    local now = os.clock()
-    if activeStates._boatProtectAt and now - activeStates._boatProtectAt < 3.5 then return end
-    activeStates._boatProtectAt = now
-    local parts = getBoatParts()
-    for i, part in ipairs(parts) do
-        if part:IsA("BasePart") then setPartCache(boatTouchCache, part, "CanTouch", false) end
-    end
-end
-
-local function getThrusterObjects()
-    local parts = getBoatParts()
-    local found, seen = {}, {}
-    for _, part in ipairs(parts) do
-        local node = part
-        for _ = 1, 3 do
-            if node and not seen[node] and containsAny(node.Name, {"thruster", "propeller", "jet", "motor", "rocket"}) then
-                seen[node] = true
-                found[#found + 1] = node
-            end
-            node = node and node.Parent
-        end
-    end
-    return found
-end
-
-local function activateThrusters()
-    local found = getThrusterObjects()
-    local activated = 0
-    for _, obj in ipairs(found) do
-        for _, d in ipairs(obj:GetDescendants()) do
-            if d:IsA("ProximityPrompt") and fireproximityprompt then
-                pcall(fireproximityprompt, d)
-                activated += 1
-            elseif d:IsA("ClickDetector") and fireclickdetector then
-                pcall(fireclickdetector, d)
-                activated += 1
-            elseif d:IsA("BoolValue") and containsAny(d.Name, {"enabled", "active", "on"}) then
-                pcall(function() d.Value = true end)
-                activated += 1
+    -- Alt+Y u otras peticiones externas de abrir
+    menu:GetAttributeChangedSignal("H3XA_RequestOpen"):Connect(function()
+        if menu:GetAttribute("H3XA_RequestOpen") then
+            menu:SetAttribute("H3XA_RequestOpen", false)
+            if isMinimized then
+                doRestore()
             end
         end
+    end)
+
+    -- Drag del panel principal + del icono minimizado
+    local UserInputService = game:GetService("UserInputService")
+    local dragging = false
+    local didDrag = false
+    local suppressOpenUntil = 0
+    local dragStart = nil
+    local startPos = nil
+    local activeInput = nil
+
+    local function beginDrag(input)
+        dragging = true
+        didDrag = false
+        dragStart = input.Position
+        startPos = menu.Position
+        activeInput = input
+        menu:SetAttribute("H3XA_UserDrag", true)
     end
-    return activated
-end
 
-local function refillFuel()
-    local now = os.clock()
-    local root = getBoatRoot()
-    if not root then return 0 end
+    local function updateDrag(input)
+        if not dragging or not dragStart or not startPos then return end
+        local delta = input.Position - dragStart
+        if math.abs(delta.X) > 6 or math.abs(delta.Y) > 6 then
+            didDrag = true
+        end
+        if not didDrag then return end
+        local newPos = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+        menu.Position = newPos
+        savedPos = newPos
+        if menu:GetAttribute("H3XA_Minimized") then
+            iconPos = newPos
+        end
+    end
 
-    local cache = activeStates._fuelValues
-    if type(cache) ~= "table" or activeStates._fuelRoot ~= root or not activeStates._fuelScanAt or now - activeStates._fuelScanAt > 8 then
-        cache = {}
-        activeStates._fuelValues = cache
-        activeStates._fuelRoot = root
-        activeStates._fuelScanAt = now
-        local parts = getBoatParts()
-        local seen = {}
-        for i, part in ipairs(parts) do
-            local parent = part.Parent
-            if parent and not seen[parent] then
-                seen[parent] = true
-                for _, d in ipairs(parent:GetDescendants()) do
-                    if (d:IsA("NumberValue") or d:IsA("IntValue")) and containsAny(d.Name, {"fuel", "charge", "energy"}) then
-                        cache[#cache + 1] = d
+    local function endDrag()
+        local wasDrag = didDrag
+        dragging = false
+        dragStart = nil
+        startPos = nil
+        activeInput = nil
+        savedPos = menu.Position
+        if menu:GetAttribute("H3XA_Minimized") then
+            iconPos = menu.Position
+        end
+        menu:SetAttribute("H3XA_UserDrag", true)
+        if wasDrag then
+            -- bloquear apertura accidental al soltar después de mover
+            suppressOpenUntil = os.clock() + 0.35
+        end
+        -- reset didDrag un frame después para no interferir con click handlers
+        task.defer(function()
+            if not dragging then
+                didDrag = wasDrag and true or false
+                task.delay(0.2, function()
+                    if not dragging then didDrag = false end
+                end)
+            end
+        end)
+    end
+
+    -- Zona de arrastre del panel (header superior)
+    local dragBar = menu:FindFirstChild("DragBar")
+    if not dragBar then
+        dragBar = Instance.new("TextButton")
+        dragBar.Name = "DragBar"
+        dragBar.BackgroundTransparency = 1
+        dragBar.Text = ""
+        dragBar.Size = UDim2.new(1, -100, 0, 56)
+        dragBar.Position = UDim2.fromOffset(0, 0)
+        dragBar.ZIndex = 40
+        dragBar.AutoButtonColor = false
+        dragBar.Parent = menu
+    end
+
+    dragBar.InputBegan:Connect(function(input)
+        if menu:GetAttribute("H3XA_Minimized") then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            beginDrag(input)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            updateDrag(input)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                local wasDrag = didDrag
+                endDrag()
+                -- Click limpio sobre icono minimizado = abrir
+                if not wasDrag and menu:GetAttribute("H3XA_Minimized") and os.clock() >= suppressOpenUntil then
+                    -- comprobar que el input terminó sobre el opener
+                    local cg = menu:FindFirstChild("CanvasGroup")
+                    local opener = cg and cg:FindFirstChild("Opener")
+                    if opener then
+                        doRestore()
                     end
                 end
             end
         end
-    end
+    end)
 
-    local changed = 0
-    for i = #cache, 1, -1 do
-        local d = cache[i]
-        if not d or not d.Parent then
-            table.remove(cache, i)
-        else
-            pcall(function() d.Value = math.max(tonumber(d.Value) or 0, 999999) end)
-            changed += 1
+    -- Icono minimizado: solo drag + apertura controlada (sin MouseButton1Click)
+    task.defer(function()
+        local cg = menu:WaitForChild("CanvasGroup", 8)
+        if not cg then return end
+        local opener = cg:FindFirstChild("Opener")
+        if opener and opener:IsA("GuiButton") then
+            opener.BackgroundTransparency = 1
+            opener.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            opener.BorderSizePixel = 0
+            opener.AutoButtonColor = false
+
+            -- Desconectar clicks que abren solo: usamos InputEnded con umbral
+            opener.MouseButton1Click:Connect(function()
+                -- ignorar siempre el click nativo; la apertura la maneja InputEnded
+            end)
+
+            opener.InputBegan:Connect(function(input)
+                if not menu:GetAttribute("H3XA_Minimized") then return end
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    beginDrag(input)
+                end
+            end)
         end
-    end
-    return changed
-end
+        local img = cg:FindFirstChild("ImageLabel")
+        if img then
+            img.BackgroundTransparency = 1
+            img.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+            img.BorderSizePixel = 0
+        end
+    end)
 
-local function isVisibleGuiObject(obj)
-    local cur = obj
-    while cur and cur:IsA("GuiObject") do
-        if not cur.Visible then return false end
-        cur = cur.Parent
-    end
-    return true
-end
-
-local function guiButtonLabel(button)
-    local text = ""
-    if button:IsA("TextButton") then text = button.Text or "" end
-    if text == "" then
-        for _, d in ipairs(button:GetDescendants()) do
-            if d:IsA("TextLabel") and d.Text ~= "" then
-                text ..= " " .. d.Text
+    closeButton.MouseButton1Click:Connect(function()
+        pcall(function()
+            local coreGui = game:GetService("CoreGui")
+            for _, child in ipairs(coreGui:GetChildren()) do
+                if child.Name == "ESPIndicators" or child.Name == "H3XA_MM2_LanguageSelector" then
+                    child:Destroy()
+                end
             end
+        end)
+        pcall(function()
+            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            if playerGui then
+                local extra = playerGui:FindFirstChild("ESPIndicators")
+                if extra then extra:Destroy() end
+            end
+        end)
+        root:Destroy()
+    end)
+
+    -- Clean typography
+    for _, object in ipairs(root:GetDescendants()) do
+        if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+            object.TextStrokeTransparency = 1
+            if object.Font ~= Enum.Font.GothamBold then
+                object.Font = Enum.Font.Gotham
+            end
+        elseif object:IsA("UIStroke") and object.Parent ~= closeButton and object.Parent ~= minimizeBtn then
+            object.Color = Color3.fromRGB(255, 255, 255)
         end
     end
-    return string.gsub((button.Name or "") .. " " .. text, "^%s+", "")
-end
 
-local function findGameButtons(words)
-    local pg = LP:FindFirstChildOfClass("PlayerGui")
-    local results = {}
-    if not pg then return results end
-    for _, d in ipairs(pg:GetDescendants()) do
-        if (d:IsA("TextButton") or d:IsA("ImageButton")) and not d:IsDescendantOf(Gui) and isVisibleGuiObject(d) then
-            local label = lower(guiButtonLabel(d))
-            for _, word in ipairs(words) do
-                if string.find(label, lower(word), 1, true) then
-                    results[#results + 1] = {button = d, label = guiButtonLabel(d)}
-                    break
+    Converted["_HubCredits"].Text = ""
+    Converted["_HubCredits"].Visible = false
+    Converted["_HubName"].Text = ""
+    Converted["_HubName"].Visible = false
+    Converted["_HubName"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    Converted["_HubName"].Font = Enum.Font.GothamBold
+    Converted["_HubName"].TextSize = 22
+    Converted["_HubDesc"].Text = ""
+    Converted["_HubDesc"].Visible = false
+    Converted["_HubDesc"].TextColor3 = Color3.fromRGB(170, 170, 180)
+    Converted["_HubDesc"].TextSize = 12
+    Converted["_TextLabel6"].Visible = false
+    Converted["_TextLabel7"].Visible = false
+
+    -- Hide/destroy residual black boxes (stubs, old minimize strip, canvas leftovers)
+    Converted["_CloseArea"].Visible = false
+    Converted["_TextLabel5"].Visible = false
+    Converted["_TextLabel5"].BackgroundTransparency = 1
+    Converted["_TextLabel5"].TextTransparency = 1
+    Converted["_Frame1"].Visible = false
+    Converted["_Frame1"].BackgroundTransparency = 1
+    Converted["_Frame1"].Size = UDim2.new(0, 0, 0, 0)
+    for _, stubName in ipairs({"_Stub", "_Stub1"}) do
+        local stub = Converted[stubName]
+        if stub then
+            stub.Visible = false
+            stub.BackgroundTransparency = 1
+            stub.Size = UDim2.new(0, 0, 0, 0)
+        end
+    end
+    pcall(function()
+        Converted["_CanvasGroup"].Visible = false
+        Converted["_CanvasGroup"].GroupTransparency = 1
+        Converted["_CanvasGroup"].BackgroundTransparency = 1
+        Converted["_ImageLabel"].Visible = false
+        Converted["_ImageLabel"].BackgroundTransparency = 1
+        Converted["_Opener"].BackgroundTransparency = 1
+    end)
+    -- Kill any leftover solid dark frames on the menu
+    pcall(function()
+        for _, child in ipairs(Converted["_Menu"]:GetChildren()) do
+            if child.Name == "Stub" or child.Name == "BottomGlow" then
+                child.Visible = false
+                if child:IsA("GuiObject") then
+                    child.BackgroundTransparency = 1
+                    child.Size = UDim2.new(0, 0, 0, 0)
                 end
             end
         end
-    end
-    return results
+    end)
+
+    -- List / notification / dialog in B&W neon
+    Converted["_ListButton"].BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    Converted["_ListButton"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    Converted["_ListButton"].TextStrokeTransparency = 1
+    Converted["_ListButton"].Font = Enum.Font.GothamBold
+
+    Converted["_NotificationSample"].BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    Converted["_UIStroke8"].Color = Color3.fromRGB(255, 255, 255)
+    Converted["_UIStroke8"].Thickness = 1.3
+    Converted["_UIStroke8"].Transparency = 0.35
+
+    Converted["_Dialog"].BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    Converted["_UIStroke10"].Color = Color3.fromRGB(255, 255, 255)
+    Converted["_UIStroke10"].Thickness = 1.4
+    Converted["_UIStroke10"].Transparency = 0.3
+
+    Converted["_FloatingButton"].BackgroundColor3 = Color3.fromRGB(14, 14, 16)
+    Converted["_UIStroke1"].Color = Color3.fromRGB(255, 255, 255)
+    Converted["_UIStroke1"].Thickness = 1.3
+    Converted["_UIStroke1"].Transparency = 0.35
 end
 
-local function activateGuiButton(button)
-    if not button or not button.Parent then return false end
-    local ok = false
-    if firesignal then
-        ok = pcall(function()
-            firesignal(button.Activated)
-            if button:IsA("TextButton") or button:IsA("ImageButton") then firesignal(button.MouseButton1Click) end
-        end)
+-- Routine Module Scripts:
+
+local routine_module_scripts = {}
+
+do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
+    local script = Instance.new("ModuleScript")
+    script.Name = "FUNCTIONS"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		local FUNCTIONSmodule = {}
+		FUNCTIONSmodule.__v = "1.21"
+		
+		local ts = game:GetService("TweenService")
+		local https = game:GetService("HttpService")
+		
+		
+			
+			
+		function DraggableObjectf()
+			local function a(b,c)local d=c.AbsoluteSize;local e=c.AbsolutePosition;local f=b.X.Scale*d.X+b.X.Offset;local g=b.Y.Scale*d.Y+b.Y.Offset;local h=math.clamp(f,0,d.X)local i=math.clamp(g,0,d.Y)local j=UDim2.new(b.X.Scale,h-b.X.Scale*d.X,b.Y.Scale,i-b.Y.Scale*d.Y)return j end;local k=UDim2.new;local l=game:GetService("UserInputService")local m=game:GetService("TweenService")local n={}n.__index=n;function n.new(o,p,q,r)local self={}self.Object=o;self.ToMove=p;self.Smooth=q;self.CallbackOnly=r;self.CanBeDragged=false;self.DragStarted=nil;self.DragEnded=nil;self.Dragged=nil;self.Dragging=false;self.LastPosition=nil;self.Velocity=Vector2.new(0,0)setmetatable(self,n)return self end;function n:Enable()self.CanBeDragged=true;local s=self.Object;local t=self.ToMove;local u=nil;local v=nil;local w=nil;local x=false;local function y(z)local A=z.Position-v;local B=UDim2.new(w.X.Scale,w.X.Offset+A.X,w.Y.Scale,w.Y.Offset+A.Y)if self.CallbackOnly then else B=a(B,self.Object:FindFirstAncestorWhichIsA("ScreenGui"))if(self.Smooth==nil or self.Smooth==true)and self.Smooth~=false then m:Create(t and t or s,TweenInfo.new(0.5,Enum.EasingStyle.Cubic,Enum.EasingDirection.Out),{Position=B}):Play()else local C=t and t or s;C.Position=B end end;return B end;self.InputBegan=s.InputBegan:Connect(function(z)if z.UserInputType==Enum.UserInputType.MouseButton1 or z.UserInputType==Enum.UserInputType.Touch then x=true;local D;D=z.Changed:Connect(function()if z.UserInputState==Enum.UserInputState.End and(self.Dragging or x)then self.Dragging=false;D:Disconnect()if self.DragEnded and not x then self.DragEnded(self.Velocity)end;x=false end end)end end)self.InputChanged=s.InputChanged:Connect(function(z)if z.UserInputType==Enum.UserInputType.MouseMovement or z.UserInputType==Enum.UserInputType.Touch then u=z end end)self.InputChanged2=l.InputChanged:Connect(function(z)if s.Parent==nil then self:Disable()return end;if x then x=false;if self.DragStarted then self.DragStarted()end;self.Dragging=true;v=z.Position;if t then w=t.Position else w=s.Position end;self.LastPosition=z.Position end;if z==u and self.Dragging then local B=y(z)self.Velocity=z.Position-self.LastPosition;self.LastPosition=z.Position;if self.Dragged then self.Dragged(B)end end end)end;function n:Disable()self.CanBeDragged=false;self.InputBegan:Disconnect()self.InputChanged:Disconnect()self.InputChanged2:Disconnect()if self.Dragging then self.Dragging=false;if self.DragEnded then self.DragEnded(self.Velocity)end end end;return n	
+		end
+		local DraggableObject = DraggableObjectf()
+		
+		function ClickAndHoldf()
+			local a={}a.__index=a;local b=game:GetService("UserInputService")function a.new(c,d)local self=setmetatable({},a)self.textButton=c;self.holdTime=d or 0.5;self.holdTask=nil;self.initialPosition=nil;self.Holded=Instance.new("BindableEvent")local function e(f,g)return math.sqrt((g.X-f.X)^2+(g.Y-f.Y)^2)end;self.textButton.MouseButton1Down:Connect(function(h,i)self.initialPosition=Vector2.new(h,i)self.holdTask=task.spawn(function()task.wait(self.holdTime)if self.holdTask then self.Holded:Fire()end end)end)b.InputChanged:Connect(function(j)if j.UserInputType==Enum.UserInputType.MouseMovement or j.UserInputType==Enum.UserInputType.Touch then if self.holdTask and self.initialPosition then local k=j.Position;local l=e(self.initialPosition,k)if l>10 then coroutine.close(self.holdTask)self.holdTask=nil end end end end)b.InputEnded:Connect(function(j)if j.UserInputType==Enum.UserInputType.MouseButton1 or j.UserInputType==Enum.UserInputType.Touch then if self.holdTask then coroutine.close(self.holdTask)self.holdTask=nil end;self.initialPosition=nil end end)return self end;return a
+		end
+		local ClickAndHold = ClickAndHoldf()
+		function PointSavef()
+			local _=false local function d(...)if _ then print("[PointSave DEBUG]:",...)end end getgenv()._FOLDERS=getgenv()._FOLDERS or{} getgenv()._FILES=getgenv()._FILES or{} isfolder=isfolder or function(_)d("Checking if folder exists:",_) return getgenv()._FOLDERS[_]~=nil end makefolder=makefolder or function(_)d("Creating folder:",_) getgenv()._FOLDERS[_]={} return getgenv()._FOLDERS[_]end isfile=isfile or function(_)d("Checking if file exists:",_) return getgenv()._FILES[_]~=nil end writefile=writefile or function(a,_)d("Writing file:",a,"with content:",_) getgenv()._FILES[a]=_ return getgenv()._FILES[a]end readfile=readfile or function(_)d("Reading file:",_) return getgenv()._FILES[_]end delfile=delfile or function(_)d("Deleting file:",_) getgenv()._FILES[_]=nil end listfiles=listfiles or function(c)d("Listing files in folder:",c) local _=getgenv()._FOLDERS[c] if _ then local a={} for b,_ in pairs(getgenv()._FILES)do if b:sub(1,#c+1)==c.."/"then local _=b:sub(#c+2) d("Found file in folder:",_) table.insert(a,_)end end return a end d("Folder does not exist:",c) return{}end local b={} b.__index=b local c="PointSaveData" local function _()if not isfolder(c)then d("Base folder not found, creating:",c) makefolder(c)else d("Base folder already exists:",c)end end function b.new(a)d("Initializing new PointSave instance for namespace:",a) _() local _=setmetatable({},b) _.namespace=a _.folderPath=c.."/"..a if not isfolder(_.folderPath)then d("Namespace folder does not exist, creating:",_.folderPath) makefolder(_.folderPath)else d("Namespace folder already exists:",_.folderPath)end return _ end function b:set(b,a)local _=self.folderPath.."/"..b..".txt" d("Setting value for key:",b,"->",a) writefile(_,tostring(a))end function b:get(a)local _=self.folderPath.."/"..a..".txt" d("Getting value for key:",a) if isfile(_)then local _=readfile(_) d("Found value for key:",a,"->",_) return _ end d("Key not found:",a) return nil end function b:remove(a)local _=self.folderPath.."/"..a..".txt" d("Removing key:",a) if isfile(_)then delfile(_) d("Removed file for key:",a)else d("File for key does not exist:",a)end end function b:clear()d("Clearing all keys in namespace:",self.namespace) local _=listfiles(self.folderPath) for _,_ in ipairs(_)do local _=self.folderPath.."/".._ if isfile(_)then d("Deleting file:",_) delfile(_)end end end function b.deleteNamespace(a)local b=c.."/"..a d("Deleting namespace:",a) local _=listfiles(b) for _,_ in ipairs(_)do local _=b.."/".._ if isfile(_)then d("Deleting file from namespace:",_) delfile(_)end end getgenv()._FOLDERS[b]=nil d("Deleted folder for namespace:",a)end function b.listNamespaces()d("Listing all namespaces") _() local b={} for a,_ in pairs(getgenv()._FOLDERS)do if a:sub(1,#c+1)==c.."/"then local _=a:sub(#c+2) d("Found namespace:",_) table.insert(b,_)end end return b end return b
+		end
+		local PointSave = PointSavef()
+		function SBTf()
+			-- Spring-based tweening module
+		
+			local a=function()local a=function()local a={}local function b(c,d,e,f,g,h)local i=d*d-4*e/c;local j=-0.5;local k=d+math.sqrt(i)local l=d-math.sqrt(i)local m,n=j*k,j*l;local o,p=(n*f-g)/(n-m),(m*f-g)/(m-n)local q=h/e;return{Offset=function(r)return o*math.exp(m*r)+p*math.exp(n*r)+q end,Velocity=function(r)return o*m*math.exp(m*r)+p*n*math.exp(n*r)end,Acceleration=function(r)return o*m*m*math.exp(m*r)+p*n*n*math.exp(n*r)end}end;local function s(c,d,e,f,g,h)local i=-d/2;local j,k=f,g-i*f;local l=h/e;return{Offset=function(m)return math.exp(i*m)*(j+k*m)+l end,Velocity=function(m)return math.exp(i*m)*(k*i*m+j*i+k)end,Acceleration=function(m)return i*math.exp(i*m)*(k*i*m+j*i+2*k)end}end;local function t(c,d,e,f,g,h)local i=d*d-4*e/c;local j=-d/2;local k=math.sqrt(-i)local l,m=f,(g-j*f)/k;local n=h/e;return{Offset=function(o)return math.exp(j*o)*(l*math.cos(k*o)+m*math.sin(k*o))+n end,Velocity=function(o)return-math.exp(j*o)*((l*k-m*j)*math.sin(k*o)+(-m*k-l*j)*math.cos(k*o))end,Acceleration=function(o)return-math.exp(j*o)*((m*k*k+2*l*j*k-m*j*j)*math.sin(k*o)+(l*k*k-2*m*j*k-l*j*j)*math.cos(k*o))end}end;function a.F(c)local d,e,f=c.InitialOffset,c.InitialVelocity,c.ExternalForce;local g,h,i=c.Mass,c.Damping,c.Constant;local j=h*h-4*i/g;if j>0 then return b(g,h,i,d,e,f)elseif j==0 then return s(g,h,i,d,e,f)else return t(g,h,i,d,e,f)end end;return a end;local c=a()local d=math.sqrt;local e=math.pi;local f={OFFSET="Offset",VELOCITY="Velocity",ACCELERATION="Acceleration",GOAL="Goal",FREQUENCY="Frequency"}local g=""local h=""local i={}local j={}j.__index=function(k,l)local m={[f.OFFSET]=function()local m=tick()-k.StartTick;local n=k.F;local o=n.Offset(m)return o end,[f.VELOCITY]=function()local m=tick()-k.StartTick;local n=k.F;local o=n.Velocity(m)return o end,[f.ACCELERATION]=function()local m=tick()-k.StartTick;local n=k.F;local o=n.Acceleration(m)return o end,[f.GOAL]=function()local m=k.ExternalForce;local n=k.Constant;return m/n end,[f.FREQUENCY]=function()local m=k.Damping;local n=k.Constant;local o=k.Mass;return d(-m*m+4*n/o)/(2*e)end}local n=rawget(k,l)if n~=nil then return n end;local o=m[l]if o~=nil then return o()end;return j[l]end;j.__tostring=function(k)local l=tick()-k.StartTick;local m=k.F;local n=k.AdvancedObjectStringEnabled;local o;if not n then o=string.format(g,m.Offset(l),m.Velocity(l),m.Acceleration(l))else o=string.format(h,k.Mass,k.Damping,k.Constant,k.Goal,k.Frequency,k.InitialOffset,k.InitialVelocity,k.ExternalForce,k.StartTick,m.Offset(l),m.Velocity(l),m.Acceleration(l))end;return o end;function i.fromDurationAndBounce(k,l)local m=1;local n=(2*math.pi/k)^2*m;local o=2*l*math.sqrt(m*n)return{m,o,n}end;function i.new(k,l,m,n,o,p)assert(k>0,"Mass for spring system cannot be less than or equal to 0")assert(m>0,"Spring constant for spring system cannot be less than or equal to 0")n=n or 0;o=o or 0;p=p or 0;local q=p*m;local r={Mass=k,Damping=l,Constant=m,InitialOffset=n-p,InitialVelocity=o,ExternalForce=q,AdvancedObjectStringEnabled=false,StartTick=0}setmetatable(r,j)r:Reset()return r end;function i.fromFrequency(k,l,m,n,o,p)assert(k>0,"Mass for spring system cannot be less than or equal to 0")assert(m>0,"Spring frequency for spring system cannot be less than or equal to 0")local q=0.25*k*(4*e*e*m*m+l*l)n=n or 0;o=o or 0;p=p or 0;local r=p*q;local u={Mass=k,Damping=l,Constant=q,InitialOffset=n-p,InitialVelocity=o,ExternalForce=r,AdvancedObjectStringEnabled=false,StartTick=0}setmetatable(u,j)u:Reset()return u end;function j.Reset(k)k.F=c.F(k)k.StartTick=tick()end;function j.SetExternalForce(k,l)k.ExternalForce=l;k.InitialOffset=k.Offset-l/k.Constant;k.InitialVelocity=k.Velocity;k:Reset()end;function j.SetGoal(k,l)k.ExternalForce=l*k.Constant;k.InitialOffset=k.Offset-l;k.InitialVelocity=k.Velocity;k:Reset()end;function j.SetFrequency(k,l)k.Constant=0.25*k.Mass*(4*e*e*l*l+k.Damping*k.Damping)k.InitialOffset=k.Offset;k.InitialVelocity=k.Velocity;k:Reset()end;function j.SnapToCriticalDamping(k)k.Damping=2*d(k.Constant/k.Mass)k.InitialOffset=k.Offset;k.InitialVelocity=k.Velocity;k:Reset()end;function j.SetOffset(k,l,m)k.InitialOffset=l-k.Goal;k.InitialVelocity=m and 0 or k.Velocity;k:Reset()end;function j.AddOffset(k,l)k.InitialOffset=k.Offset+l;k.InitialVelocity=k.Velocity;k:Reset()end;function j.SetVelocity(k,l)k.InitialOffset=k.Offset;k.InitialVelocity=l;k:Reset()end;function j.AddVelocity(k,l)k.InitialOffset=k.Offset;k.InitialVelocity=k.Velocity+l;k:Reset()end;function j.Print(k)local l=tostring(k)print(l)end;return i end;local c=a()local d=game:GetService"RunService"local e={}e.__index=e;function e.fromDurationAndBounce(f,g)local h=1;local i=(2*math.pi/f)^2*h;local j=2*(1-g)*math.sqrt(h*i)return{h,j,i}end;local f={number=function(f,g,h,i,j)local k=c.new(h,i,j,f[g],0,f[g])return{springType="number",springSet={k},updateFunc=function()f[g]=k.Offset end,setGoal=function(l)k:SetGoal(l)end}end,UDim2=function(f,g,h,i,j)local k=c.new(h,i,j,f[g].X.Offset,0,f[g].X.Offset)local l=c.new(h,i,j,f[g].X.Scale,0,f[g].X.Scale)local m=c.new(h,i,j,f[g].Y.Offset,0,f[g].Y.Offset)local n=c.new(h,i,j,f[g].Y.Scale,0,f[g].Y.Scale)return{springType="UDim2",springSet={XOffset=k,XScale=l,YOffset=m,YScale=n},updateFunc=function()f[g]=UDim2.new(l.Offset,k.Offset,n.Offset,m.Offset)end,setGoal=function(o)k:SetGoal(o.X.Offset)l:SetGoal(o.X.Scale)m:SetGoal(o.Y.Offset)n:SetGoal(o.Y.Scale)end}end,Vector2=function(f,g,h,i,j)local k=c.new(h,i,j,f[g].X,0,f[g].X)local l=c.new(h,i,j,f[g].Y,0,f[g].Y)return{springType="Vector2",springSet={X=k,Y=l},updateFunc=function()f[g]=Vector2.new(k.Offset,l.Offset)end,setGoal=function(m)k:SetGoal(m.X)l:SetGoal(m.Y)end}end,Vector3=function(f,g,h,i,j)local k=c.new(h,i,j,f[g].X,0,f[g].X)local l=c.new(h,i,j,f[g].Y,0,f[g].Y)local m=c.new(h,i,j,f[g].Z,0,f[g].Z)return{springType="Vector3",springSet={k,l,m},updateFunc=function()f[g]=Vector3.new(k.Offset,l.Offset,m.Offset)end,setGoal=function(n)k:SetTarget(n.X)l:SetTarget(n.Y)m:SetTarget(n.Z)end}end}function e.new(g,h,i,j,k)assert(g[h],"Property does not exist on object")local l=typeof(g[h])local m=f[l]if m then local n=setmetatable({},e)n.obj=g;n.propertyName=h;n.updater=nil;local o=m(g,h,i,j,k)n.springType=o.springType;n.springSet=o.springSet;n.updateFunc=o.updateFunc;n.setGoal=o.setGoal;return n else error("Type not supported: "..l)end end;function e.Start(g)if g.updater then return end;for h,i in pairs(g.springSet)do i:Reset()end;g.updater=d.RenderStepped:Connect(function(h)g.updateFunc()end)end;function e.Stop(g)if g.updater then g.updater:Disconnect()g.updater=nil end end;function e.SetGoal(g,h)g.setGoal(h)end;function e.SetParameters(g,h,i,j)for k,l in pairs(g.springSet)do l.Mass=h;l.Stiffness=i;l.Damping=j;l:Reset()end end;return e
+		end
+		local SBT = SBTf()
+		
+		
+		
+		local H3XA_MM2PointSave = PointSave.new("H3XA_MM2")
+		
+		local States = {}
+		local toggleStates = {}
+		local rangeValueStates = {}
+		local AREA = script.Parent.Menu.Area.Area
+		local AREACONTAINER = script.Parent.Menu.Area
+		
+		local AREAModuleSelected = nil
+		
+		local fBSF = script.Parent.FloatingButtonSetting
+		
+		local function calculateWidth(n)
+			if n <= 3 then
+				return 30
+			else
+				local base = 30
+				local additional = math.floor((n - 3) / 3) * 30
+				return base + additional
+			end
+		end
+		local function udim2Serializer(value)
+			if typeof(value) == "UDim2" then
+				return string.format("%g,%g,%g,%g", value.X.Scale, value.X.Offset, value.Y.Scale, value.Y.Offset)
+			elseif typeof(value) == "string" then
+				local xScale, xOffset, yScale, yOffset = string.match(value, "([^,]+),([^,]+),([^,]+),([^,]+)")
+				assert(xScale and xOffset and yScale and yOffset, "Invalid UDim2 string format")
+				return UDim2.new(tonumber(xScale), tonumber(xOffset), tonumber(yScale), tonumber(yOffset))
+			end
+		end
+		local function lrp(a,b,t)
+			return a + (b - a) * t
+		end
+		function roundNumber(num, numDecimalPlaces)
+			return tonumber(string.format("%." .. numDecimalPlaces .. "f", num))
+		end
+		
+		FUNCTIONSmodule.theme = {
+			font = Enum.Font.Gotham,
+			textColor = Color3.fromRGB(235, 235, 240),
+			accentColor = Color3.fromRGB(255, 255, 255),
+			primaryColor = Color3.fromRGB(18, 18, 24),
+			secondaryColor = Color3.fromRGB(10, 10, 14),
+		
+			backgroundColorCSQ = ColorSequence.new(Color3.fromRGB(14, 14, 18), Color3.fromRGB(8, 8, 12)),	
+			strokeColorCSQ = ColorSequence.new{
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 180, 190)),
+				ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 220, 230)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 160, 170))
+			},
+		}
+		
+		function FUNCTIONSmodule.getTheme()
+			if getgenv then
+				return getgenv().H3XA_MM2_THEME or FUNCTIONSmodule.theme
+			else
+				return FUNCTIONSmodule.theme
+			end
+		end
+		function FUNCTIONSmodule.setTheme(t)
+			FUNCTIONSmodule.theme = t
+			if getgenv then getgenv().H3XA_MM2_THEME = t end
+		end
+		
+		local floatingButtonObjects = {}
+		local floatingButtonInvisibility = {}
+		local floatingButtonDraggers = {}
+		local floatingButtonKeybinds = {}
+		local floatingButtonConnections = {}
+		
+		local fBSFResizeDragger = nil
+		getgenv().fBSFButton = nil
+		getgenv().fBSFRealButton = nil
+		getgenv().fBSF_ButtonDragger = nil
+		
+		local selected = Instance.new("ObjectValue")
+		
+		selected.Parent = script.Parent
+		selected.Name = "Selected"
+		
+		local icons = {
+			info = "rbxassetid://11780939099",
+			x = "rbxassetid://10002373478",
+			cross = "rbxassetid://10002373478",
+			check = "rbxassetid://11604833061"
+		}
+		
+		
+		incomingNotif = false
+		
+		function FUNCTIONSmodule.to_base64(data)
+			local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+			return ((data:gsub('.', function(x) 
+				local r,b='',x:byte()
+				for i=8,1,-1 do r=r..(b%2^i-b%2^(i-1)>0 and '1' or '0') end
+				return r;
+			end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+				if (#x < 6) then return '' end
+				local c=0
+				for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
+				return b:sub(c+1,c+1)
+			end)..({ '', '==', '=' })[#data%3+1])
+		end
+		
+		function FUNCTIONSmodule.from_base64(data)
+			local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+			data = string.gsub(data, '[^'..b..'=]', '')
+			return (data:gsub('.', function(x)
+				if (x == '=') then return '' end
+				local r,f='',(b:find(x)-1)
+				for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+				return r;
+			end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+				if (#x ~= 8) then return '' end
+				local c=0
+				for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+				return string.char(c)
+			end))
+		end
+		
+		function FUNCTIONSmodule.notification(s, color, icon)
+			incomingNotif = true
+			task.spawn(function()
+				s = H3XA_MM2_T(tostring(s))
+
+				-- Contenedor superior derecha (glass)
+				local host = script.Parent:FindFirstChild("Notifications")
+				if host then
+					host.AnchorPoint = Vector2.new(1, 0)
+					host.Position = UDim2.new(1, -12, 0, 12)
+					host.Size = UDim2.new(0, 280, 0, 420)
+					host.BackgroundTransparency = 1
+					local lay = host:FindFirstChildOfClass("UIListLayout")
+					if lay then
+						lay.VerticalAlignment = Enum.VerticalAlignment.Top
+						lay.HorizontalAlignment = Enum.HorizontalAlignment.Right
+						lay.Padding = UDim.new(0, 8)
+						lay.SortOrder = Enum.SortOrder.LayoutOrder
+					end
+				end
+
+				local notif = Instance.new("Frame")
+				notif.Name = "Toast"
+				notif.Size = UDim2.new(1, 0, 0, 52)
+				notif.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+				notif.BackgroundTransparency = 0.2
+				notif.BorderSizePixel = 0
+				notif.ClipsDescendants = true
+				notif.ZIndex = 50
+				notif.Parent = host or script.Parent
+
+				local corner = Instance.new("UICorner", notif)
+				corner.CornerRadius = UDim.new(0, 12)
+				local stroke = Instance.new("UIStroke", notif)
+				stroke.Color = (typeof(color) == "Color3" and color) or Color3.fromRGB(255, 255, 255)
+				stroke.Thickness = 1
+				stroke.Transparency = 0.75
+
+				local pad = Instance.new("UIPadding", notif)
+				pad.PaddingLeft = UDim.new(0, 12)
+				pad.PaddingRight = UDim.new(0, 12)
+
+				local label = Instance.new("TextLabel")
+				label.BackgroundTransparency = 1
+				label.Size = UDim2.new(1, -28, 1, 0)
+				label.Position = UDim2.fromOffset(0, 0)
+				label.Font = Enum.Font.GothamMedium
+				label.TextSize = 13
+				label.TextXAlignment = Enum.TextXAlignment.Left
+				label.TextYAlignment = Enum.TextYAlignment.Center
+				label.TextColor3 = Color3.fromRGB(235, 235, 240)
+				label.TextWrapped = true
+				label.Text = s
+				label.ZIndex = 51
+				label.Parent = notif
+
+				local close = Instance.new("TextButton")
+				close.BackgroundTransparency = 1
+				close.AnchorPoint = Vector2.new(1, 0.5)
+				close.Position = UDim2.new(1, 0, 0.5, 0)
+				close.Size = UDim2.fromOffset(22, 22)
+				close.Font = Enum.Font.GothamBold
+				close.TextSize = 16
+				close.Text = "×"
+				close.TextColor3 = Color3.fromRGB(200, 200, 210)
+				close.ZIndex = 52
+				close.Parent = notif
+
+				local scale = Instance.new("UIScale", notif)
+				scale.Scale = 0.85
+
+				-- Entrada desde arriba-derecha
+				notif.Position = UDim2.new(0, 40, 0, -8)
+				ts:Create(notif, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+					Position = UDim2.new(0, 0, 0, 0)
+				}):Play()
+				ts:Create(scale, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					Scale = 1
+				}):Play()
+				ts:Create(notif, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
+					BackgroundTransparency = 0.18
+				}):Play()
+
+				notif:SetAttribute("close", false)
+				close.MouseButton1Click:Connect(function()
+					notif:SetAttribute("close", true)
+				end)
+
+				task.wait()
+				incomingNotif = false
+				local lastclock = os.clock()
+				repeat task.wait() until os.clock()-lastclock > 4 or incomingNotif or notif:GetAttribute("close")
+
+				local finish = ts:Create(notif, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+					Position = UDim2.new(0, 50, 0, -6),
+					BackgroundTransparency = 1
+				})
+				ts:Create(scale, TweenInfo.new(0.25), { Scale = 0.9 }):Play()
+				ts:Create(label, TweenInfo.new(0.2), { TextTransparency = 1 }):Play()
+				finish:Play()
+				finish.Completed:Connect(function()
+					notif:Destroy()
+				end)
+			end)
+		end
+		
+		local lockMode = false
+		function FUNCTIONSmodule.lockModeSet(s)
+			lockMode = s
+		end
+		
+		function FUNCTIONSmodule.closeFinetuneFB()
+			for _, b in ipairs(script.Parent.FloatingButtons:GetChildren()) do
+				if b:IsA("TextButton") and b:FindFirstChildWhichIsA("UIScale") then
+					local buttonScale = b:FindFirstChildWhichIsA("UIScale")
+					ts:Create(buttonScale, TweenInfo.new(0.3), {
+						Scale = 1
+					}):Play()
+				end
+			end
+		
+			local buttonScale = getgenv().fBSFButton:FindFirstChildWhichIsA("UIScale") or Instance.new("UIScale", getgenv().fBSFButton)
+			ts:Create(buttonScale, TweenInfo.new(0.3), {
+				Scale = 0
+			}):Play()
+			ts:Create(fBSF, TweenInfo.new(0.3), {
+				BackgroundTransparency = 1
+			}):Play()
+			local done = ts:Create(fBSF.ControlBarContainer.UIScale, TweenInfo.new(0.3), {
+				Scale = 0
+			})
+			done:Play()
+			done.Completed:Wait()
+			--for _, b in ipairs(script.Parent.FloatingButtons:GetChildren()) do
+			--	if b:FindFirstChildWhichIsA("UIScale") then
+			--		b:FindFirstChildWhichIsA("UIScale"):Destroy()
+			--	end
+			--end
+			getgenv().fBSFButton:Destroy()
+			fBSF.Visible = false
+		
+			getgenv().fBSFButton = nil
+			getgenv().fBSFRealButton = nil
+			getgenv().fBSF_ButtonDragger = nil
+		end
+		
+		function FUNCTIONSmodule.finetuneFloatingButton(button: TextButton, dragger)
+			if getgenv().fBSFRealButton then return end
+			getgenv().fBSFRealButton = button
+			for _, b in ipairs(script.Parent.FloatingButtons:GetChildren()) do
+				if b:IsA("TextButton") and b:FindFirstChildWhichIsA("UIScale") then
+					local buttonScale = b:FindFirstChildWhichIsA("UIScale")
+					ts:Create(buttonScale, TweenInfo.new(0.3), {
+						Scale = 0
+					}):Play()
+				end
+			end
+		
+			local finetuningButton = button:Clone()
+			getgenv().fBSFButton = finetuningButton
+			finetuningButton.Parent = fBSF
+			finetuningButton.Name = "fBSFButton"
+			finetuningButton.AnchorPoint = Vector2.new(0, 0)
+			finetuningButton.Position = UDim2.fromOffset(button.AbsolutePosition.X, button.AbsolutePosition.Y + game:GetService("GuiService"):GetGuiInset().Y)
+		
+			fBSFResizeDragger = DraggableObject.new(finetuningButton, nil, nil, true)
+		
+			getgenv().fBSF_ButtonDragger = dragger
+			local startingSize = finetuningButton.Size
+			fBSFResizeDragger.DragStarted = function()
+				startingSize = finetuningButton.Size
+			end
+			fBSFResizeDragger.Dragged = function(pos)
+				local newSize =  UDim2.fromOffset(math.clamp(startingSize.X.Offset + pos.X.Offset, 30, 500), math.clamp(startingSize.Y.Offset + pos.Y.Offset, 10, 350))
+				ts:Create(finetuningButton, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Size = newSize
+				}):Play()
+				button.Size = newSize
+				H3XA_MM2PointSave:set(string.gsub(button.Name, "_", ""), udim2Serializer(button.Position) .. "|" .. udim2Serializer(button.Size) .. "|" .. tostring(button.Visible) .. "|" .. tostring(dragger.CanBeDragged))
+			end
+			fBSFResizeDragger:Enable()
+		
+			fBSF.ControlBarContainer.UIScale.Scale = 0
+			fBSF.BackgroundTransparency = 1
+			fBSF.Visible = true
+			ts:Create(fBSF, TweenInfo.new(0.3), {
+				BackgroundTransparency = 0.5
+			}):Play()
+			ts:Create(fBSF.ControlBarContainer.UIScale, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+				Scale = 1
+			}):Play()
+			ts:Create(finetuningButton, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5)
+			}):Play()
+		
+			if finetuningButton.BackgroundTransparency == 1 then
+				finetuningButton.Lock.TextTransparency = 0
+				ts:Create(finetuningButton, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+					BackgroundTransparency = 0.5,
+					TextTransparency = 0.5
+				}):Play()
+				ts:Create(finetuningButton.UIStroke, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+					Transparency = 0.5
+				}):Play()
+			end
+		
+			
+		end
+		
+		function FUNCTIONSmodule.ftToggleLock()
+			if getgenv().fBSF_ButtonDragger.CanBeDragged then
+				getgenv().fBSF_ButtonDragger:Disable()
+				getgenv().fBSFRealButton.Lock.UIScale.Scale = 1
+				ts:Create(getgenv().fBSFButton.Lock.UIScale, TweenInfo.new(0.8, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					Scale = 1
+				}):Play()
+			else
+				getgenv().fBSF_ButtonDragger:Enable()
+				getgenv().fBSFRealButton.Lock.UIScale.Scale = 0
+				ts:Create(getgenv().fBSFButton.Lock.UIScale, TweenInfo.new(0.3), {
+					Scale = 0
+				}):Play()
+			end
+			H3XA_MM2PointSave:set(string.gsub(getgenv().fBSFRealButton.Name, "_", ""), udim2Serializer(getgenv().fBSFRealButton.Position) .. "|" .. udim2Serializer(getgenv().fBSFRealButton.Size) .. "|" .. tostring(getgenv().fBSFRealButton.Visible) .. "|" .. tostring(getgenv().fBSF_ButtonDragger.CanBeDragged))
+		end
+		
+		function FUNCTIONSmodule.ftToggleVisibility()
+			if getgenv().fBSFButton.BackgroundTransparency == 0 then
+				getgenv().fBSFRealButton.BackgroundTransparency = 1
+				getgenv().fBSFRealButton.TextTransparency = 1
+				getgenv().fBSFRealButton.UIStroke.Transparency = 1
+				getgenv().fBSFRealButton.Lock.TextTransparency = 1
+		
+				ts:Create(getgenv().fBSFButton, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+					BackgroundTransparency = 0.5,
+					TextTransparency = 0.5
+				}):Play()
+				ts:Create(getgenv().fBSFButton.UIStroke, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+					Transparency = 0.5
+				}):Play()
+			else
+				getgenv().fBSFRealButton.BackgroundTransparency = 0
+				getgenv().fBSFRealButton.TextTransparency = 0
+				getgenv().fBSFRealButton.UIStroke.Transparency = 0
+				getgenv().fBSFRealButton.Lock.TextTransparency = 0
+		
+				ts:Create(getgenv().fBSFButton, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+					BackgroundTransparency = 0,
+					TextTransparency = 0
+				}):Play()
+				ts:Create(getgenv().fBSFButton.UIStroke, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+					Transparency = 0
+				}):Play()
+			end
+			H3XA_MM2PointSave:set(string.gsub(getgenv().fBSFRealButton.Name, "_", ""), udim2Serializer(getgenv().fBSFRealButton.Position) .. "|" .. udim2Serializer(getgenv().fBSFRealButton.Size) .. "|" .. tostring(getgenv().fBSFRealButton.Visible) .. "|" .. tostring(getgenv().fBSF_ButtonDragger.CanBeDragged))
+		end
+		
+		function FUNCTIONSmodule.createFloatingButton(item,button,buttonname,fromload)
+			if not getgenv().H3XA_MM2.FloatingButtons:FindFirstChild(string.gsub(buttonname, "_", "")) then
+				
+				
+				local UserInputService = game:GetService("UserInputService")
+				if not fromload then
+					H3XA_MM2PointSave:set(string.gsub(buttonname, "_", ""), udim2Serializer(UDim2.fromOffset(125, 90)) .. "|" .. udim2Serializer(UDim2.fromOffset(200,50)) .. "|true|true")
+				end
+		
+				local newFloatingButton = getgenv().H3XA_MM2.FloatingButton:Clone()
+				newFloatingButton.Parent = getgenv().H3XA_MM2.FloatingButtons
+				
+				newFloatingButton.Name = string.gsub(buttonname, "_", "")
+				newFloatingButton.Text = string.gsub(buttonname, "_", " ")
+				
+				newFloatingButton.BackgroundColor3 = FUNCTIONSmodule.getTheme().primaryColor
+				local themedColor = Instance.new("StringValue", newFloatingButton)
+				themedColor.Name = "themedColor"
+				themedColor.Value = "primaryColor"
+				newFloatingButton.Visible = true
+				
+				newFloatingButton.Font = Enum.Font.Montserrat
+		
+				table.insert(floatingButtonObjects, newFloatingButton)
+				local floatingButtonObjectSelf = floatingButtonObjects[#floatingButtonObjects]
+		
+				newFloatingButton.MouseButton1Click:Connect(function()
+					if typeof(item["Args"][2]) == "function" then
+						item["Args"][2](button)
+					else
+						item["Args"][2][buttonname](button)
+					end
+				end)
+				
+				local ripple
+				
+				newFloatingButton.MouseButton1Down:Connect(function(x, y)
+					ts:Create(newFloatingButton.UIScale, TweenInfo.new(0.1), {
+						Scale = 0.95
+					}):Play()
+					
+					
+					ripple = newFloatingButton.Ripple:Clone()
+					ripple.BackgroundColor3 = FUNCTIONSmodule.getTheme().textColor
+					ripple.Parent = newFloatingButton
+					ripple.Position = UDim2.fromOffset(x - newFloatingButton.AbsolutePosition.X, (y - newFloatingButton.AbsolutePosition.Y) - game:GetService("GuiService"):GetGuiInset().Y)
+					ts:Create(ripple, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+						BackgroundTransparency = 0.6,
+						Size = UDim2.fromOffset(50, 50)
+					}):Play()
+				end)
+				
+				
+				local function closeRipple()
+					if not getgenv().fBSFRealButton then
+						ts:Create(newFloatingButton.UIScale, TweenInfo.new(0.1), {
+							Scale = 1
+						}):Play()
+					end
+		
+					if ripple then
+						task.spawn(function()
+							local rippleToRemove = ripple
+							local fade = ts:Create(rippleToRemove, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+								BackgroundTransparency = 1,
+								Size = UDim2.fromOffset(150, 150)
+							})
+							fade:Play()
+							fade.Completed:Once(function()
+								rippleToRemove:Destroy()
+							end)
+						end)
+					end
+				end
+				UserInputService.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
+						closeRipple()
+					end
+				end)
+				
+				local shouldBeDraggable = true
+				if not fromload then
+					newFloatingButton.Position = UDim2.fromOffset(-125, 90)
+				elseif H3XA_MM2PointSave:get(string.gsub(buttonname, "_", "")) then
+					local data = H3XA_MM2PointSave:get(string.gsub(buttonname, "_", "")):split("|")
+					newFloatingButton.Position = udim2Serializer(data[1])
+					ts:Create(newFloatingButton, TweenInfo.new(2, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+						Size = udim2Serializer(data[2])
+					}):Play()
+					newFloatingButton.Visible = (data[3] == "true")
+					if data[4] == "false" then
+						newFloatingButton.Lock.UIScale.Scale = 1
+						shouldBeDraggable = false
+					end
+				end
+		
+				task.spawn(function()
+					if not fromload then
+						ts:Create(newFloatingButton, TweenInfo.new(2, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+							Size = UDim2.fromOffset(200, 50)
+						}):Play()
+						ts:Create(newFloatingButton, TweenInfo.new(0.7, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+							Position = UDim2.fromOffset(125, 90)
+						}):Play()
+					end
+				end)
+		
+				floatingButtonDraggers[string.gsub(buttonname, "_", "")] = DraggableObject.new(newFloatingButton)
+				if shouldBeDraggable then
+					floatingButtonDraggers[string.gsub(buttonname, "_", "")]:Enable()
+				end
+				floatingButtonDraggers[string.gsub(buttonname, "_", "")].Dragged = function(newPos)
+					H3XA_MM2PointSave:set(string.gsub(buttonname, "_", ""), udim2Serializer(newPos) .. "|" .. udim2Serializer(newFloatingButton.Size) .. "|" .. tostring(newFloatingButton.Visible) .. "|" .. tostring(floatingButtonDraggers[string.gsub(buttonname, "_", "")].CanBeDragged))
+				end
+		
+				local holder = ClickAndHold.new(newFloatingButton)
+				holder.Holded.Event:Connect(function()
+					if floatingButtonDraggers[string.gsub(buttonname, "_", "")].Dragging then return end
+					if ripple then
+						ripple:Destroy()
+					end
+					FUNCTIONSmodule.finetuneFloatingButton(floatingButtonObjectSelf, floatingButtonDraggers[string.gsub(buttonname, "_", "")])
+				end)
+		
+				newFloatingButton.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton2 then
+						FUNCTIONSmodule.notification("Press a key to bind " .. string.gsub(buttonname, "_", "") .. " to...")
+						local keytobind
+						local result
+						repeat
+							result = UserInputService.InputBegan:Wait()
+							if result.UserInputType == Enum.UserInputType.Keyboard then keytobind = result.KeyCode end
+						until keytobind
+		
+						FUNCTIONSmodule.notification(string.gsub(buttonname, "_", "") .. " binded to key " .. result.KeyCode.Name .. "!")
+						task.wait(0.1) floatingButtonKeybinds[string.gsub(buttonname, "_", "")] = keytobind	
+					end
+				end)
+		
+				local uis = game:GetService("UserInputService")
+				if uis.KeyboardEnabled and uis.MouseEnabled then
+					floatingButtonConnections[string.gsub(buttonname, "_", "")] = uis.InputBegan:Connect(function(inp, processed)
+						if processed then return end
+						if inp.KeyCode == floatingButtonKeybinds[string.gsub(buttonname, "_", "")] then
+							if typeof(item["Args"][2]) == "function" then
+								item["Args"][2](button)
+							else
+								item["Args"][2][buttonname](button)
+							end
+						end
+					end)
+				end
+		
+			else
+				floatingButtonKeybinds[string.gsub(buttonname, "_", "")] = nil
+				if floatingButtonConnections[string.gsub(buttonname, "_", "")] then
+					floatingButtonConnections[string.gsub(buttonname, "_", "")]:Disconnect()
+				end
+				H3XA_MM2PointSave:remove(string.gsub(buttonname, "_", ""))
+				task.spawn(function()
+					local buttontodestroy = getgenv().H3XA_MM2.FloatingButtons:FindFirstChild(string.gsub(buttonname, "_", ""))
+					local btdtween = ts:Create(buttontodestroy, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+						Size = UDim2.new(0,0,0,0)
+					})
+					btdtween:Play()
+					btdtween.Completed:Wait()
+					buttontodestroy:Destroy()
+				end)
+			end
+		end
+		
+		function FUNCTIONSmodule.loadFloatingButtons()
+			repeat task.wait() until getgenv().Modules
+			for _, module in ipairs(getgenv().Modules) do
+				for _, item in ipairs(module) do
+					if item["Type"] == "Button" then
+						local key = string.gsub(item["Args"][1], "_", "")
+						local saved = H3XA_MM2PointSave:get(key)
+						if saved then
+							FUNCTIONSmodule.createFloatingButton(item, Instance.new("TextButton"), item["Args"][1], true)
+						end
+					end
+				end
+			end
+		end
+		function FUNCTIONSmodule.loader(module, animateSwitch)
+			--local unloadtween = ts:Create(AREA, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			--	Position = UDim2.fromScale(1.55, 0.606)
+			--})
+		
+			--unloadtween:Play()
+			--unloadtween.Completed:Wait()
+		
+		
+			-- Transición suave al cambiar categoría / funciones
+			local animatedSwitch = animateSwitch == true
+			if animatedSwitch and AREACONTAINER and AREACONTAINER:IsA("CanvasGroup") then
+				local fadeOut = ts:Create(AREACONTAINER, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					GroupTransparency = 1
+				})
+				fadeOut:Play()
+				fadeOut.Completed:Wait()
+			end
+			pcall(function()
+				if AREA:IsA("ScrollingFrame") then
+					AREA.CanvasPosition = Vector2.zero
+				end
+			end)
+			AREA:ClearAllChildren()
+			if AREACONTAINER and AREACONTAINER:IsA("CanvasGroup") then
+				AREACONTAINER.GroupTransparency = 1
+			end
+
+			-- Categorías reales para MM2: el nombre del juego ya no se usa como categoría.
+			local categoryNames = {"ESPs", "Sheriff", "Murderer", "Combat", "Movement", "Utility", "Extras"}
+			local _lang = ((getgenv and getgenv()) or _G).H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
+			local categoryAliases = {
+				["ESPs"] = _lang == "ES" and "VISUALES" or "VISUALS",
+				["Sheriff"] = _lang == "ES" and "SOY SHERIFF" or "I'M SHERIFF",
+				["Murderer"] = _lang == "ES" and "SOY MURDERER" or "I'M MURDERER",
+				["Combat"] = _lang == "ES" and "COMBATE" or "COMBAT",
+				["Movement"] = _lang == "ES" and "MOVIMIENTO" or "MOVEMENT",
+				["Utility"] = _lang == "ES" and "UTILIDAD" or "UTILITY",
+				["Extras"] = _lang == "ES" and "EXTRAS" or "EXTRAS"
+			}
+			local function isCategoryHeader(item)
+				return item and item["Type"] == "Text" and item["Args"] and categoryAliases[item["Args"][1]] ~= nil
+			end
+			local categories = {}
+			local currentCategory = "ESPs"
+			for _, item in ipairs(module) do
+				if isCategoryHeader(item) then
+					currentCategory = item["Args"][1]
+					if not categories[currentCategory] then categories[currentCategory] = {} end
+				else
+					if not categories[currentCategory] then categories[currentCategory] = {} end
+					table.insert(categories[currentCategory], item)
+				end
+			end
+			getgenv().H3XA_MM2_SELECTED_CATEGORY = getgenv().H3XA_MM2_SELECTED_CATEGORY or "ESPs"
+			if not categories[getgenv().H3XA_MM2_SELECTED_CATEGORY] then
+				getgenv().H3XA_MM2_SELECTED_CATEGORY = categoryNames[1]
+			end
+
+			-- Iconos Lucide que sí coinciden con cada categoría
+			local categoryIcons = {
+				["ESPs"] = "rbxassetid://10723346959",          -- lucide-eye
+				["Sheriff"] = "rbxassetid://10709818534",       -- lucide-crosshair
+				["Murderer"] = "rbxassetid://10734975486",      -- lucide-sword
+				["Combat"] = "rbxassetid://10734977012",        -- lucide-target
+				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
+				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
+				["Extras"] = "rbxassetid://10734966248"         -- lucide-star
+			}
+
+			-- Sidebar glass cards
+			local side = script.Parent.Menu.List.ScrollingFrame
+			for _, child in ipairs(side:GetChildren()) do
+				if child:IsA("TextButton") then child:Destroy() end
+			end
+			for index, category in ipairs(categoryNames) do
+				if categories[category] and #categories[category] > 0 then
+					local selected = category == getgenv().H3XA_MM2_SELECTED_CATEGORY
+					local b = Instance.new("TextButton")
+					b.Name = category
+					b.LayoutOrder = index
+					b.Size = UDim2.new(1, -8, 0, selected and 40 or 34)
+					b.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+					-- Seleccionada: relleno blanco suave; resto transparentes
+					b.BackgroundTransparency = selected and 0.88 or 1
+					b.Text = ""
+					b.AutoButtonColor = false
+					b.ClipsDescendants = true
+					b.Parent = side
+
+					local c = Instance.new("UICorner", b)
+					c.CornerRadius = UDim.new(0, 16)
+
+					local st = Instance.new("UIStroke", b)
+					st.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+					st.Color = selected and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 185)
+					st.Transparency = selected and 0 or 0.35
+					st.Thickness = selected and 2.2 or 1.05
+
+					local icon = Instance.new("ImageLabel")
+					icon.Name = "Icon"
+					icon.BackgroundTransparency = 1
+					icon.AnchorPoint = Vector2.new(0, 0.5)
+					icon.Position = UDim2.new(0, 12, 0.5, 0)
+					icon.Size = UDim2.fromOffset(selected and 17 or 15, selected and 17 or 15)
+					icon.Image = categoryIcons[category] or "rbxassetid://10734966248"
+					icon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+					icon.ImageTransparency = selected and 0 or 0.35
+					icon.ScaleType = Enum.ScaleType.Fit
+					icon.ZIndex = 2
+					icon.Parent = b
+
+					local label = Instance.new("TextLabel")
+					label.Name = "Label"
+					label.BackgroundTransparency = 1
+					label.AnchorPoint = Vector2.new(0, 0.5)
+					label.Position = UDim2.new(0, selected and 36 or 34, 0.5, 0)
+					label.Size = UDim2.new(1, -44, 1, 0)
+					label.Font = selected and Enum.Font.GothamBold or Enum.Font.GothamMedium
+					label.Text = categoryAliases[category]
+					label.TextSize = selected and 13 or 12
+					label.TextXAlignment = Enum.TextXAlignment.Left
+					label.TextColor3 = Color3.fromRGB(255, 255, 255)
+					label.TextTransparency = selected and 0 or 0.28
+					label.TextStrokeTransparency = 1
+					label.ZIndex = 2
+					label.Parent = b
+
+					b.MouseEnter:Connect(function()
+						if category ~= getgenv().H3XA_MM2_SELECTED_CATEGORY then
+							ts:Create(st, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+								Thickness = 1.45,
+								Transparency = 0.15
+							}):Play()
+							ts:Create(b, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
+								BackgroundTransparency = 0.94
+							}):Play()
+						end
+					end)
+					b.MouseLeave:Connect(function()
+						if category ~= getgenv().H3XA_MM2_SELECTED_CATEGORY then
+							ts:Create(st, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+								Thickness = 1.05,
+								Transparency = 0.35
+							}):Play()
+							ts:Create(b, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
+								BackgroundTransparency = 1
+							}):Play()
+						end
+					end)
+					b.MouseButton1Click:Connect(function()
+						if getgenv().H3XA_MM2_SELECTED_CATEGORY == category then
+							return
+						end
+						getgenv().H3XA_MM2_SELECTED_CATEGORY = category
+						FUNCTIONSmodule.loader(module, true)
+					end)
+				end
+			end
+
+			local visibleItems = categories[getgenv().H3XA_MM2_SELECTED_CATEGORY] or {}
+			local listlayout = Instance.new("UIListLayout")
+			listlayout.Parent = AREA
+			listlayout.Padding = UDim.new(0, 10)
+			listlayout.FillDirection = Enum.FillDirection.Vertical
+			listlayout.SortOrder = Enum.SortOrder.LayoutOrder
+			listlayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+			local areaPad = Instance.new("UIPadding")
+			areaPad.PaddingTop = UDim.new(0, 6)
+			areaPad.PaddingBottom = UDim.new(0, 10)
+			areaPad.PaddingLeft = UDim.new(0, 2)
+			areaPad.PaddingRight = UDim.new(0, 2)
+			areaPad.Parent = AREA
+
+			-- Agrupar items bajo headers Text en tarjetas grandes
+			local sections = {}
+			local currentSection = { title = nil, items = {} }
+			for _, item in ipairs(visibleItems) do
+				if item["Type"] == "Text" then
+					if #currentSection.items > 0 or currentSection.title then
+						table.insert(sections, currentSection)
+					end
+					currentSection = { title = item, items = {} }
+				else
+					table.insert(currentSection.items, item)
+				end
+			end
+			if #currentSection.items > 0 or currentSection.title then
+				table.insert(sections, currentSection)
+			end
+
+			-- Animación suave de entrada (sin escala que deforme textos)
+			local function playEnter(obj, delay)
+				delay = delay or 0
+				local stroke = obj:FindFirstChildOfClass("UIStroke")
+				local labels = {}
+				for _, d in ipairs(obj:GetDescendants()) do
+					if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+						table.insert(labels, d)
+					elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+						table.insert(labels, d)
+					end
+				end
+				if obj:IsA("GuiObject") then
+					-- no forzar BackgroundTransparency en toggles/botones ya estilizados
+				end
+				if stroke then
+					local targetT = stroke.Transparency
+					stroke.Transparency = 1
+					task.delay(delay, function()
+						if stroke and stroke.Parent then
+							ts:Create(stroke, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+								Transparency = targetT
+							}):Play()
+						end
+					end)
+				end
+				for _, d in ipairs(labels) do
+					if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+						local tt = d.TextTransparency
+						d.TextTransparency = 1
+						task.delay(delay, function()
+							if d and d.Parent then
+								ts:Create(d, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+									TextTransparency = tt
+								}):Play()
+							end
+						end)
+					elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+						local it = d.ImageTransparency
+						d.ImageTransparency = 1
+						task.delay(delay, function()
+							if d and d.Parent then
+								ts:Create(d, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+									ImageTransparency = it
+								}):Play()
+							end
+						end)
+					end
+				end
+			end
+
+			-- Evitar cuadro negro residual en el área de contenido
+			pcall(function()
+				AREA.BackgroundTransparency = 1
+				AREA.BorderSizePixel = 0
+				AREACONTAINER.BackgroundTransparency = 1
+				AREACONTAINER.BorderSizePixel = 0
+				if AREACONTAINER:IsA("CanvasGroup") then
+					AREACONTAINER.GroupTransparency = 0
+				end
+			end)
+
+			local function styleActionButton(button, labelText, floatItem, floatName, opts)
+				opts = opts or {}
+				button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				button.BackgroundTransparency = 1
+				button.Text = ""
+				button.AutoButtonColor = false
+				button.ClipsDescendants = true
+				local corner = Instance.new("UICorner", button)
+				corner.CornerRadius = UDim.new(0, 16)
+				local stroke = Instance.new("UIStroke", button)
+				stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				stroke.Color = Color3.fromRGB(255, 255, 255)
+				stroke.Thickness = 1.15
+				stroke.Transparency = 0
+
+				local hasFloat = floatItem ~= nil and floatName ~= nil
+				local textLen = #(tostring(labelText or ""))
+				-- Compacto en grillas (Fling Murderer, etc.) o textos medianos/largos
+				local compactFloat = opts.compactFloat == true or textLen >= 12
+				local floatW = compactFloat and 28 or 52
+				local floatH = compactFloat and 18 or 24
+				local floatLabel = compactFloat and "F" or "FLOAT"
+				local floatTextSize = compactFloat and 10 or 11
+				local rightGutter = hasFloat and (floatW + 12) or 28
+
+				-- Altura: más espacio si el texto es largo o está en grilla
+				local rowH = opts.rowHeight or ((textLen >= 18) and 44 or 40)
+				button.Size = UDim2.new(1, 0, 0, rowH)
+
+				local label = Instance.new("TextLabel")
+				label.Name = "ActionLabel"
+				label.BackgroundTransparency = 1
+				label.Position = UDim2.fromOffset(12, 0)
+				label.Size = UDim2.new(1, -(12 + rightGutter), 1, 0)
+				label.Font = Enum.Font.GothamMedium
+				label.TextSize = 13
+				label.TextXAlignment = Enum.TextXAlignment.Left
+				label.TextYAlignment = Enum.TextYAlignment.Center
+				label.TextColor3 = Color3.fromRGB(255, 255, 255)
+				label.Text = labelText
+				label.TextTruncate = Enum.TextTruncate.None
+				label.TextWrapped = true
+				label.ZIndex = 1
+				label.Parent = button
+
+				local arrow = Instance.new("TextLabel")
+				arrow.Name = "GoArrow"
+				arrow.BackgroundTransparency = 1
+				arrow.AnchorPoint = Vector2.new(1, 0.5)
+				arrow.Position = UDim2.new(1, -10, 0.5, 0)
+				arrow.Size = UDim2.fromOffset(14, 16)
+				arrow.Font = Enum.Font.GothamBold
+				arrow.TextSize = 15
+				arrow.TextColor3 = Color3.fromRGB(255, 255, 255)
+				arrow.Text = ">"
+				arrow.ZIndex = 2
+				arrow.Visible = not hasFloat
+				arrow.Parent = button
+
+				local floatBtn = Instance.new("TextButton")
+				floatBtn.Name = "FloatBtn"
+				floatBtn.AnchorPoint = Vector2.new(1, 0.5)
+				floatBtn.Position = UDim2.new(1, -8, 0.5, 0)
+				floatBtn.Size = UDim2.fromOffset(floatW, floatH)
+				floatBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				floatBtn.BackgroundTransparency = 1
+				floatBtn.BorderSizePixel = 0
+				floatBtn.AutoButtonColor = false
+				floatBtn.Font = Enum.Font.GothamBold
+				floatBtn.TextSize = floatTextSize
+				floatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				floatBtn.Text = floatLabel
+				floatBtn.ZIndex = 4
+				floatBtn.Visible = hasFloat
+				floatBtn.Parent = button
+				local floatCorner = Instance.new("UICorner", floatBtn)
+				floatCorner.CornerRadius = UDim.new(0, 7)
+				local floatStroke = Instance.new("UIStroke", floatBtn)
+				floatStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				floatStroke.Color = Color3.fromRGB(255, 255, 255)
+				floatStroke.Thickness = 1
+				floatStroke.Transparency = 0
+
+				if hasFloat then
+					floatBtn.MouseButton1Click:Connect(function()
+						FUNCTIONSmodule.createFloatingButton(floatItem, button, floatName)
+						FUNCTIONSmodule.notification(H3XA_MM2_LANGUAGE == "ES" and "Botón flotante creado. Arrástralo por la pantalla." or "Floating button created. Drag it on screen.")
+					end)
+					floatBtn.MouseEnter:Connect(function()
+						ts:Create(floatBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
+							BackgroundTransparency = 0,
+							TextColor3 = Color3.fromRGB(0, 0, 0)
+						}):Play()
+					end)
+					floatBtn.MouseLeave:Connect(function()
+						ts:Create(floatBtn, TweenInfo.new(0.22, Enum.EasingStyle.Quint), {
+							BackgroundTransparency = 1,
+							TextColor3 = Color3.fromRGB(255, 255, 255)
+						}):Play()
+					end)
+				end
+
+				button.MouseEnter:Connect(function()
+					ts:Create(stroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Thickness = 1.65 }):Play()
+					if arrow.Visible then
+						ts:Create(arrow, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { TextColor3 = Color3.fromRGB(255, 255, 255) }):Play()
+					end
+				end)
+				button.MouseLeave:Connect(function()
+					ts:Create(stroke, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Thickness = 1.15 }):Play()
+				end)
+				return stroke
+			end
+
+			-- Sin tarjeta grande envolvente (evita bordes cortados arriba/abajo del scroll)
+			local globalOrder = 0
+			local enterIndex = 0
+			for _, section in ipairs(sections) do
+				if not section.title and #section.items == 0 then
+					continue
+				end
+				if #section.items == 0 then
+					continue
+				end
+
+				-- Contenedor plano sin stroke (solo layout), no se recorta visualmente
+				local card = Instance.new("Frame")
+				card.Name = "SectionFlat"
+				card.BackgroundTransparency = 1
+				card.BorderSizePixel = 0
+				card.Size = UDim2.new(1, -2, 0, 0)
+				card.AutomaticSize = Enum.AutomaticSize.Y
+				card.ClipsDescendants = false
+				globalOrder = globalOrder + 1
+				card.LayoutOrder = globalOrder
+				card.Parent = AREA
+
+				local cardPad = Instance.new("UIPadding", card)
+				cardPad.PaddingTop = UDim.new(0, 4)
+				cardPad.PaddingBottom = UDim.new(0, 8)
+				cardPad.PaddingLeft = UDim.new(0, 2)
+				cardPad.PaddingRight = UDim.new(0, 2)
+
+				local cardLayout = Instance.new("UIListLayout", card)
+				cardLayout.Padding = UDim.new(0, 10)
+				cardLayout.SortOrder = Enum.SortOrder.LayoutOrder
+				cardLayout.FillDirection = Enum.FillDirection.Vertical
+
+				if section.title then
+					local title = Instance.new("TextLabel")
+					title.BackgroundTransparency = 1
+					title.Size = UDim2.new(1, 0, 0, 18)
+					title.Font = Enum.Font.GothamBold
+					title.TextSize = 12
+					title.TextColor3 = Color3.fromRGB(200, 200, 210)
+					title.TextXAlignment = Enum.TextXAlignment.Left
+					title.Text = H3XA_MM2_T(section.title["Args"][1])
+					title.LayoutOrder = 0
+					title.Parent = card
+					enterIndex = enterIndex + 1
+					playEnter(title, math.min(enterIndex * 0.045, 0.28))
+				end
+
+				local order = 1
+				local toggleIndexInCategory = 0
+				for _, item in ipairs(section.items) do
+					order = order + 1
+					if item["Type"] == "Button" then
+						local button = Instance.new("TextButton")
+						button.LayoutOrder = order
+						button.Parent = card
+						local function activate()
+							item["Args"][2](button)
+						end
+						local rawName = tostring(item["Args"][1])
+						local allowFloat = string.find(string.lower(rawName), "copy") == nil
+						styleActionButton(button, H3XA_MM2_T(item["Args"][1]), allowFloat and item or nil, allowFloat and item["Args"][1] or nil)
+						button.MouseButton1Click:Connect(activate)
+						enterIndex = enterIndex + 1
+						playEnter(button, math.min(enterIndex * 0.045, 0.28))
+
+					elseif item["Type"] == "ButtonGrid" then
+						local frame = Instance.new("Frame")
+						frame.LayoutOrder = order
+						frame.Parent = card
+						frame.Size = UDim2.new(1, 0, 0, 0)
+						frame.AutomaticSize = Enum.AutomaticSize.Y
+						frame.BackgroundTransparency = 1
+						local gridlayout = Instance.new("UIGridLayout")
+						gridlayout.Parent = frame
+						-- Celdas más altas: texto completo + FLOAT compacto (ej. Fling Murderer)
+						gridlayout.CellSize = UDim2.new((1 / item["Args"][1]) - 0.02, 0, 0, 46)
+						gridlayout.CellPadding = UDim2.new(0.02, 0, 0, 6)
+						for buttonname, args in item["Args"][2] do
+							local button = Instance.new("TextButton")
+							button.Parent = frame
+							local function activateGrid()
+								if item["Toggleable"] then
+									item["Args"][2][buttonname](button)
+									local st = button:FindFirstChildOfClass("UIStroke")
+									if States[buttonname .. module.Name] then
+										States[buttonname .. module.Name] = false
+										button.BackgroundTransparency = 1
+										if st then
+											ts:Create(st, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+												Color = Color3.fromRGB(255, 255, 255),
+												Thickness = 1.15
+											}):Play()
+										end
+									else
+										States[buttonname .. module.Name] = true
+										button.BackgroundTransparency = 1
+										if st then
+											ts:Create(st, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+												Color = Color3.fromRGB(80, 255, 120),
+												Thickness = 1.5
+											}):Play()
+										end
+									end
+								else
+									item["Args"][2][buttonname](button)
+								end
+							end
+							local allowFloat = string.find(string.lower(tostring(buttonname)), "copy") == nil
+							styleActionButton(
+								button,
+								H3XA_MM2_T(string.gsub(buttonname, "_", " ")),
+								allowFloat and item or nil,
+								allowFloat and buttonname or nil,
+								{ compactFloat = true, rowHeight = 46 }
+							)
+							if States[buttonname .. module.Name] then
+								button.BackgroundTransparency = 1
+								local st = button:FindFirstChildOfClass("UIStroke")
+								if st then
+									st.Color = Color3.fromRGB(80, 255, 120)
+									st.Thickness = 1.5
+									st.Transparency = 0
+								end
+							end
+							button.MouseButton1Click:Connect(activateGrid)
+						end
+
+					elseif item["Type"] == "Input" then
+						-- Input B&W neón (desfase / multiplicador / Aplicar)
+						local inputRow = Instance.new("Frame")
+						inputRow.Name = "InputRow"
+						inputRow.LayoutOrder = order
+						inputRow.Size = UDim2.new(1, 0, 0, 44)
+						inputRow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+						inputRow.BackgroundTransparency = 1
+						inputRow.BorderSizePixel = 0
+						inputRow.Parent = card
+
+						local inputCorner = Instance.new("UICorner", inputRow)
+						inputCorner.CornerRadius = UDim.new(0, 14)
+						local inputStroke = Instance.new("UIStroke", inputRow)
+						inputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+						inputStroke.Color = Color3.fromRGB(255, 255, 255)
+						inputStroke.Thickness = 1.15
+						inputStroke.Transparency = 0
+
+						local textBox = Instance.new("TextBox")
+						textBox.Name = "TextBox"
+						textBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+						textBox.BackgroundTransparency = 1
+						textBox.BorderSizePixel = 0
+						textBox.Position = UDim2.fromOffset(12, 0)
+						textBox.Size = UDim2.new(1, -110, 1, 0)
+						textBox.Font = Enum.Font.GothamMedium
+						textBox.TextSize = 13
+						textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+						textBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+						textBox.PlaceholderText = H3XA_MM2_T(item["Args"][1])
+						textBox.Text = ""
+						textBox.ClearTextOnFocus = false
+						textBox.TextXAlignment = Enum.TextXAlignment.Left
+						textBox.Parent = inputRow
+
+						local applyBtn = Instance.new("TextButton")
+						applyBtn.Name = "Apply"
+						applyBtn.AnchorPoint = Vector2.new(1, 0.5)
+						applyBtn.Position = UDim2.new(1, -8, 0.5, 0)
+						applyBtn.Size = UDim2.fromOffset(86, 30)
+						applyBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+						applyBtn.BackgroundTransparency = 1
+						applyBtn.BorderSizePixel = 0
+						applyBtn.AutoButtonColor = false
+						applyBtn.Font = Enum.Font.GothamBold
+						applyBtn.TextSize = 12
+						applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+						applyBtn.Text = H3XA_MM2_T(item["Args"][2])
+						applyBtn.Parent = inputRow
+
+						local applyCorner = Instance.new("UICorner", applyBtn)
+						applyCorner.CornerRadius = UDim.new(0, 10)
+						local applyStroke = Instance.new("UIStroke", applyBtn)
+						applyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+						applyStroke.Color = Color3.fromRGB(255, 255, 255)
+						applyStroke.Thickness = 1.1
+						applyStroke.Transparency = 0
+
+						applyBtn.MouseEnter:Connect(function()
+							ts:Create(applyBtn, TweenInfo.new(0.28, Enum.EasingStyle.Quint), {
+								BackgroundTransparency = 0,
+								TextColor3 = Color3.fromRGB(0, 0, 0)
+							}):Play()
+						end)
+						applyBtn.MouseLeave:Connect(function()
+							ts:Create(applyBtn, TweenInfo.new(0.32, Enum.EasingStyle.Quint), {
+								BackgroundTransparency = 1,
+								TextColor3 = Color3.fromRGB(255, 255, 255)
+							}):Play()
+						end)
+						applyBtn.MouseButton1Click:Connect(function()
+							ts:Create(applyStroke, TweenInfo.new(0.15), { Color = Color3.fromRGB(80, 255, 120) }):Play()
+							task.delay(0.35, function()
+								if applyStroke.Parent then
+									ts:Create(applyStroke, TweenInfo.new(0.25), { Color = Color3.fromRGB(255, 255, 255) }):Play()
+								end
+							end)
+							item["Args"][3](applyBtn, textBox.Text)
+						end)
+
+						textBox.Focused:Connect(function()
+							ts:Create(inputStroke, TweenInfo.new(0.25, Enum.EasingStyle.Quint), { Thickness = 1.5 }):Play()
+						end)
+						textBox.FocusLost:Connect(function()
+							ts:Create(inputStroke, TweenInfo.new(0.25, Enum.EasingStyle.Quint), { Thickness = 1.15 }):Play()
+						end)
+
+					elseif item["Type"] == "Toggle" then
+						toggleIndexInCategory = toggleIndexInCategory + 1
+						-- EXTRAS (Detectables): primeros 2 toggles con switch más pequeño
+						local isExtras = getgenv().H3XA_MM2_SELECTED_CATEGORY == "Detectables"
+						local compactToggle = isExtras and toggleIndexInCategory <= 2
+						local trackW = compactToggle and 34 or 42
+						local trackH = compactToggle and 18 or 22
+						local knobSize = compactToggle and 13 or 16
+						local labelRightPad = compactToggle and 56 or 70
+
+						-- Toda la fila es clickeable (no solo el círculo)
+						local row = Instance.new("TextButton")
+						row.Name = "ToggleRow"
+						row.LayoutOrder = order
+						row.Size = UDim2.new(1, 0, 0, compactToggle and 32 or 34)
+						row.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+						row.BackgroundTransparency = 1
+						row.Text = ""
+						row.AutoButtonColor = false
+						row.Parent = card
+						local rc = Instance.new("UICorner", row)
+						rc.CornerRadius = UDim.new(0, 14)
+						local rs = Instance.new("UIStroke", row)
+						rs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+						rs.Color = Color3.fromRGB(255, 255, 255)
+						rs.Thickness = 1.15
+						rs.Transparency = 0
+
+						local tLabel = Instance.new("TextLabel")
+						tLabel.BackgroundTransparency = 1
+						tLabel.Position = UDim2.fromOffset(12, 0)
+						tLabel.Size = UDim2.new(1, -labelRightPad, 1, 0)
+						tLabel.Font = Enum.Font.GothamMedium
+						tLabel.TextSize = compactToggle and 11 or 12
+						tLabel.TextXAlignment = Enum.TextXAlignment.Left
+						tLabel.TextYAlignment = Enum.TextYAlignment.Center
+						tLabel.TextWrapped = true
+						tLabel.TextColor3 = Color3.fromRGB(230, 230, 235)
+						tLabel.Text = H3XA_MM2_T(item["Args"][1])
+						tLabel.ZIndex = 2
+						tLabel.Parent = row
+
+						local track = Instance.new("Frame")
+						track.Name = "Track"
+						track.AnchorPoint = Vector2.new(1, 0.5)
+						track.Position = UDim2.new(1, -10, 0.5, 0)
+						track.Size = UDim2.fromOffset(trackW, trackH)
+						track.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+						track.ZIndex = 2
+						track.Parent = row
+						local tc = Instance.new("UICorner", track)
+						tc.CornerRadius = UDim.new(1, 0)
+						local tsStroke = Instance.new("UIStroke", track)
+						tsStroke.Color = Color3.fromRGB(255, 255, 255)
+						tsStroke.Transparency = 0.85
+						tsStroke.Thickness = 1
+
+						local knob = Instance.new("Frame")
+						knob.Name = "Toggler"
+						knob.AnchorPoint = Vector2.new(0.5, 0.5)
+						knob.Size = UDim2.fromOffset(knobSize, knobSize)
+						knob.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+						knob.Position = toggleStates[item["Args"][1] .. module.Name] and UDim2.fromScale(0.72, 0.5) or UDim2.fromScale(0.28, 0.5)
+						knob.ZIndex = 3
+						knob.Parent = track
+						local kc = Instance.new("UICorner", knob)
+						kc.CornerRadius = UDim.new(1, 0)
+
+						local function setToggleVisual(on)
+							if on then
+								rs.Color = Color3.fromRGB(80, 255, 120)
+								rs.Thickness = 1.4
+								track.BackgroundColor3 = Color3.fromRGB(30, 70, 40)
+								knob.BackgroundColor3 = Color3.fromRGB(80, 255, 120)
+								tsStroke.Color = Color3.fromRGB(80, 255, 120)
+								tsStroke.Transparency = 0.35
+							else
+								rs.Color = Color3.fromRGB(255, 255, 255)
+								rs.Thickness = 1.15
+								track.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+								knob.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+								tsStroke.Color = Color3.fromRGB(255, 255, 255)
+								tsStroke.Transparency = 0.85
+							end
+						end
+
+						if toggleStates[item["Args"][1] .. module.Name] then
+							knob.Position = UDim2.fromScale(0.72, 0.5)
+							setToggleVisual(true)
+						else
+							setToggleVisual(false)
+						end
+
+						local function flipToggle()
+							if toggleStates[item["Args"][1] .. module.Name] then
+								toggleStates[item["Args"][1] .. module.Name] = false
+								ts:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.fromScale(0.28, 0.5) }):Play()
+								ts:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { BackgroundColor3 = Color3.fromRGB(24, 24, 28) }):Play()
+								ts:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { BackgroundColor3 = Color3.fromRGB(245, 245, 245) }):Play()
+								ts:Create(rs, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { Color = Color3.fromRGB(255, 255, 255), Thickness = 1.15 }):Play()
+								ts:Create(tsStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.85 }):Play()
+							else
+								toggleStates[item["Args"][1] .. module.Name] = true
+								ts:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.fromScale(0.72, 0.5) }):Play()
+								ts:Create(track, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { BackgroundColor3 = Color3.fromRGB(30, 70, 40) }):Play()
+								ts:Create(knob, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { BackgroundColor3 = Color3.fromRGB(80, 255, 120) }):Play()
+								ts:Create(rs, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { Color = Color3.fromRGB(80, 255, 120), Thickness = 1.4 }):Play()
+								ts:Create(tsStroke, TweenInfo.new(0.28, Enum.EasingStyle.Quint), { Color = Color3.fromRGB(80, 255, 120), Transparency = 0.35 }):Play()
+							end
+							item["Args"][2](knob, toggleStates[item["Args"][1] .. module.Name])
+						end
+
+						row.MouseButton1Click:Connect(flipToggle)
+						row.MouseEnter:Connect(function()
+							local active = toggleStates[item["Args"][1] .. module.Name]
+							ts:Create(rs, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Thickness = active and 1.7 or 1.55 }):Play()
+						end)
+						row.MouseLeave:Connect(function()
+							local active = toggleStates[item["Args"][1] .. module.Name]
+							ts:Create(rs, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Thickness = active and 1.4 or 1.15 }):Play()
+						end)
+
+					elseif item["Type"] == "Dropdown" then
+						local clonedropdown = getgenv().H3XA_MM2.Dropdown:Clone()
+						local dropdownFrame = getgenv().H3XA_MM2.DropdownFrameSample
+						clonedropdown.Parent = card
+						clonedropdown.LayoutOrder = order
+						clonedropdown.Visible = true
+						clonedropdown.TextLabel.Text = H3XA_MM2_T(item["Args"][1])
+						clonedropdown.Frame.MouseButton1Click:Connect(function()
+							for _, v in ipairs(dropdownFrame.ScrollingFrame:GetChildren()) do if v:IsA("TextButton") and v.Name ~= "Sample" then v:Destroy() end end
+							local mouse = game.Players.LocalPlayer:GetMouse()
+							dropdownFrame.Position = UDim2.fromOffset(mouse.X, mouse.Y - 55)
+							dropdownFrame.Size = UDim2.new(0,108/2,0,0)
+							dropdownFrame.Visible = true
+							ts:Create(dropdownFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+								Size = UDim2.fromOffset(108, 239)
+							}):Play()
+							local items
+							if typeof(item["Args"][2]) == "function" then
+								items = item["Args"][2]()
+							else
+								items = item["Args"][2]
+							end
+							for _, v in ipairs(items) do
+								local clonedropdownbutton = dropdownFrame.ScrollingFrame.Sample:Clone()
+								clonedropdownbutton.Parent = dropdownFrame.ScrollingFrame
+								clonedropdownbutton.Name = v
+								clonedropdownbutton.Visible = true
+								clonedropdownbutton.Text = H3XA_MM2_T(v)
+								clonedropdownbutton.MouseButton1Click:Connect(function()
+									clonedropdown.Frame.Text = H3XA_MM2_T(v)
+									item["Args"][3](clonedropdown.Frame, v)
+									local after = ts:Create(dropdownFrame, TweenInfo.new(0.1, Enum.EasingStyle.Circular, Enum.EasingDirection.Out), {
+										Size = UDim2.fromOffset(108/2, 0)
+									})
+									after:Play()
+									after.Completed:Once(function()
+										dropdownFrame.Visible = false
+									end)
+								end)
+							end
+						end)
+						enterIndex = enterIndex + 1
+						playEnter(clonedropdown, math.min(enterIndex * 0.045, 0.28))
+
+					elseif item["Type"] == "Range" then
+						local clonerange = getgenv().H3XA_MM2.Range:Clone()
+						clonerange.Parent = card
+						clonerange.LayoutOrder = order
+						clonerange.Visible = true
+						clonerange.Size = UDim2.new(1, 0, 0, 58)
+						clonerange.BackgroundTransparency = 1
+						-- Label: smaller, clean
+						local label = clonerange.TextLabel
+						label.Text = H3XA_MM2_T(item["Args"][1])
+						label.TextColor3 = Color3.fromRGB(220, 220, 225)
+						label.Font = Enum.Font.Gotham
+						label.TextSize = 11
+						label.TextScaled = false
+						label.TextXAlignment = Enum.TextXAlignment.Left
+						-- Track container
+						local frame = clonerange.Frame
+						frame.BackgroundTransparency = 1
+						frame.BorderSizePixel = 0
+						local track = frame.Track
+						-- Thin pill track, NO border/stroke
+						track.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+						track.BorderSizePixel = 0
+						track.Size = UDim2.new(1, 0, 0, 10)
+						track.Position = UDim2.new(0.5, 0, 0.5, 0)
+						track.AnchorPoint = Vector2.new(0.5, 0.5)
+						for _, s in ipairs(track:GetChildren()) do
+							if s:IsA("UIStroke") then s:Destroy() end
+						end
+						local trackCorner = track:FindFirstChildOfClass("UICorner")
+						if not trackCorner then
+							trackCorner = Instance.new("UICorner")
+							trackCorner.Parent = track
+						end
+						trackCorner.CornerRadius = UDim.new(1, 0)
+						-- Soften track padding so the fill sits clean
+						local trackPad = track:FindFirstChildOfClass("UIPadding")
+						if trackPad then
+							trackPad.PaddingTop = UDim.new(0, 0)
+							trackPad.PaddingBottom = UDim.new(0, 0)
+							trackPad.PaddingLeft = UDim.new(0, 0)
+							trackPad.PaddingRight = UDim.new(0, 0)
+						end
+						-- Fill (Ball) = white progress bar, no ugly edges
+						local ball = track.Ball
+						ball.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+						ball.BorderSizePixel = 0
+						ball.BackgroundTransparency = 0
+						local ballCorner = ball:FindFirstChildOfClass("UICorner")
+						if not ballCorner then
+							ballCorner = Instance.new("UICorner")
+							ballCorner.Parent = ball
+						end
+						ballCorner.CornerRadius = UDim.new(1, 0)
+						for _, s in ipairs(ball:GetChildren()) do
+							if s:IsA("UIStroke") then s:Destroy() end
+						end
+						-- Value text inside fill: tiny, dark, readable
+						pcall(function()
+							local bp = ball.BallProgress
+							bp.TextTransparency = 0
+							bp.TextColor3 = Color3.fromRGB(10, 10, 12)
+							bp.Font = Enum.Font.GothamBold
+							bp.TextSize = 10
+							bp.TextScaled = false
+						end)
+						-- Hide secondary track progress label (cleaner)
+						pcall(function()
+							if track:FindFirstChild("TrackProgress") then
+								track.TrackProgress.TextTransparency = 1
+								track.TrackProgress.Visible = false
+							end
+						end)
+						local minV = item["Args"][2]
+						local maxV = item["Args"][3]
+						local stepV = item["Args"][4] or 1
+						local stateKey = item["Args"][1] .. module.Name
+						if not rangeValueStates[stateKey] then
+							rangeValueStates[stateKey] = minV
+						end
+						local function applyVisual(val)
+							local pct = 0
+							if maxV ~= minV then pct = (val - minV) / (maxV - minV) end
+							pct = math.clamp(pct, 0, 1)
+							-- Minimum fill so the value digit stays visible
+							ball.Size = UDim2.new(math.max(0.12, pct), 0, 1, 0)
+							pcall(function()
+								ball.BallProgress.Text = tostring(math.floor(val + 0.5))
+							end)
+						end
+						applyVisual(rangeValueStates[stateKey])
+						local slider = DraggableObject.new(clonerange.Frame, nil, false, true)
+						slider:Enable()
+						local relativeSlide = nil
+						slider.Dragged = function(pos)
+							if not relativeSlide then relativeSlide = pos end
+							local dragDistance = pos - relativeSlide
+							local resolvedVal = rangeValueStates[stateKey]
+							local deltaChange = dragDistance.X.Offset
+							if math.abs(deltaChange) * 2 > stepV then
+								resolvedVal = math.clamp(resolvedVal + deltaChange, minV, maxV)
+								relativeSlide = pos
+								if stepV >= 1 then
+									resolvedVal = math.round(resolvedVal)
+								end
+								rangeValueStates[stateKey] = resolvedVal
+							end
+							applyVisual(resolvedVal)
+							rangeValueStates[stateKey] = resolvedVal
+							if item["Args"][5] then
+								item["Args"][5](clonerange, resolvedVal)
+							end
+						end
+						slider.DragEnded = function()
+							relativeSlide = nil
+						end
+						enterIndex = enterIndex + 1
+						playEnter(clonerange, math.min(enterIndex * 0.045, 0.28))
+					end
+				end
+			end
+
+			-- Sin animaciones de Position residuales (causaban el cuadro negro abajo)
+			pcall(function()
+				AREACONTAINER.Area.Position = UDim2.fromScale(0.5, 0.5)
+			end)
+			if AREACONTAINER and AREACONTAINER:IsA("CanvasGroup") then
+				ts:Create(AREACONTAINER, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+					GroupTransparency = 0
+				}):Play()
+			end
+		end
+		
+		
+		
+		function FUNCTIONSmodule.refreshlist()
+		
+			for _, v in ipairs(script.Parent.Menu.List.ScrollingFrame:GetChildren()) do
+				if v:IsA("TextButton") then
+					v:Destroy()
+				end
+			end
+		
+			local dense = {}
+			for _, module in pairs(getgenv().Modules) do
+				if module and module.Name == "Murder Mystery 2" then
+					table.insert(dense, module)
+				end
+			end
+			
+			if not AREAModuleSelected then
+				AREAModuleSelected = dense[1]
+			end
+
+			-- MM2-only build: go straight to categories (no intermediate "Murder Mystery 2" button flash)
+			if #dense == 1 then
+				AREAModuleSelected = dense[1]
+				task.defer(function()
+					if AREAModuleSelected then
+						FUNCTIONSmodule.loader(AREAModuleSelected)
+					end
+				end)
+			end
+		end
+		
+		function FUNCTIONSmodule.refresharea()
+			FUNCTIONSmodule.loader(AREAModuleSelected)
+		end
+		
+		function FUNCTIONSmodule.dialog(title, description, buttons)
+			local dialog = script.Parent.Dialog
+			dialog.DialogTitle.Text = H3XA_MM2_T(title)
+			dialog.DialogDesc.Text = H3XA_MM2_T(description)
+		
+			for _,v in ipairs(dialog.Options:GetChildren()) do
+				if v:IsA("TextButton") and v.Name ~= "OptionPlaceholder" then v:Destroy() end
+			end
+			for _, button in buttons do
+				local newButton = dialog.Options.OptionPlaceholder:Clone()
+		
+				newButton.Visible = true
+				newButton.Name = button
+				newButton.Text = H3XA_MM2_T(button)
+				newButton.Parent = dialog.Options
+				newButton.MouseButton1Click:Connect(function()
+					newButton.Parent.Parent.OnSelect:Fire(newButton.Name)
+				end)
+			end
+		
+			ts:Create(dialog, TweenInfo.new(1.1, Enum.EasingStyle.Back, Enum.EasingDirection.Out),{
+				Size = UDim2.fromOffset(313, 147)
+			}):Play()
+		
+			ts:Create(dialog.UIScale, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out),{
+				Scale = 1
+			}):Play()
+		end
+		
+		function FUNCTIONSmodule.closedialog()
+			local dialog = script.Parent.Dialog
+			ts:Create(dialog, TweenInfo.new(1.1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),{
+				Size = UDim2.fromOffset(0, 147)
+			}):Play()
+		
+			ts:Create(dialog.UIScale, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out),{
+				Scale = 0
+			}):Play()
+		end
+		
+		function FUNCTIONSmodule.waitfordialog()
+			return script.Parent.Dialog.OnSelect.Event:Wait()
+		end
+		
+		
+		getgenv().H3XA_MM2FUNCTIONS = FUNCTIONSmodule
+		return FUNCTIONSmodule
+		
     end
-    if not ok then ok = pcall(function() button:Activate() end) end
-    return ok
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.DraggableObject
+    local script = Instance.new("ModuleScript")
+    script.Name = "DraggableObject"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		local function a(b,c)local d=c.AbsoluteSize;local e=c.AbsolutePosition;local f=b.X.Scale*d.X+b.X.Offset;local g=b.Y.Scale*d.Y+b.Y.Offset;local h=math.clamp(f,0,d.X)local i=math.clamp(g,0,d.Y)local j=UDim2.new(b.X.Scale,h-b.X.Scale*d.X,b.Y.Scale,i-b.Y.Scale*d.Y)return j end;local k=UDim2.new;local l=game:GetService("UserInputService")local m=game:GetService("TweenService")local n={}n.__index=n;function n.new(o,p,q,r)local self={}self.Object=o;self.ToMove=p;self.Smooth=q;self.CallbackOnly=r;self.DragStarted=nil;self.DragEnded=nil;self.Dragged=nil;self.Dragging=false;self.LastPosition=nil;self.Velocity=Vector2.new(0,0)setmetatable(self,n)return self end;function n:Enable()local s=self.Object;local t=self.ToMove;local u=nil;local v=nil;local w=nil;local x=false;local function y(z)local A=z.Position-v;local B=UDim2.new(w.X.Scale,w.X.Offset+A.X,w.Y.Scale,w.Y.Offset+A.Y)if self.CallbackOnly then else B=a(B,self.Object:FindFirstAncestorWhichIsA("ScreenGui"))if(self.Smooth==nil or self.Smooth==true)and self.Smooth~=false then m:Create(t and t or s,TweenInfo.new(0.5,Enum.EasingStyle.Cubic,Enum.EasingDirection.Out),{Position=B}):Play()else local C=t and t or s;C.Position=B end end;return B end;self.InputBegan=s.InputBegan:Connect(function(z)if z.UserInputType==Enum.UserInputType.MouseButton1 or z.UserInputType==Enum.UserInputType.Touch then x=true;local D;D=z.Changed:Connect(function()if z.UserInputState==Enum.UserInputState.End and(self.Dragging or x)then self.Dragging=false;D:Disconnect()if self.DragEnded and not x then self.DragEnded(self.Velocity)end;x=false end end)end end)self.InputChanged=s.InputChanged:Connect(function(z)if z.UserInputType==Enum.UserInputType.MouseMovement or z.UserInputType==Enum.UserInputType.Touch then u=z end end)self.InputChanged2=l.InputChanged:Connect(function(z)if s.Parent==nil then self:Disable()return end;if x then x=false;if self.DragStarted then self.DragStarted()end;self.Dragging=true;v=z.Position;if t then w=t.Position else w=s.Position end;self.LastPosition=z.Position end;if z==u and self.Dragging then local B=y(z)self.Velocity=z.Position-self.LastPosition;self.LastPosition=z.Position;if self.Dragged then self.Dragged(B)end end end)end;function n:Disable()self.InputBegan:Disconnect()self.InputChanged:Disconnect()self.InputChanged2:Disconnect()if self.Dragging then self.Dragging=false;if self.DragEnded then self.DragEnded(self.Velocity)end end end;return n
+		
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.ClickAndHold
+    local script = Instance.new("ModuleScript")
+    script.Name = "ClickAndHold"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+
+		local a={}a.__index=a;local b=game:GetService("UserInputService")function a.new(c,d)local self=setmetatable({},a)self.textButton=c;self.holdTime=d or 0.5;self.holdTask=nil;self.initialPosition=nil;self.Holded=Instance.new("BindableEvent")local function e(f,g)return math.sqrt((g.X-f.X)^2+(g.Y-f.Y)^2)end;self.textButton.MouseButton1Down:Connect(function(h,i)self.initialPosition=Vector2.new(h,i)self.holdTask=task.spawn(function()task.wait(self.holdTime)if self.holdTask then self.Holded:Fire()end end)end)b.InputChanged:Connect(function(j)if j.UserInputType==Enum.UserInputType.MouseMovement or j.UserInputType==Enum.UserInputType.Touch then if self.holdTask and self.initialPosition then local k=j.Position;local l=e(self.initialPosition,k)if l>10 then coroutine.close(self.holdTask)self.holdTask=nil end end end end)b.InputEnded:Connect(function(j)if j.UserInputType==Enum.UserInputType.MouseButton1 or j.UserInputType==Enum.UserInputType.Touch then if self.holdTask then coroutine.close(self.holdTask)self.holdTask=nil end;self.initialPosition=nil end end)return self end;return a
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.Spring
+    local script = Instance.new("ModuleScript")
+    script.Name = "Spring"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		local a=game:GetService("RunService")local b={}function OverDamping(c,d,e,f,g,h)local i=d*d-4*e/c;local j=-1/2;local k=d+math.sqrt(i)local l=d-math.sqrt(i)local m,n=j*k,j*l;local o,p=(n*f-g)/(n-m),(m*f-g)/(m-n)local q=h/e;return{Offset=function(r)return o*math.exp(m*r)+p*math.exp(n*r)+q end,Velocity=function(r)return o*m*math.exp(m*r)+p*n*math.exp(n*r)end,Acceleration=function(r)return o*m*m*math.exp(m*r)+p*n*n*math.exp(n*r)end}end;function CriticalDamping(c,d,e,f,g,h)local s=-d/2;local o,p=f,g-s*f;local q=h/e;return{Offset=function(r)return math.exp(s*r)*(o+p*r)+q end,Velocity=function(r)return math.exp(s*r)*(p*s*r+o*s+p)end,Acceleration=function(r)return s*math.exp(s*r)*(p*s*r+o*s+2*p)end}end;function UnderDamping(c,d,e,f,g,h)local i=d*d-4*e/c;local s=-d/2;local t=math.sqrt(-i)local o,p=f,(g-s*f)/t;local q=h/e;return{Offset=function(r)return math.exp(s*r)*(o*math.cos(t*r)+p*math.sin(t*r))+q end,Velocity=function(r)return-math.exp(s*r)*((o*t-p*s)*math.sin(t*r)+(-p*t-o*s)*math.cos(t*r))end,Acceleration=function(r)return-math.exp(s*r)*((p*t*t+2*o*s*t-p*s*s)*math.sin(t*r)+(o*t*t-2*p*s*t-o*s*s)*math.cos(t*r))end}end;function b.F(u)local f,g,h=u.InitialOffset,u.InitialVelocity,u.ExternalForce;local c,d,e=u.Mass,u.Damping,u.Constant;local i=d*d-4*e/c;if i>0 then return OverDamping(c,d,e,f,g,h)elseif i==0 then return CriticalDamping(c,d,e,f,g,h)else return UnderDamping(c,d,e,f,g,h)end end;local v=b;local w=math.sqrt;local x=math.pi;local y={OFFSET="Offset",VELOCITY="Velocity",ACCELERATION="Acceleration",GOAL="Goal",FREQUENCY="Frequency"}local z=[[.]]local A=[[.]]local u={}local B={}B.__index=function(self,C)local D={[y.OFFSET]=function()local r=tick()-self.StartTick;local E=self.F;local F=E.Offset(r)return F end,[y.VELOCITY]=function()local r=tick()-self.StartTick;local E=self.F;local G=E.Velocity(r)return G end,[y.ACCELERATION]=function()local r=tick()-self.StartTick;local E=self.F;local H=E.Acceleration(r)return H end,[y.GOAL]=function()local I=self.ExternalForce;local J=self.Constant;return I/J end,[y.FREQUENCY]=function()local K=self.Damping;local L=self.Constant;local M=self.Mass;return w(-K*K+4*L/M)/(2*x)end}local N=rawget(self,C)if N~=nil then return N end;local O=D[C]if O~=nil then return O()end;return B[C]end;B.__tostring=function(self)local r=tick()-self.StartTick;local E=self.F;local P=self.AdvancedObjectStringEnabled;local Q;if P==false then Q=string.format(z,E.Offset(r),E.Velocity(r),E.Acceleration(r))elseif P==true then Q=string.format(A,self.Mass,self.Damping,self.Constant,self.Goal,self.Frequency,self.InitialOffset,self.InitialVelocity,self.ExternalForce,self.StartTick,E.Offset(r),E.Velocity(r),E.Acceleration(r))end;return Q end;function u.new(M,K,L,f,g,R)assert(M>0,"Mass for spring system cannot be less than or equal to 0")assert(L>0,"Spring constant for spring system cannot be less than or equal to 0")f=f or 0;g=g or 0;R=R or 0;local S=R*L;local T={Mass=M,Damping=K,Constant=L,InitialOffset=f-R,InitialVelocity=g,ExternalForce=S,AdvancedObjectStringEnabled=false,StartTick=0}setmetatable(T,B)T:Reset()return T end;function u.fromFrequency(M,K,U,f,g,R)assert(M>0,"Mass for spring system cannot be less than or equal to 0")assert(U>0,"Spring frequency for spring system cannot be less than or equal to 0")local L=0.25*M*(4*x*x*U*U+K*K)f=f or 0;g=g or 0;R=R or 0;local S=R*L;local T={Mass=M,Damping=K,Constant=L,InitialOffset=f-R,InitialVelocity=g,ExternalForce=S,AdvancedObjectStringEnabled=false,StartTick=0}setmetatable(T,B)T:Reset()return T end;function B:Reset()self.F=v.F(self)self.StartTick=tick()end;function B:SetExternalForce(V)self.ExternalForce=V;self.InitialOffset=self.Offset-V/self.Constant;self.InitialVelocity=self.Velocity;self:Reset()end;function B:SetGoal(R)self.ExternalForce=R*self.Constant;self.InitialOffset=self.Offset-R;self.InitialVelocity=self.Velocity;self:Reset()end;function B:SetFrequency(U)self.Constant=0.25*self.Mass*(4*x*x*U*U+self.Damping*self.Damping)self.InitialOffset=self.Offset;self.InitialVelocity=self.Velocity;self:Reset()end;function B:SnapToCriticalDamping()self.Damping=2*w(self.Constant/self.Mass)self.InitialOffset=self.Offset;self.InitialVelocity=self.Velocity;self:Reset()end;function B:SetOffset(F,W)self.InitialOffset=F-self.Goal;self.InitialVelocity=W and 0 or self.Velocity;self:Reset()end;function B:AddOffset(F)self.InitialOffset=self.Offset+F;self.InitialVelocity=self.Velocity;self:Reset()end;function B:SetVelocity(G)self.InitialOffset=self.Offset;self.InitialVelocity=G;self:Reset()end;function B:AddVelocity(G)self.InitialOffset=self.Offset;self.InitialVelocity=self.Velocity+G;self:Reset()end;function B:Print()local X=tostring(self)print(X)end;return u
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.ESPIndicator
+    local script = Instance.new("ModuleScript")
+    script.Name = "ESPIndicator"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		-- Robust ESP module with distancing, arrows, and grouping
+		-- 
+		
+		local e={} e.__index=e local a=game:GetService("RunService") local _=game:GetService("Players") local b=game:GetService("HttpService") local l=game:GetService("TweenService") e.Groups={} e.TargetIndex={} e.Defaults={AccentColor=Color3.new(1,1,0),HighlightFillTransparency=0.7,HighlightOutlineTransparency=0,HighlightDepthMode=Enum.HighlightDepthMode.AlwaysOnTop,ArrowShow=false,ArrowEdgePadding=50,ArrowMinDistance=0,ArrowSize=UDim2.new(0,30,0,30),ArrowImage="rbxassetid://97136202386756",ArrowShowDistanceText=true,ArrowDistanceFont=Enum.Font.Montserrat,ArrowDistanceTextSize=18,ShowLabel=false,LabelText="Target",LabelMaxDistance=99999,LabelOffset=Vector3.new(0,2,0),Parent=game:GetService("CoreGui")} function e.new(b)local c=setmetatable({},e) c.Settings={} for a,_ in pairs(e.Defaults)do c.Settings[a]=(b and b[a]~=nil)and b[a]or _ end local _=c.Settings.Parent or _.LocalPlayer:WaitForChild("PlayerGui") c.ScreenGui=Instance.new("ScreenGui") c.ScreenGui.Name="ESPIndicators" c.ScreenGui.IgnoreGuiInset=true c.ScreenGui.ResetOnSpawn=false c.ScreenGui.Parent=_ c.ArrowTemplate=Instance.new("ImageLabel") c.ArrowTemplate.Name="ArrowTemplate" c.ArrowTemplate.Size=c.Settings.ArrowSize c.ArrowTemplate.AnchorPoint=Vector2.new(0.5,0.5) c.ArrowTemplate.BackgroundTransparency=1 c.ArrowTemplate.Image=c.Settings.ArrowImage c.ArrowTemplate.ImageColor3=c.Settings.AccentColor c.ArrowTemplate.Visible=false c.ArrowTemplate.Parent=c.ScreenGui c.Scaler=Instance.new("UIScale") c.Scaler.Name="Scaler" c.Scaler.Scale=0 c.Scaler.Parent=c.ArrowTemplate c.Indicators={} c._updateConn=a.RenderStepped:Connect(function()c:_update()end) c._cleanupConn=a.Heartbeat:Connect(function()c:_cleanupOrphanedArrows() c:_cleanupOrphanedHighlights() c:_cleanupOrphanedLabels()end) return c end function e:AddGroup(_)local a=e.Groups[_] if not a then a={enabled=true,properties={},targets={}} e.Groups[_]=a end return a end function e:GetGroup(_)return e.Groups[_]end function e:RemoveGroup(b)local _=e.Groups[b] if not _ then return false end for _,_ in ipairs(_.targets)do local c=e.TargetIndex[_] if c then for _,a in ipairs(c)do if a==b then table.remove(c,_) break end end if#c==0 then e.TargetIndex[_]=nil end end if not e.TargetIndex[_]then self:Remove(_)end end e.Groups[b]=nil return true end function e:ClearAllGroups()for a,_ in pairs(e.Groups)do self:RemoveGroup(a)end end function e:ToggleGroup(_,a)local b=e.Groups[_] if not b then return end b.enabled=(a~=nil)and a or not b.enabled for _,_ in ipairs(b.targets)do local _=self.Indicators[_] if _ then if _.Highlight then _.Highlight.Enabled=b.enabled end if _.Arrow then _.Arrow.Visible=b.enabled and self.Settings.ArrowShow end if _.Label then _.Label.Enabled=b.enabled end end end return b.enabled end function e:SetGroupProperty(_,a,b)local _=self:AddGroup(_) _.properties[a]=b for _,_ in ipairs(_.targets)do local _=self.Indicators[_] if _ then if a=="AccentColor"then if _.Highlight then _.Highlight.FillColor=b _.Highlight.OutlineColor=b end if _.Arrow then _.Arrow.ImageColor3=b end if _.DistanceLabel then _.DistanceLabel.TextColor3=b end if _.Label and _.Label:FindFirstChild("TextLabel")then _.Label.TextLabel.TextColor3=b end end end end end function e:Add(a,g)assert(a,"ESPIndicator:Add requires a non-nil target") g=g or{} local d=Instance.new("Highlight") d.Name="Highlight_"..b:GenerateGUID(false) d.Adornee=a d.FillTransparency=g.HighlightFillTransparency or self.Settings.HighlightFillTransparency d.FillColor=g.AccentColor or self.Settings.AccentColor d.OutlineColor=g.AccentColor or self.Settings.AccentColor d.OutlineTransparency=g.HighlightOutlineTransparency or self.Settings.HighlightOutlineTransparency d.DepthMode=g.HighlightDepthMode or self.Settings.HighlightDepthMode d.Parent=self.ScreenGui local c,_,e if(g.ArrowShow or self.Settings.ArrowShow)then c=self.ArrowTemplate:Clone() c.Name="Arrow_"..b:GenerateGUID(false) c.ImageColor3=g.AccentColor or self.Settings.AccentColor c.Visible=true c.Parent=self.ScreenGui _=c:FindFirstChild("Scaler") if(g.ArrowShowDistanceText or self.Settings.ArrowShowDistanceText)then e=Instance.new("TextLabel") e.Name="DistanceLabel" e.AnchorPoint=Vector2.new(0.5,0) e.BackgroundTransparency=1 e.Font=g.ArrowDistanceFont or self.Settings.ArrowDistanceFont e.TextSize=g.ArrowDistanceTextSize or self.Settings.ArrowDistanceTextSize e.TextColor3=g.AccentColor or self.Settings.AccentColor e.Parent=c end end local f if(g.ShowLabel or self.Settings.ShowLabel)then f=Instance.new("BillboardGui") f.Name="Label_"..b:GenerateGUID(false) f.AlwaysOnTop=true f.MaxDistance=self.Settings.LabelMaxDistance f.Size=UDim2.new(0,120,0,28) f.StudsOffset=(g.LabelOffset or self.Settings.LabelOffset) f.Adornee=(typeof(a)=="Instance" and a:IsA("Model") and (a:FindFirstChild("Head") or a:FindFirstChild("HumanoidRootPart") or a) or a) f.Parent=self.ScreenGui local _=Instance.new("TextLabel") _.Name="TextLabel" _.Size=UDim2.new(1,0,1,0) _.AnchorPoint=Vector2.new(0.5,0.5) _.Position=UDim2.new(0.5,0,0.5,0) _.BackgroundTransparency=1 _.Font=Enum.Font.SourceSansBold _.TextScaled=true _.TextWrapped=true _.TextSize=14 _.TextColor3=g.AccentColor or self.Settings.AccentColor _.Text=g.LabelText or self.Settings.LabelText _.Parent=f Instance.new("UIStroke",_)end self.Indicators[a]={Highlight=d,Arrow=c,Scaler=_,DistanceLabel=e,Label=f,Options=g} local _=g.GroupName or self.Settings.GroupName if _ then self:AddToGroup(a,_)end end function e:Remove(c)local _=self.Indicators[c] if not _ then return end if _.Highlight then _.Highlight.Adornee=nil _.Highlight:Destroy()end if _.Arrow then _.Arrow:Destroy()end if _.Label then _.Label:Destroy()end local _=e.TargetIndex[c] if _ then for _,_ in ipairs(_)do local b=e.Groups[_] if b then for a,_ in ipairs(b.targets)do if _==c then table.remove(b.targets,a) break end end end end e.TargetIndex[c]=nil end self.Indicators[c]=nil end function e:AddToGroup(c,b)local _=self:AddGroup(b) if not table.find(_.targets,c)then table.insert(_.targets,c)end local a=e.TargetIndex[c] if not a then a={} e.TargetIndex[c]=a end if not table.find(a,b)then table.insert(a,b)end for a,_ in pairs(_.properties)do self:SetGroupProperty(b,a,_)end if not _.enabled then local _=self.Indicators[c] if _ and _.Highlight then _.Highlight.Enabled=false end end return true end function e:RemoveFromGroup(d,b)local c=e.Groups[b] if not c then return false end if table.find(c.targets,d)then for _,a in ipairs(c.targets)do if a==d then table.remove(c.targets,_) break end end else return false end local c=e.TargetIndex[d] if c then for a,_ in ipairs(c)do if _==b then table.remove(c,a) break end end if#c==0 then e.TargetIndex[d]=nil end end return true end function e:GetGroupTargets(_)local _=e.Groups[_] return _ and _.targets or{}end function e:GetTargetGroups(_)return e.TargetIndex[_]or{}end function e:_cleanupOrphanedHighlights()for _,_ in ipairs(self.ScreenGui:GetChildren())do if _:IsA("Highlight")and not table.find(self:_allHighlights(),_)then _.Adornee=nil _:Destroy()end end end function e:_allHighlights()local a={} for _,_ in pairs(self.Indicators)do if _.Highlight then table.insert(a,_.Highlight)end end return a end function e:_cleanupOrphanedArrows()for _,_ in ipairs(self.ScreenGui:GetChildren())do if _:IsA("ImageLabel")and _.Name:match("^Arrow_")then if not table.find(self:_allArrows(),_)then _:Destroy()end end end end function e:_allArrows()local a={} for _,_ in pairs(self.Indicators)do if _.Arrow then table.insert(a,_.Arrow)end end return a end function e:_cleanupOrphanedLabels()for _,_ in ipairs(self.ScreenGui:GetChildren())do if _:IsA("BillboardGui")and _.Name:match("^Label_")then if not table.find(self:_allLabels(),_)then _.Adornee=nil _:Destroy()end end end end function e:_allLabels()local a={} for _,_ in pairs(self.Indicators)do if _.Label then table.insert(a,_.Label)end end return a end function e:_update()local a=workspace.CurrentCamera local _=a.ViewportSize local f,i=_.X,_.Y for _,p in pairs(self.Indicators)do local j=p.Options local h=p.Arrow local k=p.Scaler if((not h)or(not k))and self.Settings.ArrowShow then self:Remove(_) continue end if not h then continue end local n if _:IsA("Model")then n=(_.PrimaryPart and _.PrimaryPart.Position)or _:GetModelCFrame().p elseif _:IsA("BasePart")then n=_.Position else continue end local m,e=a:WorldToViewportPoint(n) local c=(a.CFrame.p-n).Magnitude local _=j.ArrowMinDistance or self.Settings.ArrowMinDistance local o=j.ArrowEdgePadding or self.Settings.ArrowEdgePadding if e and c>_ then l:Create(k,TweenInfo.new(0.1,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Scale=0}):Play()else l:Create(k,TweenInfo.new(0.1,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Scale=1}):Play() local d,g=f-o*2,i-o*2 local b=a.CFrame local _=math.sqrt((d/2)^2+(g/2)^2) local a=n-b.Position local a=b:VectorToObjectSpace(a) local n=Vector2.new(a.X,a.Y).Unit local a=math.clamp(m.X,o,f-o) local b=math.clamp(m.Y,o,i-o) if a==m.X and b==m.Y and e then l:Create(k,TweenInfo.new(0.1,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Scale=0}):Play()else local _=n*_ local b if math.abs(_.Y)>g/2 then b=n*math.abs((g/2)/n.Y)else b=n*math.abs((d/2)/n.X)end local a=f/2+b.X local _=i/2-b.Y local b=math.atan2(n.X,n.Y) l:Create(h,TweenInfo.new(0.1,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{Position=UDim2.fromOffset(a,_),Rotation=math.deg(b)}):Play()end if p.DistanceLabel then p.DistanceLabel.Text=string.format("%dm",math.round(c)) local _=(j.ArrowSize and j.ArrowSize.Y.Offset or self.Settings.ArrowSize.Y.Offset)+16 p.DistanceLabel.Position=UDim2.new(0.5,0,0,_)end end end end function e:Destroy()if self._updateConn then self._updateConn:Disconnect()end if self._cleanupConn then self._cleanupConn:Disconnect()end self:ClearAllGroups() for _,_ in pairs(self.Indicators)do if _.Highlight then _.Highlight:Destroy()end if _.Arrow then _.Arrow:Destroy()end if _.Label then _.Label:Destroy()end end self.ScreenGui:Destroy() self.Indicators={} e.Groups={} e.TargetIndex={}end return e
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.Bezier
+    local script = Instance.new("ModuleScript")
+    script.Name = "Bezier"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		local h={} h.__index=h function h.new(...)local k={...} assert(#k>=3,"Must have at least 3 points") local e=(#k==3) local _=(#k==4) local j={} local d=Vector3.new local b=d().lerp local f=nil local i={} local c=0 local a=nil local function g(_)local _={_.X,_.Y,_.Z} function _:ToVector3()return d(self[1],self[2],self[3])end function _:lerp(_,a)return b(self:ToVector3(),_:ToVector3(),a)end return _ end if(not e and not _)then for _=1,#k-1 do local a=g(k[_]) local _=g(k[_+1]) local _={a,_,g(a)} i[#i+1]=_ end local b=i for _=#i,2,-1 do local a={} for c=1,_-1 do local b,_=b[c],b[c+1] local _={b[3],_[3],g(b[3])} a[c]=_ i[#i+1]=_ end b=a end a=b[1] c=#i end if(e)then local b,c,_=k[1],k[2],k[3] function j:Get(d,a)if(a)then d=(d<0 and 0 or d>1 and 1 or d)end return(1-d)*(1-d)*b+2*(1-d)*d*c+d*d*_ end elseif(_)then local _,a,c,b=k[1],k[2],k[3],k[4] function j:Get(e,d)if(d)then e=(e<0 and 0 or e>1 and 1 or e)end return(1-e)*(1-e)*(1-e)*_+3*(1-e)*(1-e)*e*a+3*(1-e)*e*e*c+e*e*e*b end else function j:Get(b,_)if(_)then b=(b<0 and 0 or b>1 and 1 or b)end for _=1,c do local _=i[_] local a=_[1]:lerp(_[2],b) local _=_[3] _[1],_[2],_[3]=a.X,a.Y,a.Z end return a[3]:ToVector3()end end function j:GetLength(_)if(not f)then local a=self:GetPath(_ or 0.1) local b=0 for _=2,#a do local _=(a[_-1]-a[_]).Magnitude b=(b+_)end f=b end return f end function j:GetPath(_)assert(type(_)=="number","Must provide a step increment") assert(_>0 and _<1,"Step out of domain; should be between 0 and 1 (exclusive)") local b={} local a=0 for _=0,1,_ do a=_ b[#b+1]=self:Get(_)end if(a<1)then local _=((1-a)<(_*0.5)) b[#b+(_ and 0 or 1)]=self:Get(1)end return b end function j:GetPathByNumberSegments(_)assert(type(_)=="number","Must provide number of segments") assert(_>0,"Number of segments must be greater than 0") return self:GetPath(1/_)end function j:GetPathBySegmentLength(a)assert(type(a)=="number","Must provide a segment length") assert(a>0,"Segment length must be greater than 0") local _=self:GetLength() local _=_/a return self:GetPathByNumberSegments(math.floor(_+0.5))end function j:GetPoints()return k end return setmetatable(j,h)end return h
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.PointSave
+    local script = Instance.new("ModuleScript")
+    script.Name = "PointSave"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		-- Datasaving module using files and folders
+		-- 
+		
+		local _=false local function d(...)if _ then print("[PointSave DEBUG]:",...)end end getgenv()._FOLDERS=getgenv()._FOLDERS or{} getgenv()._FILES=getgenv()._FILES or{} isfolder=isfolder or function(_)d("Checking if folder exists:",_) return getgenv()._FOLDERS[_]~=nil end makefolder=makefolder or function(_)d("Creating folder:",_) getgenv()._FOLDERS[_]={} return getgenv()._FOLDERS[_]end isfile=isfile or function(_)d("Checking if file exists:",_) return getgenv()._FILES[_]~=nil end writefile=writefile or function(a,_)d("Writing file:",a,"with content:",_) getgenv()._FILES[a]=_ return getgenv()._FILES[a]end readfile=readfile or function(_)d("Reading file:",_) return getgenv()._FILES[_]end delfile=delfile or function(_)d("Deleting file:",_) getgenv()._FILES[_]=nil end listfiles=listfiles or function(c)d("Listing files in folder:",c) local _=getgenv()._FOLDERS[c] if _ then local a={} for b,_ in pairs(getgenv()._FILES)do if b:sub(1,#c+1)==c.."/"then local _=b:sub(#c+2) d("Found file in folder:",_) table.insert(a,_)end end return a end d("Folder does not exist:",c) return{}end local b={} b.__index=b local c="PointSaveData" local function _()if not isfolder(c)then d("Base folder not found, creating:",c) makefolder(c)else d("Base folder already exists:",c)end end function b.new(a)d("Initializing new PointSave instance for namespace:",a) _() local _=setmetatable({},b) _.namespace=a _.folderPath=c.."/"..a if not isfolder(_.folderPath)then d("Namespace folder does not exist, creating:",_.folderPath) makefolder(_.folderPath)else d("Namespace folder already exists:",_.folderPath)end return _ end function b:set(b,a)local _=self.folderPath.."/"..b..".txt" d("Setting value for key:",b,"->",a) writefile(_,tostring(a))end function b:get(a)local _=self.folderPath.."/"..a..".txt" d("Getting value for key:",a) if isfile(_)then local _=readfile(_) d("Found value for key:",a,"->",_) return _ end d("Key not found:",a) return nil end function b:remove(a)local _=self.folderPath.."/"..a..".txt" d("Removing key:",a) if isfile(_)then delfile(_) d("Removed file for key:",a)else d("File for key does not exist:",a)end end function b:clear()d("Clearing all keys in namespace:",self.namespace) local _=listfiles(self.folderPath) for _,_ in ipairs(_)do local _=self.folderPath.."/".._ if isfile(_)then d("Deleting file:",_) delfile(_)end end end function b.deleteNamespace(a)local b=c.."/"..a d("Deleting namespace:",a) local _=listfiles(b) for _,_ in ipairs(_)do local _=b.."/".._ if isfile(_)then d("Deleting file from namespace:",_) delfile(_)end end getgenv()._FOLDERS[b]=nil d("Deleted folder for namespace:",a)end function b.listNamespaces()d("Listing all namespaces") _() local b={} for a,_ in pairs(getgenv()._FOLDERS)do if a:sub(1,#c+1)==c.."/"then local _=a:sub(#c+2) d("Found namespace:",_) table.insert(b,_)end end return b end return b
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.Theme
+    local script = Instance.new("ModuleScript")
+    script.Name = "Theme"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		-- Black and white interface theme
+		
+		local H3XA_MM2Root = getgenv().H3XA_MM2
+		local api = {
+			colors = {
+				font = Enum.Font.Montserrat,
+				textColor = Color3.fromRGB(255, 255, 255),
+				accentColor = Color3.fromRGB(255, 255, 255),
+				primaryColor = Color3.fromRGB(22, 22, 22),
+				secondaryColor = Color3.fromRGB(12, 12, 12),
+		
+				backgroundColorCSQ = ColorSequence.new(Color3.fromRGB(4, 4, 5), Color3.fromRGB(20, 20, 23)),	
+				strokeColorCSQ = ColorSequence.new{
+					ColorSequenceKeypoint.new(0, Color3.fromRGB(53.00000064074993, 53.00000064074993, 53.00000064074993)),
+					ColorSequenceKeypoint.new(0.15224914252758026, Color3.fromRGB(50.69031357765198, 50.69031357765198, 50.69031357765198)),
+					ColorSequenceKeypoint.new(0.4723183512687683, Color3.fromRGB(255, 255, 255)),
+					ColorSequenceKeypoint.new(0.7577854990959167, Color3.fromRGB(50.13314567506313, 50.13314567506313, 50.13314567506313)),
+					ColorSequenceKeypoint.new(1, Color3.fromRGB(48.000000938773155, 48.000000938773155, 48.000000938773155))
+				},
+			}
+		}
+		
+		local themeObjects = {
+			font = {},
+			textColor = {},
+			primaryColor = {},
+			secondaryColor = {},
+			backgroundColorCSQ = {},
+			strokeColorCSQ = {},
+		}
+		
+		
+		
+		-- value method matching
+		function api:sortObjects(gui)
+			for _, obj in next, gui:getDescendants() do
+				if obj:FindFirstChild("themedColor") then 
+					if obj:FindFirstChild("themedColor").Value == "primaryColor" then
+						table.insert(themeObjects.primaryColor, obj)
+					elseif obj:FindFirstChild("themedColor").Value == "secondaryColor" then
+						table.insert(themeObjects.secondaryColor, obj)
+					elseif obj:FindFirstChild("themedColor").Value == "backgroundColorCSQ" then
+						for _, find in ipairs(obj:GetChildren()) do
+							if find:IsA("UIGradient") then table.insert(themeObjects.backgroundColorCSQ, find) break end
+						end
+					else
+						warn("FRAME unknown obj: "..obj.Name)
+					end
+				end
+				if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+					--print("found obj")
+					
+					table.insert(themeObjects.font, obj)
+					table.insert(themeObjects.textColor, obj)
+					--print("added to font obj",obj.Name)
+				end
+				if obj:IsA("UIStroke") and obj:FindFirstChildWhichIsA("UIGradient") then
+					table.insert(themeObjects.strokeColorCSQ, obj:FindFirstChildWhichIsA("UIGradient"))
+				end
+				
+			end
+			--print("sorted")
+		end
+		
+		
+		--function api:sortObjects(gui)
+		--	for _, obj in next, gui:getDescendants() do
+		--		if obj:IsA("Frame") then 
+		--			if obj.BackgroundColor == api.colors.primaryColor then
+		--				table.insert(themeObjects.primaryColor, obj)
+		--			elseif obj.BackgroundColor == api.colors.secondaryColor then
+		--				table.insert(themeObjects.secondaryColor, obj)
+		--			else
+		--				warn("FRAME unknown obj: "..obj.Name)
+		--				local c = obj.BackgroundColor3
+						--print(string.format("color of unknown obj: (%d, %d, %d)", c.R * 255, c.G * 255, c.B * 255))
+		--			end
+		--		elseif obj:IsA("TextLabel") or obj:IsA("TextButton") then
+					--print("found obj")
+		--			if obj.BackgroundColor == api.colors.primaryColor then
+		--				table.insert(themeObjects.primaryColor, obj)
+		--			elseif obj.BackgroundColor == api.colors.secondaryColor then
+		--				table.insert(themeObjects.secondaryColor, obj)
+		--		--[[
+		--			elseif obj.Font == api.colors.font then
+						--print("FONT OBJECT", api.colors.font)
+		--				table.insert(themeObjects.font, obj)
+		--			elseif obj.Text and obj.TextColor == api.colors.textColor then
+		--				table.insert(themeObjects.textColor, obj)
+		--		]]
+		--			else
+		--				warn("TEXT unknown obj: "..obj.Name)
+		--			end
+		--			table.insert(themeObjects.font, obj)
+		--			table.insert(themeObjects.textColor, obj)
+					--print("added to font obj",obj.Name)
+		--		end
+		--	end
+			--print("sorted")
+		--end
+		
+		function api:updateColor(colorType, newColor)
+			--print("aplying")
+			--api.colors[colorType] = (colorType == "font" and newColor) or newColor
+			if colorType == "font" then
+				--for _, obj in next, themeObjects.font do
+				--	obj.Font = newColor
+				--end
+				
+				-- changed weights so disabeled sorry
+			elseif colorType == "textColor" then
+				for _, obj in next, themeObjects.textColor do
+					obj.TextColor3 = newColor
+				end
+			elseif colorType == "primaryColor" then
+				for _, obj in next, themeObjects.primaryColor do
+					local s=pcall(function() obj.Color = newColor end) if s then return end
+					obj.BackgroundColor3 = newColor
+				end
+			elseif colorType == "secondaryColor" then
+				for _, obj in next, themeObjects.secondaryColor do
+					local s=pcall(function() obj.Color = newColor end) if s then return end
+					obj.BackgroundColor3 = newColor
+				end
+			elseif colorType == "backgroundColorCSQ" then
+				for _, obj in next, themeObjects.backgroundColorCSQ do
+					obj.Color = newColor
+				end
+			elseif colorType == "strokeColorCSQ" then
+				for _, obj in next, themeObjects.strokeColorCSQ do
+					obj.Color = newColor
+				end
+			end
+		end
+		
+		function api:setColorTable(t)
+			api.colors = t
+			if getgenv then getgenv().H3XA_MM2_THEME = t end
+		end
+		
+		function api:init(p)
+			api:sortObjects(p)
+			for colorKey, color in api.colors do
+				local s, e = pcall(function() 
+					api:updateColor(colorKey, color)
+				end)
+				if not s then warn(e) end
+			end
+		end
+		
+		getgenv().ThemeManager = api
+		getgenv().ThemeObjects = themeObjects
+		
+		getgenv().ThemeManagerModuleObject = script
+		
+		return api
+		
+    end
+    routine_module_scripts[script] = module_script
+end
+do -- Routine Module: StarterGui.H3XA_MM2.FlyUtility
+    local script = Instance.new("ModuleScript")
+    script.Name = "FlyUtility"
+    script.Parent = Converted["_H3XA_MM2"]
+    local function module_script()
+
+		-- Mobile-compatible fly module
+		-- 
+		
+		local l={} local _=game:GetService("Players") local b=game:GetService("RunService") local d=_.LocalPlayer local h=false local e=50 local c=2 local i=0 local g=Vector3.new() local j=nil local k=nil local f=nil local function _()if f then f:Disconnect() f=nil end if j then j:Destroy() j=nil end if k then k:Destroy() k=nil end local _=d.Character if _ then local _=_:FindFirstChildOfClass("Humanoid") if _ then _.PlatformStand=false end end h=false i=0 end local function a(_)local a=d.Character if not h or not a then l:Stop() return end local _=a:FindFirstChildOfClass("Humanoid") local d=a:FindFirstChild("HumanoidRootPart") local a=workspace.CurrentCamera if not _ or _.Health<=0 or not d or not a then l:Stop() return end local _=_.MoveDirection if _.Magnitude>0.01 then i=math.min(e,i+c) g=_.Unit else i=math.max(0,i-c)end local _=Vector3.new(g.X,0,g.Z) local c=Vector3.zero if _.Magnitude>0 then c=_.Unit*i end local f=a.CFrame.LookVector.Unit local b=g:Dot(f) local _=b<0 and-1 or 1 local a=Vector3.new(f.X,0,f.Z) if a.Magnitude>0 then a=a.Unit end local a=math.abs(g:Dot(a)) local _=f.Y*_*a local _=_*i k.Velocity=Vector3.new(c.X,_,c.Z) local _=(i/e)*30 local _=-math.rad(b*_) j.CFrame=CFrame.new(d.Position,d.Position+f)*CFrame.Angles(_,0,0)end function l:Start()if h then return end local c=d.Character if not c then return end local _=c:FindFirstChildOfClass("Humanoid") local c=c:FindFirstChild("HumanoidRootPart") if not _ or not c then return end h=true j=Instance.new("BodyGyro") j.P=100000 j.MaxTorque=Vector3.new(math.huge,math.huge,math.huge) j.CFrame=c.CFrame j.Parent=c k=Instance.new("BodyVelocity") k.P=10000 k.MaxForce=Vector3.new(math.huge,math.huge,math.huge) k.Velocity=Vector3.new(0,0,0) k.Parent=c _.PlatformStand=true f=b.Heartbeat:Connect(a)end function l:Stop()if not h then return end _()end function l:SetMaxSpeed(_)if type(_)=="number"and _>=0 then e=_ else warn("FlyModule:SetMaxSpeed requires a non-negative number.")end end function l:GetMaxSpeed()return e end function l:IsFlying()return h end d.CharacterRemoving:Connect(function(_)if h then l:Stop()end end) return l
+    end
+    routine_module_scripts[script] = module_script
 end
 
-local function autoSaveBuild()
-    local buttons = findGameButtons({"save", "guardar"})
-    if #buttons == 0 then
-        toast("Abre el menú de guardar del juego y vuelve a intentarlo")
-        return false
+-- Routines:
+
+local function CEBY_routine() -- Routine: StarterGui.H3XA_MM2.Universal
+    local script = Instance.new("LocalScript")
+    script.Name = "Universal"
+    script.Parent = Converted["_H3XA_MM2"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
     end
-    return activateGuiButton(buttons[1].button)
+
+
+	local module = {}
+	module["gameId"] = 0 -- Restrict module to a certain game ID only. 0 allows all games.
+	if (module["gameId"] ~= game.GameId) and module["gameId"] ~= 0 then
+		script.Enabled = true
+	end
+	
+	local ts = game:GetService("TweenService")
+	local uis = game:GetService("UserInputService")
+	local rs = game:GetService("RunService")
+	local https = game:GetService("HttpService")
+	local Players = game:GetService("Players")
+	
+	local fu = require(script.Parent.FUNCTIONS)
+	local theme = require(script.Parent.Theme)
+	local espind = require(script.Parent.ESPIndicator)
+	local flyutility = require(script.Parent.FlyUtility)
+	local PointSave = require(script.Parent.PointSave)
+	
+	
+	local loopfovandws = false
+	local ctrlclicktp = false
+	local ws = 16
+	local fov = 70
+	
+	local hidden = false
+	
+	local H3XA_MM2PointSave = PointSave.new("H3XA_MM2")
+	
+	function splitString(str,delim)
+		local broken = {}
+		if delim == nil then delim = "," end
+		for w in string.gmatch(str,"[^"..delim.."]+") do
+			table.insert(broken,w)
+		end
+		return broken
+	end
+	
+	function toTokens(str)
+		local tokens = {}
+		for op,name in string.gmatch(str,"([+-])([^+-]+)") do
+			table.insert(tokens,{Operator = op,Name = name})
+		end
+		return tokens
+	end
+	
+	function onlyIncludeInTable(tab,matches)
+		local matchTable = {}
+		local resultTable = {}
+		for i,v in pairs(matches) do matchTable[v.Name] = true end
+		for i,v in pairs(tab) do if matchTable[v.Name] then table.insert(resultTable,v) end end
+		return resultTable
+	end
+	
+	function removeTableMatches(tab,matches)
+		local matchTable = {}
+		local resultTable = {}
+		for i,v in pairs(matches) do matchTable[v.Name] = true end
+		for i,v in pairs(tab) do if not matchTable[v.Name] then table.insert(resultTable,v) end end
+		return resultTable
+	end
+	
+	function getPlayersByName(Name)
+		local Name,Len,Found = string.lower(Name),#Name,{}
+		for _,v in pairs(Players:GetPlayers()) do
+			if Name:sub(0,1) == '@' then
+				if string.sub(string.lower(v.Name),1,Len-1) == Name:sub(2) then
+					table.insert(Found,v)
+				end
+			else
+				if string.sub(string.lower(v.Name),1,Len) == Name or string.sub(string.lower(v.DisplayName),1,Len) == Name then
+					table.insert(Found,v)
+				end
+			end
+		end
+		return Found
+	end
+	
+	function getPlayer(list,speaker)
+		if list == nil then return {speaker.Name} end
+		local nameList = splitString(list,",")
+	
+		local foundList = {}
+	
+		for _,name in pairs(nameList) do
+			if string.sub(name,1,1) ~= "+" and string.sub(name,1,1) ~= "-" then name = "+"..name end
+			local tokens = toTokens(name)
+			local initialPlayers = Players:GetPlayers()
+	
+			for i,v in pairs(tokens) do
+				if v.Operator == "+" then
+					local tokenContent = v.Name
+					local foundCase = false
+	
+					if not foundCase then
+						initialPlayers = onlyIncludeInTable(initialPlayers,getPlayersByName(tokenContent))
+					end
+				else
+					local tokenContent = v.Name
+					local foundCase = false
+	
+					if not foundCase then
+						initialPlayers = removeTableMatches(initialPlayers,getPlayersByName(tokenContent))
+					end
+				end
+			end
+	
+			for i,v in pairs(initialPlayers) do table.insert(foundList,v) end
+		end
+	
+		local foundNames = {}
+		for i,v in pairs(foundList) do table.insert(foundNames,v.Name) end
+	
+		return foundNames[1]
+	end
+	
+	
+	
+	task.spawn(function()
+		rs.RenderStepped:Connect(function()
+			if loopfovandws then
+				workspace.CurrentCamera.FieldOfView = fov
+				if game.Players.LocalPlayer.Character then
+					if game.Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+						game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = ws
+					end
+				end
+			end
+		end)
+	end)
+	
+	uis.InputBegan:Connect(function(inp, proc)
+		if proc then return end
+	
+		if uis:IsKeyDown(Enum.KeyCode.LeftControl) and inp.KeyCode == Enum.KeyCode.Y and hidden then
+			hidden = false
+			ts:Create(script.Parent.Menu.UIScale, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				Scale = 1
+			}):Play()
+		end
+	end)
+	
+	local function getPlayerMouse()
+		local player = game:GetService("Players").LocalPlayer
+		if player then
+			return player:GetMouse()
+		end
+		return nil
+	end
+	
+	-- Function to cast a ray from the cursor to the furthest object
+	local function getRayHitPosition()
+		local mouse = getPlayerMouse()
+		if not mouse then
+			return nil
+		end
+	
+		local camera = workspace.CurrentCamera
+		local unitRay = camera:ScreenPointToRay(mouse.X, mouse.Y)
+		local ray = Ray.new(unitRay.Origin, unitRay.Direction * 1000) -- Adjust the range as needed
+	
+		local part, position = workspace:FindPartOnRay(ray, game:GetService("Players").LocalPlayer.Character)
+	
+		if part then
+			return position
+		else
+			return nil
+		end
+	end
+	
+	uis.InputBegan:Connect(function(inp, proc)
+		if proc then return end
+	
+		if uis:IsKeyDown(Enum.KeyCode.LeftControl) and inp.UserInputType == Enum.UserInputType.MouseButton1 and ctrlclicktp then
+			local ray = getRayHitPosition()
+			if not ray then fu.notification("Couldn't find a place to teleport to.") return end
+			game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(ray)
+		end
+	end)
+	
+	if uis.AccelerometerEnabled then
+		uis.DeviceAccelerationChanged:Connect(function(acc)
+			if hidden and acc.Position.Magnitude > 28 then
+				hidden = false
+				ts:Create(script.Parent.Menu.UIScale, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+					Scale = 1
+				}):Play()
+			end 
+		end)
+	end
+	
+	--local flyob = flyutility.new(Players.LocalPlayer)
+	
+	
+	module["Name"] = "Universal"
+	
+	local ts = game:GetService("TweenService")
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"OP Fly", function(Self, state)
+			if state then
+				flyutility:Start(Players.LocalPlayer.Character)
+			else
+				flyutility:Stop(Players.LocalPlayer.Character)
+			end
+		end}
+	})
+	
+	table.insert(module, {
+		Type = "Range",
+		Args = {"Fly speed", 50, 350, 10, function(Self, spd)
+			--print(spd)
+			flyutility:SetMaxSpeed(spd)
+		end}
+	})
+	
+	local infJump = false
+	local infJumpConnection = nil
+	local landedConnection = nil
+	
+	local infJumps = 0
+	local infJumpDeb = false
+	local infJumpOnlyTwo = false
+	local landed = true
+	
+	local function setupHumanoid(humanoid)
+		if landedConnection then landedConnection:Disconnect() end
+	
+		landedConnection = humanoid.StateChanged:Connect(function(_, n)
+			if n == Enum.HumanoidStateType.Landed or n == Enum.HumanoidStateType.Running then
+	
+				landed = true
+				infJumps = 0
+			end
+		end)
+	end
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Infinite jump", function(Self, state)
+			infJump = state
+	
+			if state then
+				local char = game.Players.LocalPlayer.Character
+				if char and char:FindFirstChildWhichIsA("Humanoid") then
+					setupHumanoid(char:FindFirstChildWhichIsA("Humanoid"))
+				end
+	
+				infJumpConnection = uis.JumpRequest:Connect(function()
+					local character = game.Players.LocalPlayer.Character
+					local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+	
+					if not humanoid then return end
+	
+					if infJumpOnlyTwo and infJumps >= 2 and not landed then
+						--print(infJumpOnlyTwo)
+						--print(infJumps)
+						--print(landed)
+						return end
+	
+					if not infJumpDeb then
+						infJumpDeb = true
+						humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+						infJumps += 1
+						landed = false
+	
+						task.wait(.1)
+						infJumpDeb = false
+					end
+				end)
+			else
+				if infJumpConnection then infJumpConnection:Disconnect() end
+				if landedConnection then landedConnection:Disconnect() end
+				infJumps = 0
+				landed = true
+			end
+		end}
+	})
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Limit infinite jump to 2 jumps only", function(Self, state)
+			infJumpOnlyTwo = state
+			infJumps = 0 
+		end}
+	})
+	
+	
+	local aggressiveExp = false
+	local hitboxExp = 1
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Hitbox expander", "Expand everyone's hitbox", function(Self, ToExpand)
+			hitboxExp = ToExpand
+			local players = game:GetService("Players"):GetPlayers()
+			for i,v in ipairs(players) do
+				if v ~= game.Players.LocalPlayer and v.Character:FindFirstChild('HumanoidRootPart') then
+					local sizeArg = tonumber(ToExpand)
+					local Size = Vector3.new(sizeArg,sizeArg,sizeArg)
+					if aggressiveExp then
+						for _, part in ipairs(v.Character:GetChildren()) do
+							if part:IsA("BasePart") then
+								if not ToExpand or sizeArg == 1 then
+									part.Size = Vector3.new(2,1,1)
+									part.Transparency = 0.2
+								else
+									part.Size = Size
+									part.Transparency = 0.2
+								end
+								--part.CanCollide = false
+							end
+						end
+					else
+						local Root = v.Character:FindFirstChild('HumanoidRootPart')
+						if Root:IsA("BasePart") then
+							if not ToExpand or sizeArg == 1 then
+								Root.Size = Vector3.new(2,1,1)
+								Root.Transparency = 0.2
+							else
+								Root.Size = Size
+								Root.Transparency = 0.2
+							end
+							Root.CanCollide = false
+						end
+					end
+				end
+			end
+			fu.notification("Hitboxes expanded.")
+		end,}
+	})
+	
+	local loopHitBoxExp
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Loop hitbox expansion", function(Self, state)
+			if state then
+				loopHitBoxExp = rs.Heartbeat:Connect(function()
+					local players = game:GetService("Players"):GetPlayers()
+					for i,v in ipairs(players) do
+						if v ~= game.Players.LocalPlayer and v.Character:FindFirstChild('HumanoidRootPart') then
+							local sizeArg = tonumber(hitboxExp)
+							local Size = Vector3.new(sizeArg,sizeArg,sizeArg)
+							local Root = v.Character:FindFirstChild('HumanoidRootPart')
+							if aggressiveExp then
+								for _, part in ipairs(v.Character:GetChildren()) do
+									if part:IsA("BasePart") then
+										if not hitboxExp or sizeArg == 1 then
+											part.Size = Vector3.new(2,1,1)
+											part.Transparency = 0.2
+										else
+											part.Size = Size
+											part.Transparency = 0.2
+										end
+										--part.CanCollide = false
+									end
+								end
+							else
+								local Root = v.Character:FindFirstChild('HumanoidRootPart')
+								if Root:IsA("BasePart") then
+									if not hitboxExp or sizeArg == 1 then
+										Root.Size = Vector3.new(2,1,1)
+										Root.Transparency = 0.2
+									else
+										Root.Size = Size
+										Root.Transparency = 0.2
+									end
+									Root.CanCollide = false
+								end
+							end
+						end
+					end
+				end)
+			else
+				loopHitBoxExp:Disconnect()
+			end
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Aggressive hitbox expasion (all parts)", function(Self, state)
+			aggressiveExp = state
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Walkspeed", "Set speed", function(Self, speed)
+			local lp = game:GetService("Players").LocalPlayer
+			local char = lp.Character
+			if not char then fu.notification("No character!") return end
+			local hu = char:FindFirstChildOfClass("Humanoid")
+			if not hu then fu.notification("No humanoid on your character..?") return end
+			hu.WalkSpeed = tonumber(speed) or 16
+			fu.notification("Walkspeed set.")
+			ws = tonumber(speed) or 16
+		end,}
+	})
+	
+	
+	local walkspeedInDeCrement = 2
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Increase walkspeed", function(Self)
+			local lp = game:GetService("Players").LocalPlayer
+			local char = lp.Character
+			if not char then fu.notification("No character!") return end
+			local hu = char:FindFirstChildOfClass("Humanoid")
+			if not hu then fu.notification("No humanoid on your character..?") return end
+			ws = ws + walkspeedInDeCrement
+			hu.WalkSpeed = hu.WalkSpeed + walkspeedInDeCrement
+			fu.notification("Walkspeed is now ".. hu.WalkSpeed)
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Decrease walkspeed", function(Self)
+			local lp = game:GetService("Players").LocalPlayer
+			local char = lp.Character
+			if not char then fu.notification("No character!") return end
+			local hu = char:FindFirstChildOfClass("Humanoid")
+			if not hu then fu.notification("No humanoid on your character..?") return end
+			ws = ws - walkspeedInDeCrement
+			hu.WalkSpeed = hu.WalkSpeed - walkspeedInDeCrement
+			fu.notification("Walkspeed is now ".. hu.WalkSpeed)
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Walkspeed increment (How big each increase/decrease is)", "Set", function(Self, input)
+			walkspeedInDeCrement = tonumber(input) or 2
+			if not tonumber(input) then fu.notification("Not a number. Setting to default (2).") end
+			fu.notification("Set walkspeed increment to ".. walkspeedInDeCrement)
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {"FOV change", "Set FOV", function(Self, tofov)
+			if not tonumber(tofov) then fu.notification("Not a number. Setting to default.") end
+			ts:Create(workspace.CurrentCamera, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				FieldOfView = tonumber(tofov) or 70
+			}):Play()
+			fov = tonumber(tofov) or 70
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Loop walkspeed and FOV", function(Self, state)
+			loopfovandws = state
+		end,}
+	})
+	
+	
+	if uis.KeyboardEnabled and uis.MouseEnabled then
+		table.insert(module, {
+			Type = "Toggle",
+			Args = {"CTRL+Click Teleport", function(Self, state)
+				ctrlclicktp = state
+			end,}
+		})
+	end
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Teleports"}
+	})
+	
+	local function gotoPlayer(targetPlayerName)
+		local targetPlayer = Players:FindFirstChild(getPlayer(targetPlayerName, game.Players.LocalPlayer))
+		if targetPlayer then
+			local character = targetPlayer.Character
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				local targetPosition = character.HumanoidRootPart.Position
+				local playerCharacter = Players.LocalPlayer.Character
+				if playerCharacter and playerCharacter:FindFirstChild("HumanoidRootPart") then
+					playerCharacter.HumanoidRootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 5, 0))
+				end
+			end
+		else
+			print("Player '" .. targetPlayerName .. "' not found.")
+		end
+	end
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {
+			"Enter player's name", 
+			"Teleport", 
+			function(Self, text)
+				gotoPlayer(text)
+			end
+		}
+	})
+	
+	local spectateLoop = nil
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Spectate players", function(Self)
+			local listofplayers = game.Players:GetPlayers()
+			local currentlyViewing = 1
+			local currentPlayer = listofplayers[currentlyViewing]
+			if not currentPlayer then return end
+			workspace.CurrentCamera.CameraSubject = currentPlayer.Character.Humanoid
+			spectateLoop = task.spawn(function()
+				while true do
+					fu.dialog("Spectating...", "Now spectating: " .. workspace.CurrentCamera.CameraSubject.Parent.Name, {"Previous", "Stop", "Next"})
+					local action = fu.waitfordialog()
+					if action == "Stop" then
+						fu.closedialog()
+						workspace.CurrentCamera.CameraSubject = game.Players.LocalPlayer.Character.Humanoid
+						task.cancel(spectateLoop)
+						break
+					elseif action == "Next" then
+						currentlyViewing = currentlyViewing + 1
+						if currentlyViewing > #listofplayers then
+							currentlyViewing = 1
+						end
+						currentPlayer = listofplayers[currentlyViewing]
+						if not currentPlayer then return end
+						workspace.CurrentCamera.CameraSubject = currentPlayer.Character.Humanoid
+					elseif action == "Previous" then
+						currentlyViewing = currentlyViewing - 1
+						if currentlyViewing < 1 then
+							currentlyViewing = #listofplayers
+						end
+						currentPlayer = listofplayers[currentlyViewing]
+						if not currentPlayer then return end
+						workspace.CurrentCamera.CameraSubject = currentPlayer.Character.Humanoid
+					end
+				end
+	
+			end)
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Aim locking"}
+	})
+	
+	local aimlockrscon
+	local target
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Target player", "Set target", function(Self, input)
+			if not Players:FindFirstChild(getPlayer(input, game.Players.LocalPlayer)) then
+				fu.notification("Player not found.")
+				return
+			end
+			fu.notification("Target is set to " .. Players:FindFirstChild(getPlayer(input, game.Players.LocalPlayer)).Name)
+			target = Players:FindFirstChild(getPlayer(input, game.Players.LocalPlayer))
+		end,}
+	})
+	
+	local aimlock = false
+	local cam = workspace.CurrentCamera
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Aim lock", function(Self)
+			if aimlock then return end
+			if aimlockrscon then aimlockrscon:Disconnect() end
+			if not target then fu.notification("Set a target first.") return end
+			aimlockrscon = rs.RenderStepped:Connect(function()
+				if not target then fu.notification("No valid target.") aimlockrscon:Disconnect() return end
+				if not target.Character then return end
+				if not target.Character:FindFirstChild("HumanoidRootPart") then return end
+				cam.CFrame = CFrame.new(cam.CFrame.Position, target.Character:FindFirstChild("HumanoidRootPart").Position)
+			end)
+			aimlock = true
+			fu.notification("Aim lock is now on.")
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Unaim lock", function(Self)
+			if not aimlock then return end
+			aimlock = false
+			if aimlockrscon then aimlockrscon:Disconnect() end
+			fu.notification("Aim lock is now off.")
+		end,}
+	})
+	
+	
+	
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Fling"}
+	})
+	
+	local playerToFling
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Target fling player", "Set target", function(Self, input)
+			if not Players:FindFirstChild(getPlayer(input, game.Players.LocalPlayer)) then
+				fu.notification("Player not found.")
+				return
+			end
+			fu.notification("Target is set to " .. Players:FindFirstChild(getPlayer(input, game.Players.LocalPlayer)).Name)
+			playerToFling = Players:FindFirstChild(getPlayer(input, game.Players.LocalPlayer))
+		end,}
+	})
+	
+	
+	local antiFling = false
+	table.insert(module, {
+		Type = "ButtonGrid",
+		Args = {1, {
+	
+			Fling = function(Self)
+				if not playerToFling then
+					fu.notification("You need to target a player to fling.")
+					return
+				end
+				if not Players:FindFirstChild(playerToFling.Name) then
+					fu.notification("You need to target a player to fling.")
+					return
+				end
+				if antiFling then
+					fu.notification("Turn off anti-fling to use fling.")
+					return
+				end
+	
+				local player = game.Players.LocalPlayer
+				local mouse = player:GetMouse()
+				local Targets = {playerToFling}
+	
+				local Players = game:GetService("Players")
+				local Player = Players.LocalPlayer
+	
+				local AllBool = false
+	
+				local SkidFling = function(TargetPlayer)
+					local Character = Player.Character
+					local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+					local RootPart = Humanoid and Humanoid.RootPart
+	
+					local TCharacter = TargetPlayer.Character
+					local THumanoid
+					local TRootPart
+					local THead
+					local Accessory
+					local Handle
+	
+					if TCharacter:FindFirstChildOfClass("Humanoid") then
+						THumanoid = TCharacter:FindFirstChildOfClass("Humanoid")
+					end
+					if THumanoid and THumanoid.RootPart then
+						TRootPart = THumanoid.RootPart
+					end
+					if TCharacter:FindFirstChild("Head") then
+						THead = TCharacter.Head
+					end
+					if TCharacter:FindFirstChildOfClass("Accessory") then
+						Accessory = TCharacter:FindFirstChildOfClass("Accessory")
+					end
+					if Accessory and Accessory:FindFirstChild("Handle") then
+						Handle = Accessory.Handle
+					end
+	
+					if Character and Humanoid and RootPart then
+						if RootPart.Velocity.Magnitude < 50 then
+							getgenv().OldPos = RootPart.CFrame
+						end
+						if THumanoid and THumanoid.Sit and not AllBool then
+						end
+						if THead then
+							if THead.Velocity.Magnitude > 500 then
+								fu.dialog("Player flung", "Player is already flung. Fling again?", {"Fling again", "No"})
+								if fu.waitfordialog() == "No" then return fu.closedialog() end
+								fu.closedialog()
+							end
+						elseif not THead and Handle then
+							if Handle.Velocity.Magnitude > 500 then
+								fu.dialog("Player flung", "Player is already flung. Fling again?", {"Fling again", "No"})
+								if fu.waitfordialog() == "No" then return fu.closedialog() end
+								fu.closedialog()
+							end
+						end
+	
+	
+						if THead then
+							workspace.CurrentCamera.CameraSubject = THead
+						elseif not THead and Handle then
+							workspace.CurrentCamera.CameraSubject = Handle
+						elseif THumanoid and TRootPart then
+							workspace.CurrentCamera.CameraSubject = THumanoid
+						end
+						if not TCharacter:FindFirstChildWhichIsA("BasePart") then
+							return
+						end
+	
+						local FPos = function(BasePart, Pos, Ang)
+							RootPart.CFrame = CFrame.new(BasePart.Position) * Pos * Ang
+							Character:SetPrimaryPartCFrame(CFrame.new(BasePart.Position) * Pos * Ang)
+							RootPart.Velocity = Vector3.new(9e7, 9e7 * 10, 9e7)
+							RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+						end
+	
+						local SFBasePart = function(BasePart)
+							local TimeToWait = 2
+							local Time = tick()
+							local Angle = 0
+	
+							repeat
+								if RootPart and THumanoid then
+									if BasePart.Velocity.Magnitude < 50 then
+										Angle = Angle + 100
+	
+										FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle),0 ,0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(2.25, 1.5, -2.25) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(-2.25, -1.5, 2.25) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection,CFrame.Angles(math.rad(Angle), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection,CFrame.Angles(math.rad(Angle), 0, 0))
+										task.wait()
+									else
+										FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, -THumanoid.WalkSpeed), CFrame.Angles(0, 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, -TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(0, 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(math.rad(90), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(0, 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5 ,0), CFrame.Angles(math.rad(-90), 0, 0))
+										task.wait()
+	
+										FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(0, 0, 0))
+										task.wait()
+									end
+								else
+									break
+								end
+							until BasePart.Velocity.Magnitude > 500 or BasePart.Parent ~= TargetPlayer.Character or TargetPlayer.Parent ~= Players or TargetPlayer.Character ~= TCharacter or THumanoid.Sit or Humanoid.Health <= 0 or tick() > Time + TimeToWait
+						end
+	
+						workspace.FallenPartsDestroyHeight = 0/0
+	
+						local BV = Instance.new("BodyVelocity")
+						BV.Name = "EpixVel"
+						BV.Parent = RootPart
+						BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+						BV.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+	
+						Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+	
+						if TRootPart and THead then
+							if (TRootPart.CFrame.p - THead.CFrame.p).Magnitude > 5 then
+								SFBasePart(THead)
+							else
+								SFBasePart(TRootPart)
+							end
+						elseif TRootPart and not THead then
+							SFBasePart(TRootPart)
+						elseif not TRootPart and THead then
+							SFBasePart(THead)
+						elseif not TRootPart and not THead and Accessory and Handle then
+							SFBasePart(Handle)
+						else
+							fu.notification("Can't find a proper part of target player to fling.")
+						end
+	
+						BV:Destroy()
+						Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+						workspace.CurrentCamera.CameraSubject = Humanoid
+	
+						repeat
+							RootPart.CFrame = getgenv().OldPos * CFrame.new(0, .5, 0)
+							Character:SetPrimaryPartCFrame(getgenv().OldPos * CFrame.new(0, .5, 0))
+							Humanoid:ChangeState("GettingUp")
+							table.foreach(Character:GetChildren(), function(_, x)
+								if x:IsA("BasePart") then
+									x.Velocity, x.RotVelocity = Vector3.new(), Vector3.new()
+								end
+							end)
+							task.wait()
+						until (RootPart.Position - getgenv().OldPos.p).Magnitude < 25
+						workspace.FallenPartsDestroyHeight = getgenv().FPDH
+					else
+						fu.notification("No valid character of said target player. May have died.")
+					end
+				end
+				SkidFling(Targets[1])
+				-- this whole thing is skidded LMAOO
+			end,
+	
+			--Stop_Fling = function(Self)
+			--	if game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart"):FindFirstChild("BodyAngularVelocity") then
+			--		game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart"):FindFirstChild("BodyAngularVelocity"):Destroy()
+			--	end
+			--end,
+		}
+		}
+	})
+	
+	
+	local antiFlingLastPos = Vector3.zero
+	local flingNeutralizerCon
+	local flingDetectionCon
+	local detectedPlayers = {}
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Anti-fling", function(Self, state)
+			antiFling = state
+			if state then
+				fu.notification("Anti-fling activated.")
+				flingDetectionCon = rs.Heartbeat:Connect(function()
+					for _, pl in ipairs(game:GetService("Players"):GetPlayers()) do
+						if pl.Character:IsDescendantOf(workspace) then
+							if pl.Character.PrimaryPart.AssemblyAngularVelocity.Magnitude > 50 or pl.Character.PrimaryPart.AssemblyLinearVelocity.Magnitude > 100 then
+								if not detectedPlayers[pl.Name] then
+									fu.notification("A flinger has been detected with the name " .. pl.Name .. "!")
+									detectedPlayers[pl.Name] = true	
+								end
+	
+								for _, p in ipairs(pl.Character:GetDescendants()) do
+									if p:IsA("BasePart") then
+										p.CanCollide = false
+										p.AssemblyAngularVelocity = Vector3.zero
+										p.AssemblyLinearVelocity = Vector3.zero
+										p.CustomPhysicalProperties = PhysicalProperties.new(0,0,0)
+									end
+								end
+							end
+						end
+					end
+				end)
+	
+				flingNeutralizerCon = rs.Heartbeat:Connect(function()
+					if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character.PrimaryPart then
+						if game.Players.LocalPlayer.Character.PrimaryPart.AssemblyLinearVelocity.Magnitude > 250 or  game.Players.LocalPlayer.Character.PrimaryPart.AssemblyAngularVelocity.Magnitude > 250 then
+							fu.notification("You were flung. Neutralizing velocity!")
+							game.Players.LocalPlayer.Character.PrimaryPart.AssemblyLinearVelocity = Vector3.zero
+							game.Players.LocalPlayer.Character.PrimaryPart.AssemblyAngularVelocity = Vector3.zero
+							if antiFlingLastPos ~= Vector3.zero then
+								game.Players.LocalPlayer.Character.PrimaryPart.CFrame = CFrame.new(antiFlingLastPos)
+							end
+						else
+							antiFlingLastPos = game.Players.LocalPlayer.Character.PrimaryPart.Position
+						end
+					end
+				end)
+			else
+				flingDetectionCon:Disconnect()
+				flingNeutralizerCon:Disconnect()
+				detectedPlayers = {}
+				fu.notification("Anti-fling deactivated.")
+			end
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Miscellaneous"}
+	})
+	
+	-- taken (corporate term for skidded) from infyiff
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Anti AFK detection", function(Self)
+			local pl = game.Players.LocalPlayer
+			if getconnections then
+				for _, connection in pairs(getconnections(pl.Idled)) do
+					if connection["Disable"] then
+						connection["Disable"](connection)
+					elseif connection["Disconnect"] then
+						connection["Disconnect"](connection)
+					end
+				end
+			else
+				pl.Idled:Connect(function()
+					game:GetService("VirtualUser"):CaptureController()
+					game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+				end)
+			end
+			
+		end,}
+	})
+	
+	--table.insert(module, {
+	--	Type = "Dropdown",
+	--	Args = {"Player to fling", function()
+	--		local playersAsStrings = {"None"}
+	--		for _, p in ipairs(game.Players:GetPlayers()) do
+	--			table.insert(playersAsStrings, p.Name)
+	--		end
+	--		return playersAsStrings
+	--	end,
+	
+	--	function(Self, selected)
+	--		print(selected)
+	--	end,}
+	--})
+	
+	pcall(function()
+		if game:GetService("CoreGui"):FindFirstChild("DeltaIcon") then
+			table.insert(module, {
+				Type = "Toggle",
+				Args = {"Hide Delta Icon", function(Self, state)
+					game:GetService("CoreGui"):FindFirstChild("DeltaIcon").Enabled = state
+				end,}
+			})
+		end
+	end)
+	
+	
+	
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Hide H3XA_MM2", function(Self)
+			if uis.KeyboardEnabled then
+				ts:Create(script.Parent.Menu.UIScale, TweenInfo.new(0.6, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+					Scale = 0
+				}):Play()
+				hidden=true
+				fu.notification("Press CTRL+SHIFT+Y to bring back the menu.")
+			elseif uis.AccelerometerEnabled then
+				ts:Create(script.Parent.Menu.UIScale, TweenInfo.new(0.6, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+					Scale = 0
+				}):Play()
+				hidden=true
+				fu.notification("Shake your device to bring back the menu.")
+			else
+				fu.notification("Can't hide H3XA_MM2!") -- how else are you gonna open???
+			end
+		end,}
+	}
+	)
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"FPS Boost", function(Self)
+			fu.dialog("FPS boosting", "FPS boosting can have unpredictable effects. You may instead lag more using this!", {"FPS boost anyway", "Nevermind"})
+			local result = fu.waitfordialog()
+			fu.closedialog()
+			if result == "FPS boost anyway" then
+				local Terrain = workspace:FindFirstChildOfClass('Terrain')
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Terrain.WaterReflectance = 0
+				Terrain.WaterTransparency = 0
+				game.Lighting.GlobalShadows = false
+				game.Lighting.FogEnd = 9e9
+				pcall(function()
+					settings().Rendering.QualityLevel = 1
+				end)
+				for i,v in pairs(game:GetDescendants()) do
+					if v:IsA("Part") or v:IsA("UnionOperation") or v:IsA("MeshPart") or v:IsA("CornerWedgePart") or v:IsA("TrussPart") then
+						v.Material = "Plastic"
+						v.Reflectance = 0
+					elseif v:IsA("Decal") then
+						v.Transparency = 1
+					elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+						v.Lifetime = NumberRange.new(0)
+					elseif v:IsA("Explosion") then
+						v.BlastPressure = 1
+						v.BlastRadius = 1
+					end
+				end
+				for i,v in pairs(game.Lighting:GetDescendants()) do
+					if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") then
+						v.Enabled = false
+					end
+				end
+				workspace.DescendantAdded:Connect(function(child)
+					task.spawn(function()
+						if child:IsA('ForceField') then
+							rs.Heartbeat:Wait()
+							child:Destroy()
+						elseif child:IsA('Sparkles') then
+							rs.Heartbeat:Wait()
+							child:Destroy()
+						elseif child:IsA('Smoke') or child:IsA('Fire') then
+							rs.Heartbeat:Wait()
+							child:Destroy()
+						end
+					end)
+				end)
+			end
+		end,}
+	})
+	
+	local rsloopconnectionfling
+	local clip = true
+	local nocliploop
+	
+	
+	table.insert(module, {
+		Type = "ButtonGrid",
+		Args = {2, {
+			Noclip = function()
+				clip = false
+				nocliploop = rs.Stepped:Connect(function()
+					if clip == false and game.Players.LocalPlayer.Character ~= nil then
+						for _, child in pairs(game.Players.LocalPlayer.Character:GetDescendants()) do
+							if child:IsA("BasePart") and child.CanCollide == true then
+								child.CanCollide = false
+							end
+						end
+					end
+				end)
+			end,
+	
+			Reclip = function()
+				if clip then return end
+				clip = true
+				nocliploop:Disconnect()
+				fu.notification("Reclipping may need you to reset your character.")
+			end,
+		}}})
+	
+	
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Other"}
+	})
+	
+	--table.insert(module, {
+	--	Type = "Button",
+	--	Args = {"Lock/unlock a floating button", function()
+	--		fu.lockMode = true
+	--		fu.notification("Click/tap a floating button to lock/unlock...")
+	--	end,}
+	--})
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Get ping", function(Self)
+			fu.notification(game.Players.LocalPlayer:GetNetworkPing() * 1000)
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Open developer console (debugging)", function(Self)
+			game.StarterGui:SetCore("DevConsoleVisible", true)
+			--getgenv().H3XA_MM2.Open.UIStroke.Transparency = 0
+			--getgenv().H3XA_MM2.Open.TextTransparency = 0
+			--ts:Create(getgenv().H3XA_MM2.Open, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			--	Position = UDim2.fromScale(0.5, 0.903)
+			--}):Play()
+	
+			--ts:Create(getgenv().H3XA_MM2.Open.UIStroke, TweenInfo.new(1), {
+			--	Transparency = 1
+			--}):Play()
+			--ts:Create(getgenv().H3XA_MM2.Open, TweenInfo.new(1), {
+			--	TextTransparency = 1
+			--}):Play()
+		end}
+	}
+	)
+	
+	function themeSerialize(data)
+		local function s(v)
+			local t = typeof(v)
+			if t == "number" or t == "string" or t == "boolean" then
+				return v
+			elseif t == "Color3" then
+				return {__type="Color3", r=math.floor(v.R*255+0.5), g=math.floor(v.G*255+0.5), b=math.floor(v.B*255+0.5)}
+			elseif t == "EnumItem" then
+				return {__type="EnumItem", enumType=v.EnumType.Name, name=v.Name}
+			elseif t == "ColorSequence" then
+				local kp = {}
+				for _, k in ipairs(v.Keypoints) do
+					table.insert(kp, {t=k.Time, v={r=math.floor(k.Value.R*255+0.5), g=math.floor(k.Value.G*255+0.5), b=math.floor(k.Value.B*255+0.5)}})
+				end
+				return {__type="ColorSequence", keypoints=kp}
+			elseif t == "table" then
+				local out = {}
+				for k, val in pairs(v) do
+					if k ~= "font" then out[k] = s(val) end
+				end
+				return out
+			else
+				error("Unsupported type: " .. t)
+			end
+		end
+		return s(data)
+	end
+	
+	function themeDeserialize(data)
+		local function d(v)
+			if typeof(v) ~= "table" then return v end
+			if v.__type == "Color3" then
+				return Color3.fromRGB(v.r, v.g, v.b)
+			elseif v.__type == "EnumItem" then
+				local e = Enum[v.enumType] return e and e[v.name] or nil
+			elseif v.__type == "ColorSequence" then
+				local kps = {}
+				for _, k in ipairs(v.keypoints) do
+					table.insert(kps, ColorSequenceKeypoint.new(k.t, Color3.fromRGB(k.v.r, k.v.g, k.v.b)))
+				end
+				return ColorSequence.new(kps)
+			else
+				local out = {}
+				for k, val in pairs(v) do out[k] = d(val) end
+				return out
+			end
+		end
+		return d(data)
+	end
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Theme"}
+	})
+	
+	local function loadThemeFromSave(last)
+		if not last then task.wait(1) else task.wait(0.2) end
+		if H3XA_MM2PointSave:get("H3XA_MM2Global_themeCode") then
+			local themeObjectImport = themeDeserialize(https:JSONDecode(fu.from_base64(H3XA_MM2PointSave:get("H3XA_MM2Global_themeCode"))))
+			theme:setColorTable(themeObjectImport)
+			theme:init(getgenv().H3XA_MM2)
+	
+			fu.setTheme(themeObjectImport)
+	
+			fu.refreshlist()
+			fu.refresharea()
+			if not last then loadThemeFromSave(true) end -- im getting desperate
+		end
+	end
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {
+			"Theme code",
+			"Apply",
+			function(obj, value)
+				local themeObjectImport = themeDeserialize(https:JSONDecode(fu.from_base64(value)))
+				theme:setColorTable(themeObjectImport)
+				theme:init(getgenv().H3XA_MM2)
+				
+				fu.setTheme(themeObjectImport)
+				
+				fu.refreshlist()
+				fu.refresharea()
+				fu.notification("Successfully applied theme!")
+				
+				H3XA_MM2PointSave:set("H3XA_MM2Global_themeCode", value)
+			end
+		}
+	})
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Reload theme", function()
+			theme:init(getgenv().H3XA_MM2)
+	
+			fu.refreshlist()
+			fu.refresharea()
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Delete theme from save", function()
+			H3XA_MM2PointSave:remove("H3XA_MM2Global_themeCode")
+			
+			fu.notification("Theme will not be restored on the next executes.")
+		end,}
+	})
+	
+	task.spawn(loadThemeFromSave)
+	
+	
+	
+	--task.spawn(function()
+	--	local success, titles = pcall(function()
+	--	end)
+	
+	--	if not success then
+	--		titles = {}
+	--	end
+	
+	--	local function applyTag(player)
+	--		local data = titles[player.Name]
+	--		if data and player.Character then
+	--			local head = player.Character:FindFirstChild("Head")
+	--			if head then
+	--				espind:Remove(head)
+	--				espind:Add(head, {
+	--					ShowLabel = true,
+	--					LabelText = data.text,
+	--					AccentColor = Color3.fromHex(data.color),
+	--					LabelMaxDistance = 50,
+	--					LabelOffset = Vector3.new(0, 2, 0),
+	--					GroupName = "UserTags"
+	--				})
+	--			end
+	--		end
+	--	end
+	
+	--	local function onCharacterAdded(player)
+	--		player.CharacterAdded:Connect(function(character)
+	--			task.wait(1) -- small delay
+	--			applyTag(player)
+	--		end)
+	--	end
+	
+	--	for _, player in ipairs(Players:GetPlayers()) do
+	--		applyTag(player)
+	--		onCharacterAdded(player)
+	--	end
+	
+	--	Players.PlayerAdded:Connect(function(player)
+	--		onCharacterAdded(player)
+	--	end)
+	--end)
+	
+	--table.insert(module, {
+	--	Type = "Toggle",
+	--	Args = {"Hide H3XA_MM2+/Developer tags", function(_, state)
+	--		local group = espind:GetGroup("UserTags")
+	--		if group then
+	--			espind:ToggleGroup("UserTags", not state)
+	--		end
+	--	end
+	--	}
+	--})
+	
+	
+	--table.insert(module, {
+	--	Type = "Dropdown",
+	--	Args = {"debug option", {"yes", "no"}, function(Self, item)
+	--		print(item)
+	--	end,}
+	--})
+	
+	repeat task.wait() until getgenv().Modules
+	getgenv().Modules[1] = module
+end
+local function DSZIHQM_routine() -- Routine: StarterGui.H3XA_MM2.Init
+    local script = Instance.new("LocalScript")
+    script.Name = "Init"
+    script.Parent = Converted["_H3XA_MM2"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+
+	getgenv().Modules = {}
+	
+	local ts = game:GetService("TweenService")
+	
+	
+	getgenv().H3XA_MM2 = script.Parent
+	getgenv().ThemeManager = require(script.Parent.Theme)
+	local COREGUI = game:GetService("CoreGui")
+	function randomString()
+		local length = math.random(10,20)
+		local array = {}
+		for i = 1, length do
+			array[i] = string.char(math.random(32, 126))
+		end
+		return table.concat(array)
+	end
+	local s, e = pcall(function()
+		if get_hidden_gui or gethui then
+			local hiddenUI = get_hidden_gui or gethui
+			script.Parent.Name = randomString()
+			script.Parent.Parent = hiddenUI()
+			--print("[H3XA_MM2] - Using get_hidden_gui for anti-detection.")
+		elseif (not is_sirhurt_closure) and (syn and syn.protect_gui) then
+			script.Parent.Name = randomString()
+			syn.protect_gui(script.Parent)
+			script.Parent.Parent = COREGUI
+			--print("[H3XA_MM2] - Using syn.protect_gui for anti-detection.")
+		elseif COREGUI:FindFirstChild('RobloxGui') then
+			script.Parent.Parent = COREGUI.RobloxGui
+			--print("[H3XA_MM2] - Using RobloxGui for anti-detection.")
+		else
+			--warn("[H3XA_MM2] - Using CoreGui as anti-detection. This is the most basic coverage and can still be detected.")
+		end
+	end)
+	
+	--print("[H3XA_MM2] - H3XA_MM2 is now in " .. tostring(script.Parent:GetFullName()))
+	if not s then
+		--warn("[H3XA_MM2] - Attempts at anti-detection failed. Using CoreGui as anti-detection.")
+		warn(e)	
+	end
+	
+	--printidentity("[H3XA_MM2] - Your executor level (identity) is")
+	
+	local getExeName = identifyexecutor or getexecutorname or function() return "Unknown Executor" end
+	--print("[H3XA_MM2] - Your executor is " .. getExeName())
+	
+	script.Parent.SafeAreaCompatibility = Enum.SafeAreaCompatibility.None
+	script.Parent.ScreenInsets = Enum.ScreenInsets.None
+	script.Parent.ResetOnSpawn = false
+	
+	
+	-- Abrir siempre a tamaño normal (sin pop de escala que achica textos)
+	script.Parent.Menu.AnchorPoint = Vector2.new(0.5, 0.5)
+	script.Parent.Menu.Position = UDim2.fromScale(0.5, 0.5)
+	script.Parent.Menu.UIScale.Scale = 1
+	script.Parent.Menu.BackgroundTransparency = 0.32
+	
+	script.Parent.Dialog.Size = UDim2.fromOffset(0, 147)
+	script.Parent.Dialog.UIScale.Scale = 0
+	script.Parent.Dialog.Visible = true
+	
+	-- No splash
+	script.Parent.Menu.CanvasGroup.Visible = false
+	script.Parent.Menu.CanvasGroup.GroupTransparency = 1
+	
+	if not game:IsLoaded() then
+		game.Loaded:Wait()
+	end
+	
+	task.wait(0.15)
+	-- Wait until MM2 module is registered to avoid empty/flash state
+	local waited = 0
+	while (not getgenv().Modules or not getgenv().Modules[3]) and waited < 5 do
+		task.wait(0.1)
+		waited = waited + 0.1
+	end
+	require(script.Parent.FUNCTIONS).refreshlist()
+	
+	script.Parent.Menu.CanvasGroup.ImageLabel.Visible = true
+	script.Parent.Menu.CanvasGroup.Interactable = true
+	
+	script.Parent.Menu.CloseArea.AllowForSpring:Fire()
+	task.wait(0.45)
+	require(script.Parent.FUNCTIONS).loadFloatingButtons()
+end
+local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
+    local script = Instance.new("LocalScript")
+    script.Name = "Murder Mystery 2"
+    script.Parent = Converted["_H3XA_MM2"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local module = {}
+	module["gameId"] = 0 -- 66654135 -- Restrict module to a certain game ID only. 0 allows all games.
+	
+	local fu = require(getgenv().H3XA_MM2.FUNCTIONS)
+	local espindc = require(script.Parent.ESPIndicator)
+	
+	
+	
+	
+	
+	local espcontainer = espindc.new({ArrowEdgePadding = 50, ArrowShowDistanceText = false,})
+	
+	local playerESP = false
+	local sheriffAimbot = false
+	local coinAutoCollect = false
+	local autoShooting = false
+	local shootOffset = 2.8
+	local offsetToPingMult = 1
+	
+	local predictionAIEngine = false
+	local predictionOngoing = false
+	
+	local predictionCooldown = false
+	
+	
+	local gunDropESP
+	
+	local trapDetection = false
+	--local trapESP = Instance.new("Highlight")
+	--trapESP.Name = "TrapESP"
+	--trapESP.FillColor = Color3.fromRGB(255, 112, 10)
+	--trapESP.OutlineColor = Color3.fromRGB(255, 112, 10)
+	--trapESP.FillTransparency = 0.5
+	
+	
+	local autoGetDroppedGun = false
+	local simulateKnifeThrow = false
+	
+	local localplayer = game:GetService("Players").LocalPlayer
+	
+	local playerData = {}
+	
+	local phs = game:GetService("PathfindingService")
+	local ts = game:GetService("TweenService")
+	local rs = game:GetService("RunService")
+	
+	local claimedCoins = {}
+	
+	local function findMurderer()
+	
+	
+		-- Fallback
+		for _, i in ipairs(game.Players:GetPlayers()) do
+			if i.Backpack:FindFirstChild("Knife") then
+				return i
+			end
+		end
+	
+		for _, i in ipairs(game.Players:GetPlayers()) do
+			if not i.Character then continue end
+			if i.Character:FindFirstChild("Knife") then
+				return i
+			end
+		end
+	
+		if playerData then
+			for player, data in playerData do
+				if data.Role == "Murderer" then
+					if game.Players:FindFirstChild(player) then
+						return game.Players:FindFirstChild(player)
+					end
+				end
+			end
+		end
+		return nil
+	end
+	
+	local function findSheriff()
+	
+	
+		-- Fallback
+		for _, i in ipairs(game.Players:GetPlayers()) do
+			if i.Backpack:FindFirstChild("Gun") then
+				return i
+			end
+		end
+	
+		for _, i in ipairs(game.Players:GetPlayers()) do
+			if not i.Character then continue end
+			if i.Character:FindFirstChild("Gun") then
+				return i
+			end
+		end
+	
+	
+		if playerData then
+			for player, data in playerData do
+				if data.Role == "Sheriff" then
+					if game.Players:FindFirstChild(player) then
+						return game.Players:FindFirstChild(player)
+					end
+				end
+			end
+		end
+		return nil
+	end
+	
+	local function findSheriffThatsNotMe()
+	
+	
+		-- Fallback
+		for _, i in ipairs(game.Players:GetPlayers()) do
+			if i == localplayer then continue end
+			if i.Backpack:FindFirstChild("Gun") then
+				return i
+			end
+		end
+	
+		for _, i in ipairs(game.Players:GetPlayers()) do
+			if i == localplayer then continue end
+			if not i.Character then continue end
+			if i.Character:FindFirstChild("Gun") then
+				return i
+			end
+		end
+	
+	
+		if playerData then
+			for player, data in playerData do
+				if data.Role == "Sheriff" then
+					if game.Players:FindFirstChild(player) then
+						if game.Players:FindFirstChild(player) == localplayer then continue end
+						return game.Players:FindFirstChild(player)
+					end
+				end
+			end
+		end
+		return nil
+	end
+	
+	
+	
+	local hideMeEsp = false
+	function reloadESP()
+		if not playerESP then return end
+		espcontainer:RemoveGroup("players")
+		local listplayers = game.Players:GetChildren()
+		for _, player in ipairs(listplayers) do
+			if player == localplayer and hideMeEsp then continue end
+			if  player.Character ~= nil then
+				local character = player.Character
+				if true then
+	
+					task.spawn(function()
+						local head = character:FindFirstChild("Head")
+						local hrp = character:FindFirstChild("HumanoidRootPart")
+						local labelTarget = head or hrp or character
+						if player == findMurderer() then
+							espcontainer:Add(character, {
+								AccentColor    = Color3.new(1, 0, 0.0156863),
+								ArrowShow        = false,
+								LabelText         = "Murderer",
+								ShowLabel         = true,
+								LabelOffset       = Vector3.new(0, 1.25, 0),
+								GroupName         = "players"
+							})
+						elseif player == findSheriff() then
+							espcontainer:Add(character, {
+								AccentColor    = Color3.new(0, 0.6, 1),
+								ArrowShow        = false,
+								LabelText         = "Sheriff",
+								ShowLabel         = true,
+								LabelOffset       = Vector3.new(0, 1.25, 0),
+								GroupName         = "players"
+							})
+						else
+							espcontainer:Add(character, {
+								AccentColor    = Color3.new(0, 1, 0.0313725),
+								ArrowShow        = false,
+								ShowLabel         = false,
+								GroupName         = "players"
+							})
+						end
+						--if a then
+						--	if not player then return end
+						--	a.Adornee = player.Character or player.CharactedAdded:Wait()
+						--end
+					end)
+				end
+			end
+		end
+	end
+	
+	
+	
+	local remotesRoot = game.ReplicatedStorage:FindFirstChild("Remotes")
+	if remotesRoot then
+		local gameplay = remotesRoot:FindFirstChild("Gameplay")
+		if gameplay then
+			local pdc = gameplay:FindFirstChild("PlayerDataChanged")
+			if pdc then
+				pdc.OnClientEvent:Connect(function(data)
+					playerData = data
+					if playerESP then
+						reloadESP()
+					end
+				end)
+			end
+		end
+	end
+	-- Si no es MM2 pero el usuario eligió SÍ, el módulo/UI sigue cargando igual
+	
+	
+	local onTesting = game.GameId == 119460199
+	
+	--if game.ReplicatedStorage:WaitForChild("UpdatePlayerData", 1) then
+	--	local UpdatePlayerDataEvent = game.ReplicatedStorage:WaitForChild("UpdatePlayerData", 5)
+	--	if UpdatePlayerDataEvent then
+	--		UpdatePlayerDataEvent.OnClientEvent:Connect(function(data)
+	--			playerData = data
+	--		end)
+	--	end
+	--end
+	
+	local Players = game:GetService("Players")
+	local playerToExamineIsSpamJumping = false
+	
+	
+	
+	
+	local function findNearestPlayer()
+		local Players = game:GetService("Players")
+		local localPlayer = Players.LocalPlayer
+	
+		local nearestPlayer = nil
+		local shortestDistance = math.huge
+	
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= localPlayer and player.Character then 
+	
+				local localRootPart = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+				local otherRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+	
+				if localRootPart and otherRootPart then
+					local distance = (localRootPart.Position - otherRootPart.Position).Magnitude
+	
+					if distance < shortestDistance then
+						shortestDistance = distance
+						nearestPlayer = player
+					end
+				end
+			end
+		end
+	
+		return nearestPlayer
+	end
+	
+	function miniFling(playerToFling)
+		local a=game.Players.LocalPlayer;local b=a:GetMouse()local c={playerToFling}local d=game:GetService("Players")local e=d.LocalPlayer;local f=false;local g=function(h)local i=e.Character;local j=i and i:FindFirstChildOfClass("Humanoid")local k=j and j.RootPart;local l=h.Character;local m;local n;local o;local p;local q;if l:FindFirstChildOfClass("Humanoid")then m=l:FindFirstChildOfClass("Humanoid")end;if m and m.RootPart then n=m.RootPart end;if l:FindFirstChild("Head")then o=l.Head end;if l:FindFirstChildOfClass("Accessory")then p=l:FindFirstChildOfClass("Accessory")end;if p and p:FindFirstChild("Handle")then q=p.Handle end;if i and j and k then if k.Velocity.Magnitude<50 then getgenv().OldPos=k.CFrame end;if m and m.Sit and not f then end;if o then if o.Velocity.Magnitude>500 then fu.dialog("Player flung","Player is already flung. Fling again?",{"Fling again","No"})if fu.waitfordialog()=="No"then return fu.closedialog()end;fu.closedialog()end elseif not o and q then if q.Velocity.Magnitude>500 then fu.dialog("Player flung","Player is already flung. Fling again?",{"Fling again","No"})if fu.waitfordialog()=="No"then return fu.closedialog()end;fu.closedialog()end end;if o then workspace.CurrentCamera.CameraSubject=o elseif not o and q then workspace.CurrentCamera.CameraSubject=q elseif m and n then workspace.CurrentCamera.CameraSubject=m end;if not l:FindFirstChildWhichIsA("BasePart")then return end;local r=function(s,t,u)k.CFrame=CFrame.new(s.Position)*t*u;i:SetPrimaryPartCFrame(CFrame.new(s.Position)*t*u)k.Velocity=Vector3.new(9e7,9e7*10,9e7)k.RotVelocity=Vector3.new(9e8,9e8,9e8)end;local v=function(s)local w=2;local x=tick()local y=0;repeat if k and m then if s.Velocity.Magnitude<50 then y=y+100;r(s,CFrame.new(0,1.5,0)+m.MoveDirection*s.Velocity.Magnitude/1.25,CFrame.Angles(math.rad(y),0,0))task.wait()r(s,CFrame.new(0,-1.5,0)+m.MoveDirection*s.Velocity.Magnitude/1.25,CFrame.Angles(math.rad(y),0,0))task.wait()r(s,CFrame.new(2.25,1.5,-2.25)+m.MoveDirection*s.Velocity.Magnitude/1.25,CFrame.Angles(math.rad(y),0,0))task.wait()r(s,CFrame.new(-2.25,-1.5,2.25)+m.MoveDirection*s.Velocity.Magnitude/1.25,CFrame.Angles(math.rad(y),0,0))task.wait()r(s,CFrame.new(0,1.5,0)+m.MoveDirection,CFrame.Angles(math.rad(y),0,0))task.wait()r(s,CFrame.new(0,-1.5,0)+m.MoveDirection,CFrame.Angles(math.rad(y),0,0))task.wait()else r(s,CFrame.new(0,1.5,m.WalkSpeed),CFrame.Angles(math.rad(90),0,0))task.wait()r(s,CFrame.new(0,-1.5,-m.WalkSpeed),CFrame.Angles(0,0,0))task.wait()r(s,CFrame.new(0,1.5,m.WalkSpeed),CFrame.Angles(math.rad(90),0,0))task.wait()r(s,CFrame.new(0,1.5,n.Velocity.Magnitude/1.25),CFrame.Angles(math.rad(90),0,0))task.wait()r(s,CFrame.new(0,-1.5,-n.Velocity.Magnitude/1.25),CFrame.Angles(0,0,0))task.wait()r(s,CFrame.new(0,1.5,n.Velocity.Magnitude/1.25),CFrame.Angles(math.rad(90),0,0))task.wait()r(s,CFrame.new(0,-1.5,0),CFrame.Angles(math.rad(90),0,0))task.wait()r(s,CFrame.new(0,-1.5,0),CFrame.Angles(0,0,0))task.wait()r(s,CFrame.new(0,-1.5,0),CFrame.Angles(math.rad(-90),0,0))task.wait()r(s,CFrame.new(0,-1.5,0),CFrame.Angles(0,0,0))task.wait()end else break end until s.Velocity.Magnitude>500 or s.Parent~=h.Character or h.Parent~=d or h.Character~=l or m.Sit or j.Health<=0 or tick()>x+w end;workspace.FallenPartsDestroyHeight=0/0;local z=Instance.new("BodyVelocity")z.Name="EpixVel"z.Parent=k;z.Velocity=Vector3.new(9e8,9e8,9e8)z.MaxForce=Vector3.new(1/0,1/0,1/0)j:SetStateEnabled(Enum.HumanoidStateType.Seated,false)if n and o then if(n.CFrame.p-o.CFrame.p).Magnitude>5 then v(o)else v(n)end elseif n and not o then v(n)elseif not n and o then v(o)elseif not n and not o and p and q then v(q)else fu.notification("Can't find a proper part of target player to fling.")end;z:Destroy()j:SetStateEnabled(Enum.HumanoidStateType.Seated,true)workspace.CurrentCamera.CameraSubject=j;repeat k.CFrame=getgenv().OldPos*CFrame.new(0,.5,0)i:SetPrimaryPartCFrame(getgenv().OldPos*CFrame.new(0,.5,0))j:ChangeState("GettingUp")table.foreach(i:GetChildren(),function(A,B)if B:IsA("BasePart")then B.Velocity,B.RotVelocity=Vector3.new(),Vector3.new()end end)task.wait()until(k.Position-getgenv().OldPos.p).Magnitude<25;workspace.FallenPartsDestroyHeight=getgenv().FPDH else fu.notification("No valid character of said target player. May have died.")end end;g(c[1])
+	end
+	
+	function getMap()
+		for _, o in ipairs(workspace:GetChildren()) do
+			if o:FindFirstChild("CoinContainer") and o:FindFirstChild("Spawns") then
+				return o
+			end
+		end
+		return nil
+	end
+	
+	
+	
+	--task.spawn(function() 
+	--	if game:GetService("RunService"):IsStudio() then return end -- :)
+	
+	--local OldNameCall = nil
+	
+	--OldNameCall = hookmetamethod(game, "__namecall", function(Self, ...)
+	--	local Args = {...}
+	--	local NamecallMethod = getnamecallmethod()
+	
+	--	if NamecallMethod == "InvokeServer" and Args[1] == 1 and sheriffAimbot then
+	--		if not findMurderer() then
+	--			print("No murderer to be shot!")
+	--		else
+	--			print("Shot - Intercepting shot to murderer")
+	--			Args[2] = findMurderer().Character:FindFirstChild("HumanoidRootPart").Position
+	--		end
+	--	end
+	
+	--	return OldNameCall(Self, unpack(Args))
+	--end)
+	
+	--end)
+	
+	-- I honestly don't know what went wrong so if any of you experts know why this stuff aint working make a pull request :praying_hands_emoji:
+	
+	
+	module["Name"] = "Murder Mystery 2"
+
+	-- Shared feature state (used by VISUALS toggles and later systems)
+	RE = {
+		Hitbox = false, HitboxSize = 5,
+		Arrow = false, ProxAlert = false, Radar = false, CoinESP = false,
+		DistanceESP = false, Tracers = false, SkeletonESP = false,
+		WalkSpeed = false, WSVal = 16, JumpPower = false, JPVal = 50,
+		InfJump = false, Noclip = false, AntiAFK = false, Waypoint = nil,
+		Invisibility = false,
+		SilentAim = false, Aimbot = false, FOVRadius = 100,
+		AutoGrabGun = false, AutoWin = false,
+	}
+	
+	-- Player ESP
+	workspace.ChildAdded:Connect(function(ch)
+		if ch == getMap() and playerESP then
+			fu.notification("Map has loaded, waiting for roles...")
+			repeat
+				task.wait(1)
+			until findMurderer()
+	
+			fu.notification("Player ESP reloaded.")
+		end
+	end)
+	
+	workspace.ChildRemoved:Connect(function(ch)
+		if ch == getMap() and playerESP then
+			fu.notification("Game ended, removing Player ESPs.")
+			playerData = {}
+			espcontainer:ClearAllGroups()
+		end
+	end)
+	
+	-- Dropped Gun ESP
+	workspace.DescendantAdded:Connect(function(ch)
+		if trapDetection and ch.Name == "Trap" and (ch.Parent:IsA("Folder") or ch.Parent:IsA("Model")) then
+			ch.Transparency = 0
+			espcontainer:Add(ch, {
+				AccentColor    =  Color3.new(1, 0, 0.0156863),
+				ArrowShow        = false,
+				ShowLabel         = true,
+				LabelText         = H3XA_MM2_T("Traps"),
+				GroupName         = "trap"
+			})
+	
+			fu.notification("Murderer has placed a trap!")
+		end
+	
+		if gunDropESP and ch.Name == "GunDrop" then
+			espcontainer:Add(ch, {
+				AccentColor    =  Color3.new(0.952941, 1, 0.0745098),
+				ArrowShow        = true,
+				ArrowMinDistance       = 999999,      
+				ArrowSize         = UDim2.new(0,40,0,40),
+				LabelText         = H3XA_MM2_T("Dropped Gun"),
+				ShowLabel         = true,
+				GroupName         = "gun"
+			})
+			--if not script.Parent:FindFirstChild("GunESP") then
+			--	local gunesp = Instance.new("Highlight", script.Parent)
+			--	gunesp.OutlineTransparency = 1
+			--	gunesp.FillColor = Color3.fromRGB(255, 255, 0)
+			--	gunesp.Name = "GunESP"
+			--	gunesp.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			--	gunesp.Adornee = ch
+			--	gunesp.Enabled = true
+			--end
+			--script.Parent:FindFirstChild("GunESP").Adornee = ch
+			--script.Parent:FindFirstChild("GunESP").Enabled = true
+			--local bguiclone = script.Parent.DroppedGunBGUI:Clone()
+			--bguiclone.Parent = script.Parent
+			--bguiclone.Adornee = ch
+			--bguiclone.Enabled = true
+			--bguiclone.Name = "DGBGUIClone"
+			fu.notification("Gun has been dropped! Find a yellow highlight.")
+			if autoGetDroppedGun then
+				fu.notification("Auto get dropped gun - Cooling down...")
+				task.wait(1)
+				if not getMap():FindFirstChild("GunDrop") then fu.notification("No dropped gun to be teleported to.") return end
+				local previousPosition = localplayer.Character:GetPivot()
+				localplayer.Character:MoveTo(getMap():FindFirstChild("GunDrop").Position)
+				localplayer.Backpack.ChildAdded:Wait()
+				localplayer.Character:PivotTo(previousPosition)
+			end
+		end
+	end)
+	
+	workspace.DescendantRemoving:Connect(function(ch)
+		if gunDropESP and ch.Name == "GunDrop" then
+			espcontainer:RemoveGroup("gun")
+			fu.notification("Someone has took the dropped gun.")
+			task.wait(1)
+			fu.notification("The hero is " .. findSheriff().DisplayName .. ".")
+			reloadESP()
+			--if playerESP then
+			--	for _, v in ipairs(script.Parent:GetChildren()) do
+			--		if v:IsA("Highlight") then
+			--			v:Destroy()
+			--		end
+			--	end
+			--end
+	
+			--local listplayers = game.Players:GetChildren()
+			--for _, player in ipairs(listplayers) do
+			--	if  player.Character ~= nil then
+			--		local character = player.Character
+			--		if not character:FindFirstChild("PlayerESP") then
+			--			local a = Instance.new("Highlight", script.Parent)
+			--			a.Name = "PlayerESP"
+			--			a.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			--			a.Adornee = character
+			--			a.FillColor = Color3.fromRGB(255, 255, 255)
+			--			a.FillTransparency = 0.5
+			--			task.spawn(function()
+			--				if player == findMurderer() then
+			--					local mbgui = script.Parent.MurdererBGUI:Clone()
+			--					mbgui.Enabled = true
+			--					mbgui.Name = "AppliedMurdererBGUI"
+			--					mbgui.Parent = getgenv().H3XA_MM2
+			--					mbgui.Adornee = character
+			--					a.FillColor = Color3.fromRGB(255,0,0)
+			--					a.OutlineColor = Color3.fromRGB(255,0,0)
+			--				elseif player == findSheriff() then
+			--					a.FillColor = Color3.fromRGB(255, 255,0)
+			--					a.OutlineColor = Color3.fromRGB(255, 255,0)
+			--				else
+			--					a.FillColor = Color3.fromRGB(0,255,0)
+			--					a.OutlineColor = Color3.fromRGB(0, 255, 0)
+			--				end
+			--				if a then
+			--					if not player then return end
+			--					a.Adornee = player.Character or player.CharactedAdded:Wait()
+			--				end
+			--			end)
+			--		end
+			--	end
+			--end
+		end
+	end)
+	
+	function getClosestModelToPlayer(player, models)
+		local closestModel = nil
+		local closestDistance = math.huge 
+	
+		local playerPosition = player.Character.HumanoidRootPart.Position
+	
+		for _, model in ipairs(models) do
+			local modelPosition = model:GetPivot().Position
+			local distance = (modelPosition - playerPosition).Magnitude
+			if distance < closestDistance then
+				closestDistance = distance
+				closestModel = model
+			end
+		end
+	
+		local returningResult = {closestModel, closestDistance}
+		setmetatable(returningResult, {
+			__tostring = function(t)
+				return closestModel
+			end,
+		})
+	
+		return returningResult
+	end
+	
+	-- Coin autocollect
+	task.spawn(
+		function()
+			while task.wait(0.1) do
+				if not coinAutoCollect then continue end
+	
+				if getMap() then
+					if getMap():FindFirstChild("CoinContainer") and #getMap():FindFirstChild("CoinContainer"):GetChildren() > 1 then
+						local closestCoin = getClosestModelToPlayer(localplayer, getMap():FindFirstChild("CoinContainer"):GetChildren())
+						if closestCoin then
+							if not localplayer.Character:FindFirstChild("HumanoidRootPart") then continue end
+							local distance = (localplayer.Character:FindFirstChild("HumanoidRootPart").Position - closestCoin:GetPivot().Position).Magnitude
+							local toclosestcoin = ts:Create(localplayer.Character:FindFirstChild("HumanoidRootPart"), TweenInfo.new(distance*0.05, Enum.EasingStyle.Linear), {
+								CFrame = closestCoin:GetPivot()
+							})
+							toclosestcoin:Play()
+							toclosestcoin.Completed:Wait()
+							task.wait(0.1)
+							closestCoin:Destroy() -- so we wont try to get it anymore
+							--localplayer.Character:MoveTo(Vector3.new(closestCoin:GetPivot().X, closestCoin:GetPivot().Y, closestCoin:GetPivot().Z))
+							claimedCoins[closestCoin] = true
+						end
+					end
+				end
+			end
+		end
+	)
+	
+	
+	
+	local function getPredictedPosition(player, shootOffset)
+		local usingBasicPred = not predictionAIEngine
+		if predictionOngoing then
+			fu.notification("Cancelling AI prediction, using basic prediction.")
+			usingBasicPred = true
+		end
+		local ogplayer = player
+		pcall(function()
+			player = player.Character
+			if not player.Character then fu.notification("No murderer to predict position.") return end
+		end)
+		local playerHRP = player:FindFirstChild("UpperTorso")
+		local playerHum = player:FindFirstChild("Humanoid")
+		if not playerHRP or not playerHum then
+			return Vector3.new(0,0,0), "Could not find the player's HumanoidRootPart."
+		end
+	
+		local playerPosition = playerHRP.Position
+	
+	
+		if predictionAIEngine and not usingBasicPred and not predictionCooldown and getgenv().H3XA_MM2Network_predictPos then
+			if (playerPosition - localplayer.Character:FindFirstChild("UpperTorso").Position).Magnitude > 20 then
+				fu.notification("Calculating trajectory...")
+				predictionCooldown = true
+				predictionOngoing = true
+				local predictedPosition = getgenv().H3XA_MM2Network_predictPos(ogplayer)
+				predictionOngoing = false
+				task.spawn(function()
+					task.wait(5)
+					predictionCooldown = false
+				end)
+				return predictedPosition
+			else
+				fu.notification("Murderer is too close for trajectory prediction. Reverting to basic prediction.")
+			end
+		elseif predictionAIEngine and not getgenv().H3XA_MM2Network.predictPos then
+			fu.notification("Prediction engine is not available. Reverting to basic prediction.")	
+		end
+	
+	
+		local velocity = Vector3.new()
+		velocity = playerHRP.AssemblyLinearVelocity
+		local playerMoveDirection = playerHum.MoveDirection
+		local playerLookVec = playerHRP.CFrame.LookVector
+		local yVelFactor = velocity.Y > 0 and -1 or 0.5
+		local predictedPosition
+		predictedPosition = playerHRP.Position + ((velocity * Vector3.new(0.75, 0.5, 0.75))) * (shootOffset / 15) +playerMoveDirection * shootOffset
+		predictedPosition = predictedPosition * (((localplayer:GetNetworkPing() * 1000) * ((offsetToPingMult - 1) * 0.01)) + 1)
+		-- failed so hard i had to revert back to v1.11 :sob:
+	
+		--predictedPosition = Vector3.new(predictedPositiomurdererHRP.Position + ((murdererVelocity * Vector3.new(0, 0.5, 0))) * (shootOffset / 15) + murderer.Character.Humanoid.MoveDirection * shootOffsetn.X, math.clamp(predictedPosition.Y, playerPosition.Y - 2, playerPosition.Y + 2), predictedPosition.Z)
+	
+	
+		return predictedPosition
+	end
+	
+	
+	
+	
+	task.spawn(function()
+		while task.wait(1) do
+			if findSheriff() == localplayer and autoShooting then
+				fu.notification("Auto-shooting started.")
+				repeat
+					task.wait(0.1)
+					local murderer = findMurderer()
+					if not murderer then fu.notification("No murderer.") continue end
+					local murdererPosition = murderer.Character.HumanoidRootPart.Position
+					local characterRootPart = localplayer.Character.HumanoidRootPart
+					local rayDirection = murdererPosition - characterRootPart.Position
+	
+					local raycastParams = RaycastParams.new()
+					raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+					raycastParams.FilterDescendantsInstances = {localplayer.Character}
+	
+					local hit = workspace:Raycast(characterRootPart.Position, rayDirection, raycastParams)
+					if not hit or hit.Instance.Parent == murderer.Character then -- Check if nothing collides or if it collides with the murderer
+						fu.notification("Auto-shooting!")
+						if not localplayer.Character:FindFirstChild("Gun") then
+							local hum = localplayer.Character:FindFirstChild("Humanoid")
+							if localplayer.Backpack:FindFirstChild("Gun") then
+								localplayer.Character:FindFirstChild("Humanoid"):EquipTool(localplayer.Backpack:FindFirstChild("Gun"))
+							else
+								fu.notification("You don't have the gun..?")
+								return
+							end
+						end
+						local murdererHRP = murderer.Character:FindFirstChild("HumanoidRootPart")
+						if not murdererHRP then
+							fu.notification("Could not find the murderer's HumanoidRootPart.")
+							return
+						end
+	
+						local predictedPosition = getPredictedPosition(murderer, shootOffset)
+	
+						local args = {
+							[1] = 1,
+							[2] = predictedPosition,
+							[3] = "AH2"
+						}
+	
+	
+						localplayer.Character.Gun.KnifeLocal.CreateBeam.RemoteFunction:InvokeServer(unpack(args))
+	
+	
+	
+					end
+				until findSheriff() ~= localplayer or not autoShooting
+			end
+		end
+	end)
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"ESPs"}
+	})
+	
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Role ESP", function(Self, state)
+			playerESP = state and true or false
+			if not playerESP then
+				espcontainer:RemoveGroup("players")
+			else
+				if not findMurderer() or not findSheriff() then
+					fu.notification("No roles yet. Waiting for roles...")
+					repeat
+						task.wait(1)
+					until findSheriff() or findMurderer()
+				end
+				reloadESP()
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Dropped Gun", function(Self, state)
+			gunDropESP = state and true or false
+			if not gunDropESP then
+				espcontainer:RemoveGroup("gun")
+			else
+				if not getMap() then return end
+				if getMap():FindFirstChild("GunDrop") then
+					espcontainer:Add(getMap():FindFirstChild("GunDrop"), {
+						AccentColor    = Color3.new(0.952941, 1, 0.0745098),
+						ArrowShow        = true,
+						ArrowMinDistance = 999999,
+						ArrowSize         = UDim2.new(0,40,0,40),
+						LabelText         = H3XA_MM2_T("Dropped Gun"),
+						ShowLabel         = true,
+						GroupName         = "gun"
+					})
+					fu.notification("Gun has been dropped! Find a yellow highlight.")
+				end
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Traps", function(Self, state)
+			trapDetection = state and true or false
+			if not trapDetection then
+				espcontainer:RemoveGroup("trap")
+			else
+				for _, v in ipairs(workspace:GetDescendants()) do
+					if v.Name == "Trap" and (v.Parent:IsA("Folder") or v.Parent:IsA("Model")) then
+						v.Transparency = 0
+						espcontainer:Add(v, {
+							AccentColor    = Color3.new(1, 0, 0),
+							ArrowShow        = false,
+							ShowLabel         = true,
+							LabelText         = H3XA_MM2_T("Traps"),
+							GroupName         = "trap"
+						})
+					end
+				end
+			end
+		end}
+	})
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Hide my own ESP", function(Self, state)
+			hideMeEsp = state
+			reloadESP()
+		end,}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Distance ESP", function(Self, state)
+			if RE then RE.DistanceESP = state end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Tracers", function(Self, state)
+			if RE then RE.Tracers = state end
+		end}
+	})
+
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Sheriff"}
+	})
+	
+	local instakillshoot = false
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Shoot murderer", function(Self)
+			if findSheriff() ~= localplayer then 
+				fu.notification("You're not sheriff/hero.") 
+				return 
+			end
+	
+			local murderer = findMurderer() or findSheriffThatsNotMe()
+			if not murderer then
+				fu.notification("No murderer (or sheriff) to shoot.")
+				return
+			end
+	
+			if not localplayer.Character:FindFirstChild("Gun") then
+				local hum = localplayer.Character:FindFirstChild("Humanoid")
+				if localplayer.Backpack:FindFirstChild("Gun") then
+					hum:EquipTool(localplayer.Backpack:FindFirstChild("Gun"))
+				else
+					fu.notification("You don't have the gun..?")
+					return
+				end
+			end
+	
+			local murdererHRP = murderer.Character:FindFirstChild("HumanoidRootPart")
+			if not murdererHRP then
+				fu.notification("Could not find the murderer's HumanoidRootPart.")
+				return
+			end
+	
+			local predictedPosition = getPredictedPosition(murderer, shootOffset)
+		
+			local args
+			if instakillshoot then
+				args = {
+					CFrame.new(murdererHRP.Position + Vector3.new(0,1,0)), --laziest "anticheat" ive ever seen
+					CFrame.new(murdererHRP.Position)
+				}
+			else
+				args = {
+					CFrame.new(localplayer.Character.RightHand.Position),
+					CFrame.new(predictedPosition)
+				}
+			end
+			localplayer.Character:WaitForChild("Gun"):WaitForChild("Shoot"):FireServer(unpack(args))
+	
+			--local args = {
+			--	[1] = 1,
+			--	[2] = predictedPosition,
+			--	[3] = "AH2"
+			--}
+	
+	
+			--localplayer.Character.Gun.KnifeLocal.CreateBeam.RemoteFunction:InvokeServer(unpack(args))
+		end,}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Delayed shoot murderer", function(Self)
+			if findSheriff() ~= localplayer then 
+				fu.notification("You're not sheriff/hero.") 
+				return 
+			end
+	
+			local murderer = findMurderer() or findSheriffThatsNotMe()
+			if not murderer then
+				fu.notification("No murderer (or sheriff) to shoot.")
+				return
+			end
+	
+			if not localplayer.Character:FindFirstChild("Gun") then
+				local hum = localplayer.Character:FindFirstChild("Humanoid")
+				if localplayer.Backpack:FindFirstChild("Gun") then
+					hum:EquipTool(localplayer.Backpack:FindFirstChild("Gun"))
+				else
+					fu.notification("You don't have the gun..?")
+					return
+				end
+			end
+	
+			local murdererHRP = murderer.Character:FindFirstChild("HumanoidRootPart")
+			if not murdererHRP then
+				fu.notification("Could not find the murderer's HumanoidRootPart.")
+				return
+			end
+	
+			fu.notification("Waiting for murderer to be in view...")
+			rs.Stepped:Connect(function()
+				-- shoot a ray from player to murderer
+				local origin = localplayer.Character.HumanoidRootPart.Position
+				local direction = (Vector3.new(murdererHRP.Position.X, origin.Y, murdererHRP.Position.Z) - origin).unit * 1000
+				local params = RaycastParams.new()
+	
+				local raycastResult = workspace:Raycast(origin, direction, params)
+				if raycastResult then
+					if raycastResult.Instance == murdererHRP then
+						local predictedPosition = getPredictedPosition(murderer, shootOffset)
+	
+						local args = {
+							[1] = 1,
+							[2] = predictedPosition,
+							[3] = "AH2"
+						}
+	
+	
+						localplayer.Character.Gun.KnifeLocal.CreateBeam.RemoteFunction:InvokeServer(unpack(args))
+					end
+				end
+			end)
+	
+	
+		end,}
+	})
+	
+	-- table.insert(module, {
+	-- 	Type = "Toggle",
+	-- 	Args = {"Use AI Prediction Engine", function(Self, state)
+	-- 		predictionAIEngine = state
+	-- 	end,}
+	-- })
+	
+	
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Shoot position offset", "Set", function(Self, text)
+			if not tonumber(text) then fu.notification("Not a valid number.") return end
+	
+			if tonumber(text) > 5 then
+				fu.notification("An offset with a multiplier of 5 might not at all shoot the murderer!")
+			end
+			if tonumber(text) < 0 then
+				fu.notification("An offset with a negative multiplier will make a shot BEHIND the murderer's walk direction.")
+			end
+			shootOffset = tonumber(text)
+			fu.notification("Offset has been set.")
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Input",
+		Args = {"Offset-to-ping multiplier", "Set", function(Self, text)
+			if not tonumber(text) then fu.notification("Not a valid number.") return end
+	
+			if tonumber(text) > 5 then
+				fu.notification("An offset with a multiplier of 5 might not at all shoot the murderer!")
+			end
+			if tonumber(text) < 0 then
+				fu.notification("An offset with a negative multiplier will make a shot BEHIND the murderer's walk direction.")
+			end
+			offsetToPingMult = tonumber(text)
+			fu.notification("Offset has been set.")
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Shoot offset re-aims the gun/knife shoot/throw to the character's predicted position. Recommended is 2.8"}
+	})
+	
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Offset-to-ping multiplier allows the offset to change dynamically with latency/ping. The default is 1 (aka no adjustment)"}
+	})
+
+	
+	local spawnAtPlayer = false
+	local loopThrow = false
+	local function knifeThrow(silent)
+		if findMurderer() ~= localplayer then 
+			if silent then return end
+	
+			fu.notification("You're not murderer.") 
+			return 
+		end
+	
+		if not localplayer.Character:FindFirstChild("Knife") then
+			local hum = localplayer.Character:FindFirstChild("Humanoid")
+			if localplayer.Backpack:FindFirstChild("Knife") then
+				hum:EquipTool(localplayer.Backpack:FindFirstChild("Knife"))
+			else
+				if silent then return end
+	
+				fu.notification("You don't have the knife..?")
+				return
+			end
+		end
+	
+		local NearestPlayer = findNearestPlayer()
+	
+		if not NearestPlayer or not NearestPlayer.Character then
+			if silent then return end
+	
+			fu.notification("Can't find a player!?")
+			return
+		end
+		local nearestHRP = NearestPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if not nearestHRP then
+			if silent then return end
+	
+			fu.notification("Can't find the player's pivot.")
+		end
+	
+		-- nearestHRP.Anchored = true
+		local argsThrowRemote = {
+			CFrame.new(localplayer.Character.RightHand.Position),
+			CFrame.new(getPredictedPosition(NearestPlayer, shootOffset + 1)),
+		}
+	
+		if spawnAtPlayer then
+			argsThrowRemote[1] = CFrame.new(nearestHRP.Position + (nearestHRP.CFrame.LookVector * 5))
+		end
+		-- task.spawn(function()
+		--     task.wait(2)
+		--     -- nearestHRP.Anchored = false
+		-- end)
+		localplayer.Character:WaitForChild("Knife"):WaitForChild("Events"):WaitForChild("KnifeThrown"):FireServer(unpack(argsThrowRemote))
+	
+		--localplayer.Character:WaitForChild("Knife"):WaitForChild("Throw"):FireServer(unpack(argsThrowRemote))
+	end
+	
+	
+	
+	
+	task.spawn(function()
+		while task.wait(1.5) do
+			if loopThrow then
+				knifeThrow(true)
+			end
+		end
+	end)
+table.insert(module, {
+		Type = "Toggle",
+		Args = {"Instakill murderer as sheriff", function(Self, tog)
+			instakillshoot = tog
+		end}
+	})
+
+table.insert(module, {
+		Type = "Button",
+		Args = {"Teleport to dropped gun", function(Self)
+			if not getMap():FindFirstChild("GunDrop") then fu.notification("No dropped gun to be teleported to.") return end
+			local previousPosition = localplayer.Character:GetPivot()
+			localplayer.Character:PivotTo(getMap():FindFirstChild("GunDrop"):GetPivot())
+			localplayer.Backpack.ChildAdded:Wait()
+			localplayer.Character:PivotTo(previousPosition)
+		end,}
+	})
+
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Fling Murderer", function()
+			if not findMurderer() then
+				fu.notification("No murderer to fling.")
+				return
+			end
+			miniFling(findMurderer())
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Copy murderer username", function()
+			if not findMurderer() then
+				fu.notification("No murderer to copy.")
+				return
+			end
+			if setclipboard then setclipboard(findMurderer().Name) end
+			fu.notification("Copied to clipboard.")
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Murderer"}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Knife throw to closest", function()
+			knifeThrow()
+		end}
+	})
+	
+	
+	
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Auto knife throw", function(Self, tog)
+			loopThrow = tog
+		end}
+	})
+	
+	
+	
+	
+	
+	--table.insert(module, {
+	--	Type = "ButtonGrid",
+	--	Toggleable = true,
+	--	Args = {1, {
+	--		--Coins_Magnet = function()
+	--		--	coinAutoCollect = not coinAutoCollect
+	--		--	if coinAutoCollect then
+	--		--		fu.notification("Coins magnet is currently buggy right now. Use at your own risk.")
+	--		--	end
+	--		--end,
+	--		Auto_Shoot_murderer = function()
+	--			autoShooting = not autoShooting
+	--			if findSheriff() == localplayer and autoShooting then
+	--				fu.notification("Auto-shooting started.")
+	--				repeat
+	--					task.wait(0.1)
+	--					local murderer = findMurderer() or findSheriffThatsNotMe()
+	--					if not murderer then warn("[H3XA_MM2] > MM2 Autoshoot - No murderer.") continue end
+	--					local murdererPosition = murderer.Character.HumanoidRootPart.Position
+	--					local characterRootPart = localplayer.Character.HumanoidRootPart
+	--					local rayDirection = (murdererPosition - characterRootPart.Position).Unit * 50
+	
+	--					local raycastParams = RaycastParams.new()
+	--					raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	--					raycastParams.FilterDescendantsInstances = {localplayer.Character}
+	
+	--					local hit = workspace:Raycast(characterRootPart.Position, rayDirection, raycastParams)
+	--					if not hit or hit.Instance.Parent == murderer.Character then -- Check if nothing collides or if it collides with the murderer
+	--						fu.notification("Auto-shooting!")
+	--						if not localplayer.Character:FindFirstChild("Gun") then
+	--							local hum = localplayer.Character:FindFirstChild("Humanoid")
+	--							if localplayer.Backpack:FindFirstChild("Gun") then
+	--								localplayer.Character:FindFirstChild("Humanoid"):EquipTool(localplayer.Backpack:FindFirstChild("Gun"))
+	--							else
+	--								fu.notification("You don't have the gun..?")
+	--								return
+	--							end
+	--						end
+	--						local murdererHRP = murderer.Character:FindFirstChild("HumanoidRootPart")
+	--						if not murdererHRP then
+	--							fu.notification("Could not find the murderer's HumanoidRootPart.")
+	--							return
+	--						end
+	--						local murdererVelocity = murdererHRP.AssemblyLinearVelocity
+	--						local predictedPosition = murdererHRP.Position + (murdererVelocity * Vector3.new(1, 0.5, 1)) * (shootOffset / 15)
+	
+	--						local args = {
+	--							[1] = 1,
+	--							[2] = predictedPosition,
+	--							[3] = "AH2"
+	--						}
+	
+	
+	--						localplayer.Character.Gun.KnifeLocal.CreateBeam.RemoteFunction:InvokeServer(unpack(args))
+	--					end
+	--				until not autoShooting
+	--			end
+	--		end,
+	--	}}
+	--})
+	
+table.insert(module, {
+		Type = "Toggle",
+		Args = {"Spawn knife throw near player", function(Self, tog)
+			spawnAtPlayer = tog
+		end}
+	})
+
+table.insert(module, {
+		Type = "Button",
+		Args = {"Kill closest player as murderer", function()
+			if findMurderer() ~= localplayer then fu.notification("You're not murderer.") return end
+	
+			if not localplayer.Character:FindFirstChild("Knife") then
+				local hum = localplayer.Character:FindFirstChild("Humanoid")
+				if localplayer.Backpack:FindFirstChild("Knife") then
+					localplayer.Character:FindFirstChild("Humanoid"):EquipTool(localplayer.Backpack:FindFirstChild("Knife"))
+				else
+					fu.notification("You don't have the knife..?")
+					return
+				end
+			end
+	
+			local NearestPlayer = findNearestPlayer()
+	
+			if not NearestPlayer or not NearestPlayer.Character then
+				fu.notification("Can't find a player!?")
+				return
+			end
+			local nearestHRP = NearestPlayer.Character:FindFirstChild("HumanoidRootPart")
+			if not nearestHRP then
+				fu.notification("Can't find the player's pivot.")
+			end
+	
+			if not localplayer.Character:FindFirstChild("HumanoidRootPart") then fu.notification("You're not a valid character.") return end
+			if not simulateKnifeThrow then
+				nearestHRP.Anchored = true
+				nearestHRP.CFrame = localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame + localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * 2
+				task.wait(0.1)
+				local args = {
+					[1] = "Slash"
+				}
+	
+				localplayer.Character.Knife.Stab:FireServer(unpack(args))
+				return
+			else
+				local lpknife = localplayer.Character:FindFirstChild("Knife")
+				if not lpknife then return end
+	
+				local raycastParams = RaycastParams.new()
+				raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+				raycastParams.FilterDescendantsInstances = {localplayer.Character}
+				local rayResult = workspace:Raycast(lpknife:GetPivot().Position, (nearestHRP.Position - localplayer.Character:FindFirstChild("HumanoidRootPart").Position).Unit * 350, raycastParams)
+				local toThrow = nearestHRP.Position
+				--if rayResult then
+				--	toThrow = rayResult.Position
+				--end
+				--if math.random(0, 10) == 5 then -- idk what the fuk im doing
+				--	toThrow = nearestHRP.Position
+				--end
+				local args = {
+					[1] = lpknife:GetPivot(), 
+					[2] = toThrow
+				}
+	
+				localplayer.Character.Knife.Throw:FireServer(unpack(args))
+				return
+			end
+	
+	
+		end,}
+	})
+
+table.insert(module, {
+		Type = "Toggle",
+		Args = {"Murderer kill aura", function(Self, state)
+			if state then
+				if killAuraCon then killAuraCon:Disconnect() end
+			else
+				killAuraCon = game:GetService("RunService").Heartbeat:Connect(function()
+					for _, player in ipairs(game.Players:GetPlayers()) do
+						if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player ~= localplayer then
+							local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+							if (hrp.Position - localplayer.Character:FindFirstChild("HumanoidRootPart").Position).Magnitude < 7 then
+								hrp.Anchored = true
+								hrp.CFrame = localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame + localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * 2
+	
+								task.wait(0.1)
+								local args = {
+									[1] = "Slash"
+								}
+	
+								localplayer.Character.Knife.Stab:FireServer(unpack(args))
+								return	
+							end
+						end
+					end
+				end)
+			end
+		end,}
+	})
+
+table.insert(module, {
+		Type = "Button",
+		Args = {"Kill EVERYONE as murderer", function()
+			if findMurderer() ~= localplayer then fu.notification("You're not murderer.") return end
+	
+			if not localplayer.Character:FindFirstChild("Knife") then
+				local hum = localplayer.Character:FindFirstChild("Humanoid")
+				if localplayer.Backpack:FindFirstChild("Knife") then
+					localplayer.Character:FindFirstChild("Humanoid"):EquipTool(localplayer.Backpack:FindFirstChild("Knife"))
+				else
+					fu.notification("You don't have the knife..?")
+					return
+				end
+			end
+	
+			for _, player in ipairs(game.Players:GetPlayers()) do
+				if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player ~= localplayer then
+					player.Character:FindFirstChild("HumanoidRootPart").Anchored = true
+					player.Character:FindFirstChild("HumanoidRootPart").CFrame = localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame + localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * 1 
+	
+				end	
+			end
+	
+			local args = {
+				[1] = "Slash"
+			}
+			localplayer.Character.Knife.Stab:FireServer(unpack(args))
+		end,}
+	})
+
+table.insert(module, {
+		Type = "Button",
+		Args = {"Hold everyone hostage", function()
+			if findMurderer() ~= localplayer then fu.notification("You're not murderer. This'll only be useful if you're the murderer.") return end
+	
+			for _, player in ipairs(game.Players:GetPlayers()) do
+				if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player ~= localplayer then
+					player.Character:FindFirstChild("HumanoidRootPart").Anchored = true
+					player.Character:FindFirstChild("HumanoidRootPart").CFrame = localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame + localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * 5
+				end	
+			end
+	
+			fu.notification("Placed every single player in a single point. Kill everyone at once once you decide to.")
+		end,}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Fling Sheriff", function()
+			if not findSheriff() then
+				fu.notification("No sheriff/hero to fling.")
+				return
+			end
+			miniFling(findSheriff())
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Copy sheriff username", function()
+			if not findSheriff() then
+				fu.notification("No sheriff/hero to copy.")
+				return
+			end
+			if setclipboard then setclipboard(findSheriff().Name) end
+			fu.notification("Copied to clipboard.")
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Extras"}
+	})
+
+	local function secondsToMinutes(seconds)
+		if seconds == -1 then return "" end
+		local minutes = math.floor(seconds / 60)
+		local remainingSeconds = seconds % 60
+		return string.format("%dm %ds", minutes, remainingSeconds)
+	end
+	local timertask = nil
+	local timertext = nil
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Round timer", function(Self, state)
+			if state then
+				timertext = Instance.new("TextLabel")
+				timertext.Parent = script.Parent
+				timertext.BackgroundTransparency = 1
+				timertext.TextColor3 = Color3.fromRGB(255, 255, 255)
+				timertext.TextScaled = true
+				timertext.AnchorPoint = Vector2.new(0.5, 0.5)
+				timertext.Position = UDim2.fromScale(0.5, 0.15)
+				timertext.Size = UDim2.fromOffset(200, 35)
+				timertext.Font = Enum.Font.GothamBold
+				timertask = task.spawn(function()
+					while task.wait(0.5) do
+						local part = game.Workspace:FindFirstChild("RoundTimerPart")
+						local timeLeft = part and part:GetAttribute("Time") or -1
+						if timertext then
+							timertext.Text = secondsToMinutes(timeLeft)
+						end
+					end
+				end)
+			else
+				if timertext then
+					timertext:Destroy()
+					timertext = nil
+				end
+				if timertask then
+					pcall(function() task.cancel(timertask) end)
+					timertask = nil
+				end
+			end
+		end,}
+	})
+	
+		
+		
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Send Sheriff and Murderer names into chat", function(Self)
+			local textchannels = game:GetService("TextChatService"):WaitForChild("TextChannels"):GetChildren()
+			for _, textchannel in ipairs(textchannels) do
+				if textchannel.Name == "RBXSystem" then continue end
+				local murd = findMurderer()
+				local sher = findSheriff()
+	
+				local murdName = "-"
+				local sherName = "-"
+				if murd then murdName = murd.Name end
+				if sher then sherName = sher.Name end
+				local message = string.format([[Murderer: %s |
+		Sheriff: %s |
+		<<H3XA_MM2>>]], murdName, sherName)
+				textchannel:SendAsync(message)
+			end
+		end,}
+	})
+	
+	table.insert(module, {
+		Type = "ButtonGrid",
+		Args = {2, {
+			Teleport_to_lobby = function(Self)
+				local char = localplayer.Character
+				if not char then
+					fu.notification("You're not a valid character.")
+					return
+				end
+				local lobby = workspace:FindFirstChild("Lobby")
+				if not lobby then
+					-- fallback común en MM2
+					lobby = workspace:FindFirstChild("Lobby", true)
+				end
+				if not lobby then
+					fu.notification("No lobby to teleport to.")
+					return
+				end
+				local spawnPos = nil
+				local spawns = lobby:FindFirstChild("Spawns")
+				if spawns then
+					local spawn = spawns:FindFirstChildWhichIsA("SpawnLocation") or spawns:FindFirstChildWhichIsA("BasePart")
+					if spawn then spawnPos = spawn.Position end
+				end
+				if not spawnPos then
+					local spawn = lobby:FindFirstChildWhichIsA("SpawnLocation", true)
+					if spawn then spawnPos = spawn.Position end
+				end
+				if not spawnPos then
+					local ok, pivot = pcall(function() return lobby:GetPivot().Position end)
+					if ok and pivot then spawnPos = pivot end
+				end
+				if not spawnPos then
+					fu.notification("No lobby to teleport to.")
+					return
+				end
+				local target = CFrame.new(spawnPos + Vector3.new(0, 4, 0))
+				if char:FindFirstChild("HumanoidRootPart") then
+					char:PivotTo(target)
+				else
+					char:MoveTo(spawnPos + Vector3.new(0, 4, 0))
+				end
+				fu.notification("Teleported to lobby.")
+			end,
+	
+			Teleport_to_map = function(Self)
+				local map = getMap()
+				if not map then
+					fu.notification("No map to teleport to.")
+					return
+				end
+				local char = localplayer.Character
+				if not char then
+					fu.notification("You're not a valid character.")
+					return
+				end
+				local spawnsFolder = map:FindFirstChild("Spawns")
+				if spawnsFolder then
+					local spawns = spawnsFolder:GetChildren()
+					if #spawns > 0 then
+						local randomSpawn = spawns[math.random(1, #spawns)]
+						local pos = randomSpawn.Position
+						if char:FindFirstChild("HumanoidRootPart") then
+							char:PivotTo(CFrame.new(pos + Vector3.new(0, 3, 0)))
+						else
+							char:MoveTo(pos)
+						end
+						fu.notification("Teleported to map.")
+						return
+					end
+				end
+				fu.notification("No map to teleport to.")
+			end,
+		}}
+	}) 
+	
+		
+		
+	
+		
+		
+	
+	
+	
+	
+	
+	
+	
+		
+	-- table.insert(module, {
+	-- 	Type = "Toggle",
+	-- 	Args = {"Simulate knife throw for killing nearest", function(Self, state)
+	-- 		simulateKnifeThrow = state
+	-- 		if state then
+	-- 			fu.notification("Simulating a knife throw can make you look legitimate. However, note that it's less reliable and may miss the target.")
+	-- 		end
+	-- 	end,}
+	-- })
+	
+	local killAuraCon = nil
+	
+		
+		
+	--table.insert(module, {
+	--	Type = "Text",
+	--	Args = {"Coin farming"}
+	--})
+	
+	
+	--local Players = game:GetService("Players")
+	--local RunService = game:GetService("RunService")
+	
+	--local coinFarming = false
+	--local coinFarmConnection = nil
+	--local coinCollected = 0
+	--local coinBag = 0
+	--local coinLimit = 50
+	--local coinBlacklists = {}
+	
+	--game.ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Gameplay"):WaitForChild("CoinCollected").OnClientEvent:Connect(function(arg1, arg2, arg3)
+	--	local amount = tonumber(arg1) or tonumber(arg2)
+	--	local limit = tonumber(arg2) or tonumber(arg3)
+	--	if amount then coinBag = amount end
+	--	if limit then coinLimit = limit end
+	--end)
+	
+	--local FARM_SPEED = 30
+	
+	--local function isPlayerInLobby()
+	--	local coinFolder = workspace:FindFirstChild("CoinContainer", true) or workspace:FindFirstChild("CoinVisuals", true) or workspace:FindFirstChild("Coins", true)
+	--	if not coinFolder then return true end
+	
+	--	local lobby = workspace:FindFirstChild("Lobby")
+	--	if lobby and game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+	--		local dist = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - lobby:GetPivot().Position).Magnitude
+	--		if dist < 200 then return true end
+	--	end
+	--	return false
+	--end
+	
+	--local function getNearestCoin(hrp)
+	--	local container = workspace:FindFirstChild("CoinContainer", true) or workspace:FindFirstChild("CoinVisuals", true) or workspace:FindFirstChild("Coins", true)
+	--	if not container then return nil end
+	
+	--	local nearest, minDist = nil, math.huge
+	--	for _, coin in ipairs(container:GetChildren()) do
+	--		if coin:IsA("BasePart") and not coinBlacklists[coin] and (coin.Name == "Coin_Server" or coin:FindFirstChildWhichIsA("TouchTransmitter")) then
+	--			local visual = coin:FindFirstChild("CoinVisual")
+	--			if not visual or visual.Transparency == 0 then
+	--				local dist = (hrp.Position - coin.Position).Magnitude
+	--				if dist < minDist then
+	--					minDist = dist
+	--					nearest = coin
+	--				end
+	--			end
+	--		end
+	--	end
+	--	return nearest
+	--end
+	
+	--local function startCoinFarm()
+	--	if coinFarming then fu.notification("Already coin farming.") return end
+	
+	--	coinFarming = true
+	
+	--	coinFarmConnection = RunService.Heartbeat:Connect(function()
+	--		local char = Players.LocalPlayer.Character
+	--		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	--		local hum = char and char:FindFirstChild("Humanoid")
+	
+	--		if not hrp or not hum or hum.Health <= 0 then return end 
+	
+	--		if isPlayerInLobby() then 
+	--			coinBag = 0
+	--			coinBlacklists = {}
+	--			hrp.Velocity = Vector3.zero
+	--			fu.dialog("Coin farming | IN LOBBY", `{coinCollected} coins collected.`, {})
+	--			return 
+	--		end
+	
+	--		if coinBag >= coinLimit then
+	--			hrp.Velocity = Vector3.zero
+	--			fu.dialog("Coin farming | COIN MAX", `{coinCollected} coins collected.`, {})
+	--			return
+	--		end
+	
+	--		local target = getNearestCoin(hrp)
+	
+	--		if target then
+	--			for _, part in ipairs(char:GetDescendants()) do
+	--				if part:IsA("BasePart") then part.CanCollide = false end
+	--			end
+	
+	--			local direction = (target.Position - hrp.Position).Unit
+	--			hrp.Velocity = direction * FARM_SPEED
+	--			hrp.CFrame = CFrame.new(hrp.Position, target.Position)
+	
+	--			local distance = (target.Position - hrp.Position).Magnitude
+	--			if distance < 3 then
+	--				local touch = target:FindFirstChildWhichIsA("TouchTransmitter", true) or target
+	--				if firetouchinterest then
+	--					firetouchinterest(hrp, touch.Parent or touch, 0)
+	
+	--					task.spawn(function()
+	--						task.wait()
+	--						firetouchinterest(hrp, touch.Parent or touch, 1)
+	--					end)
+	--				end
+	
+	--				coinCollected += 1
+	--				coinBlacklists[target] = true
+	--			end
+	--		else
+	--			hrp.Velocity = Vector3.zero
+	--		end
+	
+	--		fu.dialog("Coin farming", `{coinBag} / {coinLimit} in bag. Total: {coinCollected}`, {})
+	--	end)
+	--end
+	
+	--table.insert(module, {
+	--	Type = "Button",
+	--	Args = {"Start coin farming", function()
+	--		startCoinFarm()
+	--	end,}
+	--})
+	
+	--table.insert(module, {
+	--	Type = "Button",
+	--	Args = {"Stop coin farming", function()
+	--		if not coinFarming then fu.notification("You're not coin farming.") return end
+	--		fu.notification("Stopped coin farming. Collected " .. coinCollected .. " coins.")
+	
+	--		coinFarming = false
+	--		if coinFarmConnection then 
+	--			coinFarmConnection:Disconnect() 
+	--			coinFarmConnection = nil 
+	--		end
+	
+	--		coinCollected = 0
+	--		coinBlacklists = {}
+	--		coinBag = 0
+	--		fu.closedialog()
+	
+	--		local char = game.Players.LocalPlayer.Character
+	--		if char then
+	--			for _, part in ipairs(char:GetDescendants()) do
+	--				if part:IsA("BasePart") then part.CanCollide = true end
+	--			end
+	--			local hrp = char:FindFirstChild("HumanoidRootPart")
+	--			if hrp then hrp.Velocity = Vector3.zero end
+	--		end
+	--	end,}
+	--})
+	
+	-- no i give up im srry this ass
+	
+	-- any smarties wanna fixthis ass code please do
+	
+	-- ============================================================
+	-- RUNTIME ERROR FEATURES (Combat / Movement / Visuals / Utility)
+	-- ============================================================
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local Workspace = game:GetService("Workspace")
+	local VirtualUser = game:GetService("VirtualUser")
+	local Camera = Workspace.CurrentCamera
+
+	RE = RE or {
+		Hitbox = false, HitboxSize = 5,
+		Arrow = false, ProxAlert = false, Radar = false, CoinESP = false,
+		DistanceESP = false, Tracers = false, SkeletonESP = false,
+		WalkSpeed = false, WSVal = 16, JumpPower = false, JPVal = 50,
+		InfJump = false, Noclip = false, AntiAFK = false, Waypoint = nil,
+		Invisibility = false,
+		SilentAim = false, Aimbot = false, FOVRadius = 100,
+		AutoGrabGun = false, AutoWin = false,
+	}
+	-- ensure flags exist if RE was partially created early
+	RE.DistanceESP = RE.DistanceESP or false
+	RE.Tracers = RE.Tracers or false
+	RE.SkeletonESP = RE.SkeletonESP or false
+
+	local reConnections = {}
+	local reGuiParent
+	do
+		local ok, res = pcall(function() return (gethui and gethui()) or game:GetService("CoreGui") end)
+		reGuiParent = (ok and res) or localplayer:WaitForChild("PlayerGui")
+	end
+	if reGuiParent:FindFirstChild("H3XA_RE_HUD") then reGuiParent.H3XA_RE_HUD:Destroy() end
+	local REHud = Instance.new("ScreenGui")
+	REHud.Name = "H3XA_RE_HUD"
+	REHud.ResetOnSpawn = false
+	REHud.DisplayOrder = 999999
+	REHud.Parent = reGuiParent
+
+	-- Alert banner
+	local AlertBanner = Instance.new("Frame", REHud)
+	AlertBanner.Size = UDim2.new(0, 300, 0, 40)
+	AlertBanner.Position = UDim2.new(0.5, -150, 0, 60)
+	AlertBanner.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	AlertBanner.Visible = false
+	Instance.new("UICorner", AlertBanner).CornerRadius = UDim.new(0, 8)
+	local alertStroke = Instance.new("UIStroke", AlertBanner)
+	alertStroke.Color = Color3.fromRGB(255, 255, 255)
+	alertStroke.Thickness = 1.2
+	alertStroke.Transparency = 0.15
+	local AlertText = Instance.new("TextLabel", AlertBanner)
+	AlertText.Size = UDim2.new(1, 0, 1, 0)
+	AlertText.BackgroundTransparency = 1
+	AlertText.Font = Enum.Font.GothamBold
+	AlertText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	AlertText.TextSize = 13
+
+	-- Geometric Murderer Arrow
+	local ArrowFrame = Instance.new("Frame", REHud)
+	ArrowFrame.Size = UDim2.new(0, 70, 0, 70)
+	ArrowFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	ArrowFrame.BackgroundTransparency = 1
+	ArrowFrame.Visible = false
+	ArrowFrame.ZIndex = 50
+	local ArrowContainer = Instance.new("Frame", ArrowFrame)
+	ArrowContainer.Size = UDim2.new(1, 0, 1, 0)
+	ArrowContainer.BackgroundTransparency = 1
+	ArrowContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+	ArrowContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+	local ArrowShaft = Instance.new("Frame", ArrowContainer)
+	ArrowShaft.Size = UDim2.new(0, 28, 0, 10)
+	ArrowShaft.Position = UDim2.new(0.5, -30, 0.5, -5)
+	ArrowShaft.BackgroundColor3 = Color3.fromRGB(255, 35, 35)
+	ArrowShaft.BorderSizePixel = 0
+	ArrowShaft.ZIndex = 51
+	Instance.new("UICorner", ArrowShaft).CornerRadius = UDim.new(0, 3)
+	local ShaftStroke = Instance.new("UIStroke", ArrowShaft)
+	ShaftStroke.Color = Color3.fromRGB(255, 255, 255)
+	ShaftStroke.Thickness = 1.8
+	ShaftStroke.Transparency = 0.15
+	local ArrowHead = Instance.new("Frame", ArrowContainer)
+	ArrowHead.Size = UDim2.new(0, 22, 0, 22)
+	ArrowHead.Position = UDim2.new(0.5, -2, 0.5, -11)
+	ArrowHead.BackgroundColor3 = Color3.fromRGB(255, 35, 35)
+	ArrowHead.BorderSizePixel = 0
+	ArrowHead.Rotation = 45
+	ArrowHead.ZIndex = 52
+	Instance.new("UICorner", ArrowHead).CornerRadius = UDim.new(0, 2)
+	local HeadStroke = Instance.new("UIStroke", ArrowHead)
+	HeadStroke.Color = Color3.fromRGB(255, 255, 255)
+	HeadStroke.Thickness = 1.8
+	HeadStroke.Transparency = 0.15
+	local ArrowCore = Instance.new("Frame", ArrowContainer)
+	ArrowCore.Size = UDim2.new(0, 8, 0, 8)
+	ArrowCore.Position = UDim2.new(0.5, -4, 0.5, -4)
+	ArrowCore.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+	ArrowCore.BorderSizePixel = 0
+	ArrowCore.ZIndex = 53
+	Instance.new("UICorner", ArrowCore).CornerRadius = UDim.new(1, 0)
+	local OuterGlow = Instance.new("Frame", ArrowFrame)
+	OuterGlow.Size = UDim2.new(0, 78, 0, 78)
+	OuterGlow.Position = UDim2.new(0.5, -39, 0.5, -39)
+	OuterGlow.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
+	OuterGlow.BackgroundTransparency = 0.85
+	OuterGlow.BorderSizePixel = 0
+	OuterGlow.ZIndex = 49
+	Instance.new("UICorner", OuterGlow).CornerRadius = UDim.new(1, 0)
+
+	-- FOV Circle
+	local FOVCircle = Instance.new("Frame", REHud)
+	FOVCircle.Size = UDim2.new(0, 200, 0, 200)
+	FOVCircle.Position = UDim2.new(0.5, -100, 0.5, -100)
+	FOVCircle.BackgroundTransparency = 1
+	FOVCircle.Visible = false
+	Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
+	local FOVStroke = Instance.new("UIStroke", FOVCircle)
+	FOVStroke.Color = Color3.fromRGB(255, 255, 255)
+	FOVStroke.Thickness = 1.5
+
+	-- Radar
+	local RadarFrame = Instance.new("Frame", REHud)
+	RadarFrame.Size = UDim2.new(0, 160, 0, 160)
+	RadarFrame.Position = UDim2.new(0, 20, 0.5, -80)
+	RadarFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
+	RadarFrame.BackgroundTransparency = 0.2
+	RadarFrame.Active = true
+	RadarFrame.Draggable = true
+	RadarFrame.Visible = false
+	Instance.new("UICorner", RadarFrame).CornerRadius = UDim.new(1, 0)
+	Instance.new("UIStroke", RadarFrame).Color = Color3.fromRGB(255, 255, 255)
+	local CenterDot = Instance.new("Frame", RadarFrame)
+	CenterDot.Size = UDim2.new(0, 6, 0, 6)
+	CenterDot.Position = UDim2.new(0.5, -3, 0.5, -3)
+	CenterDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	Instance.new("UICorner", CenterDot).CornerRadius = UDim.new(1, 0)
+	local BlipContainer = Instance.new("Frame", RadarFrame)
+	BlipContainer.Size = UDim2.new(1, 0, 1, 0)
+	BlipContainer.BackgroundTransparency = 1
+
+	local function reGetRole(player)
+		if not player or not player.Character then return "Innocent" end
+		local char, bp = player.Character, player:FindFirstChild("Backpack")
+		if char:FindFirstChild("Knife") or (bp and bp:FindFirstChild("Knife")) then return "Murderer" end
+		if char:FindFirstChild("Gun") or (bp and bp:FindFirstChild("Gun")) then return "Sheriff" end
+		return "Innocent"
+	end
+
+	local function reGetMurderer()
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localplayer and reGetRole(p) == "Murderer" then return p end
+		end
+		return nil
+	end
+
+	local function reGetSheriff()
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localplayer and reGetRole(p) == "Sheriff" then return p end
+		end
+		return nil
+	end
+
+	local function reResetHitboxes()
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localplayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+				p.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
+				p.Character.HumanoidRootPart.Transparency = 1
+			end
+		end
+	end
+
+	local function reResetMovement()
+		if localplayer.Character and localplayer.Character:FindFirstChild("Humanoid") then
+			localplayer.Character.Humanoid.WalkSpeed = 16
+			localplayer.Character.Humanoid.UseJumpPower = true
+			localplayer.Character.Humanoid.JumpPower = 50
+		end
+	end
+
+	local function reClearCoinESP()
+		for _, v in ipairs(Workspace:GetDescendants()) do
+			if v:FindFirstChild("CoinHL") then v.CoinHL:Destroy() end
+		end
+	end
+
+	local function reResetInvisibility()
+		local char = localplayer.Character
+		if char then
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") or part:IsA("Decal") then
+					part.LocalTransparencyModifier = 0
+				end
+			end
+		end
+	end
+
+	table.insert(reConnections, RunService.RenderStepped:Connect(function()
+		local char = localplayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return end
+
+		FOVCircle.Size = UDim2.new(0, RE.FOVRadius * 2, 0, RE.FOVRadius * 2)
+		FOVCircle.Position = UDim2.new(0.5, -RE.FOVRadius, 0.5, -RE.FOVRadius)
+
+		if RE.Invisibility then
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") or part:IsA("Decal") then part.LocalTransparencyModifier = 0.95 end
+			end
+		end
+
+		local murderer = reGetMurderer()
+		local murdHrp = murderer and murderer.Character and murderer.Character:FindFirstChild("HumanoidRootPart")
+
+		if murdHrp then
+			local dist = (hrp.Position - murdHrp.Position).Magnitude
+			if RE.ProxAlert and dist <= 40 then
+				AlertBanner.Visible = true
+				AlertText.Text = H3XA_MM2_T("MURDERER NEAR (" .. math.floor(dist) .. "m)")
+			elseif RE.ProxAlert then
+				AlertBanner.Visible = false
+			end
+			if RE.Arrow then
+				ArrowFrame.Visible = true
+				local screenPos = Camera:WorldToViewportPoint(murdHrp.Position)
+				local vSize = Camera.ViewportSize
+				local center = Vector2.new(vSize.X / 2, vSize.Y / 2)
+				local targetPos = Vector2.new(screenPos.X, screenPos.Y)
+				local direction = (targetPos - center)
+				local angle = math.atan2(direction.Y, direction.X)
+				ArrowFrame.Rotation = math.deg(angle)
+				local radius = math.min(vSize.X, vSize.Y) * 0.38
+				local clampedPos = center + direction.Unit * math.min(direction.Magnitude, radius)
+				ArrowFrame.Position = UDim2.new(0, clampedPos.X, 0, clampedPos.Y)
+			end
+		else
+			if RE.ProxAlert then AlertBanner.Visible = false end
+			if RE.Arrow then ArrowFrame.Visible = false end
+		end
+
+		if RE.Aimbot or RE.SilentAim then
+			local targetChar = (reGetRole(localplayer) == "Murderer") and (reGetSheriff() and reGetSheriff().Character) or (murderer and murderer.Character)
+			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+				local tPos = Camera:WorldToViewportPoint(targetChar.HumanoidRootPart.Position)
+				local mousePos = UserInputService:GetMouseLocation()
+				local distFromMouse = (Vector2.new(tPos.X, tPos.Y) - mousePos).Magnitude
+				if distFromMouse <= RE.FOVRadius then
+					if RE.Aimbot then
+						Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetChar.HumanoidRootPart.Position)
+					end
+				end
+			end
+		end
+
+		if RE.Radar then
+			BlipContainer:ClearAllChildren()
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= localplayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+					local tHrp = p.Character.HumanoidRootPart
+					local rel = tHrp.Position - hrp.Position
+					local yaw = math.atan2(-Camera.CFrame.LookVector.X, -Camera.CFrame.LookVector.Z)
+					local rX = rel.X * math.cos(yaw) - rel.Z * math.sin(yaw)
+					local rZ = rel.X * math.sin(yaw) + rel.Z * math.cos(yaw)
+					local sX, sZ = math.clamp(rX / 80, -1, 1), math.clamp(rZ / 80, -1, 1)
+					local blip = Instance.new("Frame", BlipContainer)
+					blip.Size = UDim2.new(0, 6, 0, 6)
+					blip.Position = UDim2.new(0.5 + (sX * 0.42), -3, 0.5 + (sZ * 0.42), -3)
+					Instance.new("UICorner", blip).CornerRadius = UDim.new(1, 0)
+					local role = reGetRole(p)
+					if role == "Murderer" then blip.BackgroundColor3 = Color3.fromRGB(239, 68, 68)
+					elseif role == "Sheriff" then blip.BackgroundColor3 = Color3.fromRGB(59, 130, 246)
+					else blip.BackgroundColor3 = Color3.fromRGB(34, 197, 94) end
+				end
+			end
+		end
+
+		if RE.Hitbox then
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= localplayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+					p.Character.HumanoidRootPart.Size = Vector3.new(RE.HitboxSize, RE.HitboxSize, RE.HitboxSize)
+					p.Character.HumanoidRootPart.Transparency = 0.6
+					p.Character.HumanoidRootPart.CanCollide = false
+				end
+			end
+		end
+
+		if RE.WalkSpeed and char:FindFirstChild("Humanoid") then char.Humanoid.WalkSpeed = RE.WSVal end
+		if RE.JumpPower and char:FindFirstChild("Humanoid") then
+			char.Humanoid.UseJumpPower = true
+			char.Humanoid.JumpPower = RE.JPVal
+		end
+	end))
+
+	task.spawn(function()
+		while task.wait(0.1) do
+			local char = localplayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not hrp then continue end
+
+			if RE.AutoGrabGun then
+				local droppedGun = Workspace:FindFirstChild("GunDrop") or Workspace:FindFirstChild("Gun")
+				if droppedGun and droppedGun:IsA("BasePart") then
+					if (hrp.Position - droppedGun.Position).Magnitude <= 30 then
+						hrp.CFrame = droppedGun.CFrame
+					end
+				end
+			end
+
+			if RE.AutoWin then
+				local myRole = reGetRole(localplayer)
+				if myRole == "Murderer" then
+					for _, p in ipairs(Players:GetPlayers()) do
+						if p ~= localplayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+							hrp.CFrame = p.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+							task.wait(0.2)
+						end
+					end
+				elseif myRole == "Sheriff" then
+					local murderer = reGetMurderer()
+					if murderer and murderer.Character and murderer.Character:FindFirstChild("HumanoidRootPart") then
+						Camera.CFrame = CFrame.new(Camera.CFrame.Position, murderer.Character.HumanoidRootPart.Position)
+					end
+				end
+			end
+		end
+	end)
+
+	task.spawn(function()
+		while task.wait(0.5) do
+			if RE.CoinESP then
+				for _, v in ipairs(Workspace:GetDescendants()) do
+					if v:IsA("BasePart") then
+						local name = v.Name:lower()
+						if name:find("coin") or name:find("normalcoin") or name:find("nyan") or v.Parent.Name == "CoinContainer" or v.Parent.Name == "Coins" then
+							if not v:FindFirstChild("CoinHL") then
+								local hl = Instance.new("Highlight", v)
+								hl.Name = "CoinHL"
+								hl.FillColor = Color3.fromRGB(234, 179, 8)
+								hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+
+	-- Distance / Tracers / Skeleton ESP (monochrome)
+	local RE_ESP_Objects = {}
+	local function reDrawLine(startPos, endPos, color, thickness)
+		local line = Instance.new("Frame")
+		line.AnchorPoint = Vector2.new(0.5, 0.5)
+		line.BackgroundColor3 = color
+		line.BorderSizePixel = 0
+		line.ZIndex = 1
+		local distance = (startPos - endPos).Magnitude
+		local center = (startPos + endPos) / 2
+		line.Position = UDim2.new(0, center.X, 0, center.Y)
+		line.Size = UDim2.new(0, distance, 0, thickness or 1.5)
+		line.Rotation = math.deg(math.atan2(endPos.Y - startPos.Y, endPos.X - startPos.X))
+		return line
+	end
+	local function reClearVisualESP()
+		for _, obj in pairs(RE_ESP_Objects) do
+			if obj and obj.Parent then obj:Destroy() end
+		end
+		table.clear(RE_ESP_Objects)
+	end
+	table.insert(reConnections, RunService.RenderStepped:Connect(function()
+		reClearVisualESP()
+		if not (RE.DistanceESP or RE.Tracers or RE.SkeletonESP) then return end
+		local myChar = localplayer.Character
+		local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+		if not myRoot then return end
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= localplayer and player.Character then
+				local char = player.Character
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				local rootPart = char:FindFirstChild("HumanoidRootPart")
+				local head = char:FindFirstChild("Head")
+				if hum and hum.Health > 0 and rootPart and head then
+					local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+					local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position)
+					local distance = math.floor((myRoot.Position - rootPart.Position).Magnitude)
+					if onScreen then
+						if RE.Tracers then
+							local screenBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+							local targetPos = Vector2.new(rootPos.X, rootPos.Y)
+							local tracer = reDrawLine(screenBottom, targetPos, Color3.fromRGB(255, 255, 255), 1.4)
+							tracer.BackgroundTransparency = 0.15
+							tracer.Parent = REHud
+							table.insert(RE_ESP_Objects, tracer)
+						end
+						if RE.DistanceESP then
+							local distLabel = Instance.new("TextLabel")
+							distLabel.Text = tostring(distance) .. "m"
+							distLabel.Position = UDim2.new(0, rootPos.X, 0, rootPos.Y + 22)
+							distLabel.Size = UDim2.new(0, 0, 0, 0)
+							distLabel.BackgroundTransparency = 1
+							distLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+							distLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+							distLabel.TextStrokeTransparency = 0.35
+							distLabel.Font = Enum.Font.GothamBold
+							distLabel.TextSize = 12
+							distLabel.ZIndex = 2
+							distLabel.Parent = REHud
+							table.insert(RE_ESP_Objects, distLabel)
+						end
+						if RE.SkeletonESP and headOnScreen then
+							local parts = {
+								char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftUpperArm"),
+								char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm"),
+								char:FindFirstChild("Left Leg") or char:FindFirstChild("LeftUpperLeg"),
+								char:FindFirstChild("Right Leg") or char:FindFirstChild("RightUpperLeg"),
+							}
+							local neckPos = Vector2.new(headPos.X, headPos.Y + 12)
+							local torsoPos = Vector2.new(rootPos.X, rootPos.Y)
+							local spine = reDrawLine(neckPos, torsoPos, Color3.fromRGB(255, 255, 255), 1.5)
+							spine.Parent = REHud
+							table.insert(RE_ESP_Objects, spine)
+							for _, part in ipairs(parts) do
+								if part then
+									local partPos, partOnScreen = Camera:WorldToViewportPoint(part.Position)
+									if partOnScreen then
+										local limbLine = reDrawLine(torsoPos, Vector2.new(partPos.X, partPos.Y), Color3.fromRGB(230, 230, 230), 1.1)
+										limbLine.Parent = REHud
+										table.insert(RE_ESP_Objects, limbLine)
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end))
+
+	table.insert(reConnections, UserInputService.JumpRequest:Connect(function()
+		if RE.InfJump and localplayer.Character and localplayer.Character:FindFirstChildOfClass("Humanoid") then
+			localplayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end))
+
+	table.insert(reConnections, RunService.Stepped:Connect(function()
+		if RE.Noclip and localplayer.Character then
+			for _, part in ipairs(localplayer.Character:GetDescendants()) do
+				if part:IsA("BasePart") then part.CanCollide = false end
+			end
+		end
+	end))
+
+	table.insert(reConnections, localplayer.Idled:Connect(function()
+		if RE.AntiAFK then
+			VirtualUser:Button2Down(Vector2.new(0, 0), Camera.CFrame)
+			task.wait(1)
+			VirtualUser:Button2Up(Vector2.new(0, 0), Camera.CFrame)
+		end
+	end))
+
+	-- ===== UI CATEGORIES =====
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Combat"}
+	})
+
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Aimbot", function(Self, state)
+			RE.Aimbot = state
+			FOVCircle.Visible = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Range",
+		Args = {"Aimbot FOV Radius", 50, 300, 10, function(Self, val)
+			RE.FOVRadius = val
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Hitbox Expander", function(Self, state)
+			RE.Hitbox = state
+			if not state then reResetHitboxes() end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Range",
+		Args = {"Hitbox Size", 2, 25, 1, function(Self, val)
+			RE.HitboxSize = val
+		end}
+	})
+
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Movement"}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"WalkSpeed", function(Self, state)
+			RE.WalkSpeed = state
+			if not state then reResetMovement() end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Range",
+		Args = {"WalkSpeed Value", 16, 100, 1, function(Self, val)
+			RE.WSVal = val
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"JumpPower", function(Self, state)
+			RE.JumpPower = state
+			if not state then reResetMovement() end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Range",
+		Args = {"JumpPower Value", 50, 200, 5, function(Self, val)
+			RE.JPVal = val
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Infinite Jump", function(Self, state)
+			RE.InfJump = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Noclip", function(Self, state)
+			RE.Noclip = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"ESPs"}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Murderer Arrow", function(Self, state)
+			RE.Arrow = state
+			if not state then ArrowFrame.Visible = false end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Proximity Alert", function(Self, state)
+			RE.ProxAlert = state
+			if not state then AlertBanner.Visible = false end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Radar 3D", function(Self, state)
+			RE.Radar = state
+			RadarFrame.Visible = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Invisibility", function(Self, state)
+			RE.Invisibility = state
+			if not state then reResetInvisibility() end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Utility"}
+	})
+
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Anti-AFK", function(Self, state)
+			RE.AntiAFK = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Clear floating buttons", function()
+			local root = getgenv().H3XA_MM2
+			local host = root and root:FindFirstChild("FloatingButtons")
+			local names = {}
+			if host then
+				for _, child in ipairs(host:GetChildren()) do
+					if child:IsA("GuiObject") then
+						table.insert(names, child.Name)
+						pcall(function() child:Destroy() end)
+					end
+				end
+			end
+			pcall(function()
+				if H3XA_MM2PointSave and H3XA_MM2PointSave.remove then
+					for _, name in ipairs(names) do
+						H3XA_MM2PointSave:remove(name)
+					end
+				end
+			end)
+			if fu and fu.notification then
+				fu.notification(H3XA_MM2_T("Floating buttons cleared."))
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Save Waypoint", function()
+			local c = localplayer.Character
+			if c and c:FindFirstChild("HumanoidRootPart") then
+				RE.Waypoint = c.HumanoidRootPart.CFrame
+				fu.notification("Waypoint saved.")
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Teleport to Waypoint", function()
+			local c = localplayer.Character
+			if RE.Waypoint and c and c:FindFirstChild("HumanoidRootPart") then
+				c.HumanoidRootPart.CFrame = RE.Waypoint
+				fu.notification("Teleported to waypoint.")
+			else
+				fu.notification("No waypoint saved.")
+			end
+		end}
+	})
+
+	repeat task.wait() until getgenv().Modules
+	getgenv().Modules[3] = module
+	fu.refreshlist()
+end
+local function ONOAH_routine() -- Routine: StarterGui.H3XA_MM2.Open.InitOpen
+    local script = Instance.new("LocalScript")
+    script.Name = "InitOpen"
+    script.Parent = Converted["_Open"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local ts = game:GetService("TweenService")
+	
+	
+	local stroke = Instance.new("UIStroke")
+	stroke.Parent = script.Parent
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = Color3.fromRGB(255,255,255)
+	
+	
+	script.Parent.Position = UDim2.fromScale(0.5, -1)
+	ts:Create(script.Parent, TweenInfo.new(1.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(0.5, 0.063)
+	}):Play()
+	
+	
+	task.wait(5)
+	ts:Create(script.Parent, TweenInfo.new(5), {
+		TextTransparency = 1
+	}):Play()
+	--ts:Create(stroke, TweenInfo.new(5), {
+	--	Transparency = 1
+	--}):Play()
+end
+local function JFQXCG_routine() -- Routine: StarterGui.H3XA_MM2.Open.OnClick
+    local script = Instance.new("LocalScript")
+    script.Name = "OnClick"
+    script.Parent = Converted["_Open"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local ts = game:GetService("TweenService")
+	
+	local clickCount = 0
+	local lastClickTime = tick()
+	script.Parent.MouseButton1Click:Connect(function()
+		local currentTime = tick()
+		
+		script.Parent.TextTransparency = 1
+		ts:Create(script.Parent, TweenInfo.new(1),
+			{TextTransparency = 1}
+		):Play()
+		
+		-- Check if the time since the last click is within a certain threshold
+		if currentTime - lastClickTime < 0.5 then
+			clickCount = clickCount + 1
+		else
+			
+			clickCount = 1
+		end
+	
+		lastClickTime = currentTime
+	
+		if clickCount == 3 then
+			-- Triple-click detected
+			local envDev = (getgenv and getgenv()) or _G
+			local isMobileUI = (envDev.H3XA_MM2_DEVICE == "MOBILE")
+			local fullSize = isMobileUI and UDim2.fromOffset(560, 380) or UDim2.fromOffset(720, 470)
+
+			ts:Create(getgenv().H3XA_MM2.Menu, TweenInfo.new(0.7, Enum.EasingStyle.Back, Enum.EasingDirection.Out), 
+				{Position = UDim2.fromScale(0.5, 0.5), Size = fullSize}
+			):Play()
+		end
+	end)
+	
+end
+local function EJGX_routine() -- Routine: StarterGui.H3XA_MM2.Open.Resizer
+    local script = Instance.new("LocalScript")
+    script.Name = "Resizer"
+    script.Parent = Converted["_Open"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+
+	local guiObject = script.Parent
+	local userInputService = game:GetService("UserInputService")
+	local ts = game:GetService("TweenService")
+	
+	local resizing = false
+	local initialMousePosition = nil
+	local initialSize = nil
+	local touchCount = 0
+	
+	-- Define the minimum width (50 pixels) and maximum width (initial width)
+	local MIN_WIDTH = 100
+	local MAX_WIDTH = guiObject.Size.X.Offset
+	
+	local function onInputBegan(input, gameProcessed)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			touchCount = touchCount + 1
+		end
+	
+		if touchCount == 2 then
+			resizing = false
+			return
+		end
+	
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			resizing = true
+			initialMousePosition = input.Position
+			initialSize = guiObject.Size
+		end
+	end
+	
+	local function onInputEnded(input, gameProcessed)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			touchCount = touchCount - 1
+		end
+	
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then		
+			resizing = false
+			initialMousePosition = nil
+			initialSize = nil
+			--ts:Create(guiObject.UIStroke, TweenInfo.new(1.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			--	Transparency = 1
+			--}):Play()
+		end
+	end
+	
+	local function onInputChanged(input, gameProcessed)
+		if touchCount == 2 then
+			return
+		end
+	
+		if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - initialMousePosition
+			if math.abs(delta.X) > 50 then
+				local newWidth = math.clamp(initialSize.X.Offset + delta.X, MIN_WIDTH, MAX_WIDTH)
+				local newSize = UDim2.new(
+					initialSize.X.Scale,
+					newWidth,
+					initialSize.Y.Scale,
+					initialSize.Y.Offset
+				)
+				ts:Create(guiObject, TweenInfo.new(0.8, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+					Size = newSize
+				}):Play()
+				--guiObject.UIStroke.Transparency = 0
+			end
+		end
+	end
+	
+	guiObject.InputBegan:Connect(onInputBegan)
+	guiObject.InputEnded:Connect(onInputEnded)
+	userInputService.InputChanged:Connect(onInputChanged)
+	
+end
+local function FRPPL_routine() -- Routine: StarterGui.H3XA_MM2.FloatingButton.Keybinding
+    local script = Instance.new("LocalScript")
+    script.Name = "Keybinding"
+    script.Parent = Converted["_FloatingButton"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	
+end
+local function VOBA_routine() -- Routine: StarterGui.H3XA_MM2.FloatingButton.Invisible
+    local script = Instance.new("LocalScript")
+    script.Name = "Invisible"
+    script.Parent = Converted["_FloatingButton"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	--local ts = game:GetService("TweenService")
+	
+	--local holding = false
+	--local invisible = false
+	
+	
+	
+	--script.Parent.MouseButton1Down:Connect(function()
+	--	holding = true
+	--	task.wait(0.5)
+	--	if holding then
+	--		if not invisible then 
+	--			invisible = true
+	--			ts:Create(script.Parent, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+	--				BackgroundTransparency = 1,
+	--				TextTransparency = 1
+	--			}):Play()
+	--			ts:Create(script.Parent.UIStroke, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+	--				Transparency = 0.7
+	--			}):Play()
+	--		else
+	--			invisible = false
+	--			ts:Create(script.Parent, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+	--				BackgroundTransparency = 0,
+	--				TextTransparency = 0
+	--			}):Play()
+	--			ts:Create(script.Parent.UIStroke, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut), {
+	--				Transparency = 0
+	--			}):Play()
+	--		end
+	--	end
+	--end)
+	
+	--script.Parent.MouseButton1Up:Connect(function()
+	--	holding = false
+	--end)
+end
+local function SZSARYI_routine() -- Routine: StarterGui.H3XA_MM2.AddCustomModule.Add.LocalScript
+    local script = Instance.new("LocalScript")
+    script.Name = "LocalScript"
+    script.Parent = Converted["_Add"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local ts = game:GetService("TweenService")
+	
+	local function loadModule(modulelink)
+		if script.Parent.Parent.TextBox.Text == "" and not modulelink then return end
+		ts:Create(script.Parent.Parent.Parent.Menu.UIScale, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Scale = 1
+		}):Play()
+		ts:Create(script.Parent.Parent, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = UDim2.fromScale(0.5, -0.5)
+		}):Play()
+	
+	
+		local lastmodule = getgenv().Modules[#getgenv().Modules]
+		require(script.Parent.Parent.Parent.FUNCTIONS).notification("Module is loading...")
+	
+		local moduleload = modulelink
+		if script.Parent.Parent.TextBox.Text ~= "" then
+			moduleload = script.Parent.Parent.TextBox.Text
+		end
+	
+		local moduleEx = loadstring(game:HttpGet(moduleload))
+		--setfenv(moduleEx, {FUNCTIONS = require(script.Parent.Parent.Parent.FUNCTIONS)})
+	
+		local newmodule = moduleEx()
+		if newmodule["BG_TASK"] then
+			coroutine.wrap(newmodule["BG_TASK"])()
+		end
+		if getgenv().Modules[#getgenv().Modules] ~= lastmodule then
+			local newmodule = getgenv().Modules[#getgenv().Modules]
+			require(script.Parent.Parent.Parent.FUNCTIONS).notification("New module added: " .. newmodule["Name"])
+			require(script.Parent.Parent.Parent.FUNCTIONS).refreshlist()
+		else
+			require(script.Parent.Parent.Parent.FUNCTIONS).notification("Module failed to load...")
+		end
+	end
+	script.Parent.MouseButton1Click:Connect(function() loadModule() end)
+	
+	-- Additional plugin modules
+	task.wait(1.5)
+end
+local function UVBTWP_routine() -- Routine: StarterGui.H3XA_MM2.AddCustomModule.Cancel.LocalScript
+    local script = Instance.new("LocalScript")
+    script.Name = "LocalScript"
+    script.Parent = Converted["_Cancel"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local ts = game:GetService("TweenService")
+	
+	script.Parent.MouseButton1Click:Connect(function()
+		ts:Create(script.Parent.Parent.Parent.Menu.UIScale, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Scale = 1
+		}):Play()
+		ts:Create(script.Parent.Parent, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = UDim2.fromScale(0.5, -0.5)
+		}):Play()
+	end)
+end
+local function HCWF_routine() -- Routine: StarterGui.H3XA_MM2.Menu.UIStroke.UIGradient.Animator
+    local script = Instance.new("LocalScript")
+    script.Name = "Animator"
+    script.Parent = Converted["_UIGradient4"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local ts = game:GetService("TweenService")
+	
+	-- Continuous neon gradient rotation for premium glow effect
+	ts:Create(script.Parent, TweenInfo.new(
+		8, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut,
+		math.huge, false), {
+			Rotation = 360
+		}):Play()
+end
+local function AWDPHWS_routine() -- Routine: StarterGui.H3XA_MM2.Menu.CloseArea.CloseOpen
+    local script = Instance.new("LocalScript")
+    script.Name = "CloseOpen"
+    script.Parent = Converted["_CloseArea"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local TweenService = game:GetService("TweenService")
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	
+	local menu = script.Parent.Parent
+	local Spring = require(menu.Parent.Spring)
+	local DraggableObject = require(menu.Parent.DraggableObject)
+	local Bezier = require(menu.Parent.Bezier)
+	
+	-- Tween the TextLabel transparency
+	--TweenService:Create(script.Parent.TextLabel, TweenInfo.new(20, Enum.EasingStyle.Linear), {
+	--	TextTransparency = 1,
+	--	BackgroundTransparency = 1
+	--}):Play()
+	
+	local closed = false
+	local springing = false
+	
+	local closing
+	
+	local lastPos = UDim2.fromScale(0.5, 0.5)
+	local closedLastPos = UDim2.fromScale(0.5, 0.5)
+	
+	-- Initialize springs for menu position and size (center by default)
+	local MenuPosXScale = Spring.new(0.7, 30, 160, menu.Position.X.Scale, 0, menu.Position.X.Scale)
+	local MenuPosYScale = Spring.new(0.7, 45, 190, 0.5, 0, 0.5)
+	local MenuPosXOffset = Spring.new(0.7, 30, 160, 0, 0)
+	local MenuPosYOffset = Spring.new(0.7, 45, 190, 0, 0)
+	local MenuSizeXOffset = Spring.new(1, 25, 120, menu.Size.X.Offset, 0, menu.Size.X.Offset)
+	local MenuSizeYOffset = Spring.new(1, 25, 120, menu.Size.Y.Offset, 0, menu.Size.Y.Offset)
+	
+	local MenuRotation = Spring.new(1, 18, 100, menu.Rotation, 0, menu.Rotation)
+	
+	
+	-- Functions to update spring goals and offsets
+	local function setSpringPosGoal(udim2)
+		MenuPosXScale:SetGoal(udim2.X.Scale)
+		MenuPosYScale:SetGoal(udim2.Y.Scale)
+		MenuPosXOffset:SetGoal(udim2.X.Offset)
+		MenuPosYOffset:SetGoal(udim2.Y.Offset)
+	end
+	
+	local function setSpringSizeGoal(udim2)
+		MenuSizeXOffset:SetGoal(udim2.X.Offset)
+		MenuSizeYOffset:SetGoal(udim2.Y.Offset)
+	end
+	
+	-- Render step to update menu position and size based on spring values
+	RunService.RenderStepped:Connect(function()
+		if menu:GetAttribute("H3XA_Minimized") or menu:GetAttribute("H3XA_UserDrag") then
+			return -- custom minimize / user drag owns size/pos
+		end
+		if springing then
+			menu.Position = UDim2.new(MenuPosXScale.Offset, MenuPosXOffset.Offset, MenuPosYScale.Offset, MenuPosYOffset.Offset)
+			menu.Size = UDim2.fromOffset(MenuSizeXOffset.Offset, MenuSizeYOffset.Offset)
+			menu.Rotation = MenuRotation.Offset
+			MenuRotation:SetGoal(0)
+		end
+	end)
+	
+	-- Initialize draggable menu
+	local MenuDrag = DraggableObject.new(script.Parent, menu, false, true)
+	MenuDrag:Enable()
+	
+	-- Drag del icono minimizado lo maneja el rediseño (H3XA_UserDrag), no este Draggable
+	local OpenerMenuDrag = DraggableObject.new(script.Parent.Parent.CanvasGroup.Opener, menu, false, true)
+	-- NO Enable: evita conflicto con drag/open del rediseño
+	local OpenerDraggable = false
+	
+	textHidden = false
+	
+	
+	-- Dragging behavior
+	local deltaFrom = menu.Position
+	MenuDrag.Dragged = function(pos)
+		--if not textHidden then
+		--	textHidden = true
+		--	TweenService:Create(script.Parent.TextLabel, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+		--		TextTransparency = 1,
+		--		BackgroundTransparency = 1
+		--	}):Play()
+		--end
+		local delta = pos - deltaFrom
+		deltaFrom = pos
+		MenuRotation:SetGoal(delta.X.Offset * 0.5)
+		setSpringPosGoal(pos)
+		TweenService:Create(menu.UIScale, TweenInfo.new(0.6, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			Scale = 0.95
+		}):Play()
+	end
+	
+	OpenerMenuDrag.Dragged = function(pos)
+		if OpenerDraggable then
+			closedLastPos = pos
+			setSpringPosGoal(pos)
+			-- Si está minimizado, mover el icono en tiempo real (no depender de springs)
+			if menu:GetAttribute("H3XA_Minimized") then
+				menu.Position = pos
+				menu:SetAttribute("H3XA_UserDrag", true)
+			end
+		end
+	end
+	
+	script.Parent.MouseButton1Click:Connect(function()
+		if not textHidden then
+			textHidden = true
+			TweenService:Create(script.Parent.TextLabel, TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+				TextTransparency = 1,
+				BackgroundTransparency = 1
+			}):Play()
+		end
+		TweenService:Create(menu, TweenInfo.new(2, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			AnchorPoint = Vector2.new(0.5, 0.5)
+		}):Play()
+		springing = true
+		setSpringPosGoal(closedLastPos)
+		setSpringSizeGoal(UDim2.fromOffset(60, 60))
+		--script.Parent.ZIndex = script.Parent.ZIndex - 2
+		if not menu.Area:FindFirstChildWhichIsA("UICorner") then
+			Instance.new("UICorner", menu.Area)
+		end
+		menu.Area:FindFirstChildWhichIsA("UICorner").CornerRadius = UDim.new(0, 16)
+		task.spawn(function() task.wait(0.05) menu.List.Visible = false end)
+		menu.CanvasGroup.Visible = true
+		OpenerDraggable = true
+		if closing then closing:Cancel() end
+		TweenService:Create(menu.CanvasGroup, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			GroupTransparency = 0
+		}):Play()
+	end)
+	
+	MenuDrag.DragEnded = function(vel)
+		TweenService:Create(
+			menu.UIScale,
+			TweenInfo.new(0.6, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+			{ Scale = 1 }
+		):Play()
+	
+		if math.abs(vel.Y) > 10 then
+			local thrownPosition = menu.Position
+	
+			if not textHidden then
+				textHidden = true
+				TweenService:Create(
+					script.Parent.TextLabel,
+					TweenInfo.new(1, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+					{
+						TextTransparency = 1,
+						BackgroundTransparency = 1
+					}
+				):Play()
+			end
+	
+			TweenService:Create(
+				menu,
+				TweenInfo.new(2, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+				{ AnchorPoint = Vector2.new(0.5, 0.5) }
+			):Play()
+			
+			local farPos = Vector3.new(thrownPosition.X.Offset + vel.X * 10, thrownPosition.Y.Offset + vel.Y * 10, 0)
+	
+			springing = true
+			
+			local bezierCurve = Bezier.new(
+				Vector3.new(thrownPosition.X.Offset, thrownPosition.Y.Offset, 0),
+				farPos,
+				Vector3.new(closedLastPos.X.Offset, closedLastPos.Y.Offset, 0)
+			)
+			local points = bezierCurve:GetPath(0.5)
+	
+			--setSpringPosGoal(UDim2.new(closedLastPos.X.Scale, farPos.X, closedLastPos.Y.Scale, farPos.Y))
+			setSpringPosGoal(UDim2.new(closedLastPos.X.Scale, points[math.ceil(#points/2)].X, closedLastPos.Y.Scale, points[math.ceil(#points/2)].Y))
+			setSpringSizeGoal(UDim2.fromOffset(60 - vel.Y * 2, 60 - vel.Y * 2))
+	
+			task.wait(0.1)
+	
+			--task.spawn(function()
+			--	for _, point in bezierCurve:GetPath(0.08) do
+			--		setSpringPosGoal(UDim2.new(closedLastPos.X.Scale, point.X, closedLastPos.Y.Scale, point.Y))
+			--		task.wait()
+			--	end
+			--end)
+	
+			setSpringSizeGoal(UDim2.fromOffset(60, 60))
+			setSpringPosGoal(UDim2.new(closedLastPos.X.Scale, closedLastPos.X.Offset, closedLastPos.Y.Scale, closedLastPos.Y.Offset))
+			menu.Area.UICorner.CornerRadius = UDim.new(0, 16)
+			task.delay(0.25, function() menu.List.Visible = false end)
+			menu.CanvasGroup.Visible = true
+	
+			OpenerDraggable = true
+	
+			if closing then closing:Cancel() end
+	
+			TweenService:Create(
+				menu.CanvasGroup,
+				TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+				{ GroupTransparency = 0 }
+			):Play()
+		else
+			lastPos = menu.Position
+		end
+	end
+	
+	
+	-- Opener ya no abre con click aquí (evita abrir al soltar el drag).
+	-- La apertura la controla el sistema H3XA minimize/restore del rediseño.
+	-- Alt+Y sigue pudiendo pedir apertura vía atributo.
+	UserInputService.InputBegan:Connect(function(inp, proc)
+		if proc then return end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftAlt) and inp.KeyCode == Enum.KeyCode.Y then
+			if menu:GetAttribute("H3XA_Minimized") then
+				menu:SetAttribute("H3XA_RequestOpen", true)
+			end
+		end
+	end)
+	
+	-- Parallax camera offset
+	local RunService = game:GetService("RunService")
+	local cam = workspace.CurrentCamera
+	
+	local lastLook = cam.CFrame.LookVector
+	local uiOffset = Vector2.new(0, 0)
+	local prevUiOffset = Vector2.new(0, 0)
+	
+	local function normalizeAngle(angle)
+		while angle > math.pi do angle = angle - 2 * math.pi end
+		while angle <= -math.pi do angle = angle + 2 * math.pi end
+		return angle
+	end
+	
+	RunService.RenderStepped:Connect(function(dt)
+		local look = cam.CFrame.LookVector
+	
+		local oldYaw   = math.atan2(lastLook.X, lastLook.Z)        
+		local newYaw   = math.atan2(look.X, look.Z)
+	
+		local oldPitch = math.asin(math.clamp(lastLook.Y, -1, 1))
+		local newPitch = math.asin(math.clamp(look.Y, -1, 1))
+	
+		local deltaYaw   = normalizeAngle(newYaw - oldYaw)
+		local deltaPitch = newPitch - oldPitch  
+	
+		local targetOffset = Vector2.new(deltaYaw * 15, deltaPitch * 15)
+	
+		uiOffset = uiOffset:Lerp(targetOffset, 0.2)
+		--uiOffset = uiOffset * Vector2.new(-1, 1)
+	
+		
+		if not OpenerDraggable then
+			MenuPosXOffset:SetGoal((MenuPosXOffset.Goal - prevUiOffset.X) + uiOffset.X)
+			MenuPosYOffset:SetGoal((MenuPosYOffset.Goal - prevUiOffset.Y) + uiOffset.Y)
+		end
+		prevUiOffset = uiOffset
+		
+		lastLook = look
+	end)
+	
+	
+	
+	script.Parent.AllowForSpring.Event:Wait()
+	springing = true
+end
+local function VTLALB_routine() -- Routine: StarterGui.H3XA_MM2.Menu.List.AutoSetup
+    local script = Instance.new("LocalScript")
+    script.Name = "AutoSetup"
+    script.Parent = Converted["_List"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	--local ts = game:GetService("TweenService")
+	
+	
+	--local States = {}
+	
+	--local FloatingButtonConnectionsMouse = {}
+	--local FloatingButtonConnectionsTouch = {}
+	
+	--task.wait(0.1)
+	
+	--AREA = script.Parent.Parent.Area
+	
+	--local function calculateWidth(n)
+	--	if n <= 3 then
+	--		return 30
+	--	else
+	--		local base = 30
+	--		local additional = math.floor((n - 3) / 3) * 30
+	--		return base + additional
+	--	end
+	--end
+	
+	----local listlayout = Instance.new("UIListLayout")
+	----listlayout.Parent = AREA
+	----listlayout.Padding = UDim.new(0, 10)
+	----listlayout.FillDirection = Enum.FillDirection.Vertical
+	----listlayout.SortOrder = Enum.SortOrder.LayoutOrder
+	----listlayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	
+	
+	
+	
+	--task.wait(.5) -- magic number to wait modules to load lmao
+	--task.spawn(function()
+	--	require(script.Parent.Parent.Parent.FUNCTIONS).refreshlist()
+	--	--for i = 1, 10 do
+	--	--	task.wait(.1)
+	--	--	require(script.Parent.Parent.Parent.FUNCTIONS).refreshlist()
+	--	--end
+	--end)
+end
+local function TVLRH_routine() -- Routine: StarterGui.H3XA_MM2.Menu.List.AddCustomModule.LocalScript
+    local script = Instance.new("LocalScript")
+    script.Name = "LocalScript"
+    script.Parent = Converted["_AddCustomModule1"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	local ts = game:GetService("TweenService")
+	
+	script.Parent.MouseButton1Click:Connect(function()
+		ts:Create(script.Parent.Parent.Parent.UIScale, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Scale = 0.9
+		}):Play()
+		ts:Create(script.Parent.Parent.Parent.Parent.AddCustomModule, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = UDim2.fromScale(0.5, 0.5)
+		}):Play()
+	end)
+end
+local function KUFNO_routine() -- Routine: StarterGui.H3XA_MM2.FloatingButtonSetting.ControlBarContainer.ControlBar.Visibility.LocalScript
+    local script = Instance.new("LocalScript")
+    script.Name = "LocalScript"
+    script.Parent = Converted["_Visibility"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	script.Parent.MouseButton1Click:Connect(function()
+		getgenv().H3XA_MM2FUNCTIONS.ftToggleVisibility()
+	end)
+end
+local function XLYNZG_routine() -- Routine: StarterGui.H3XA_MM2.FloatingButtonSetting.ControlBarContainer.ControlBar.Lock.LocalScript
+    local script = Instance.new("LocalScript")
+    script.Name = "LocalScript"
+    script.Parent = Converted["_Lock1"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	script.Parent.MouseButton1Click:Connect(function()
+		getgenv().H3XA_MM2FUNCTIONS.ftToggleLock()
+	end)
+end
+local function XAPKH_routine() -- Routine: StarterGui.H3XA_MM2.FloatingButtonSetting.ControlBarContainer.ControlBar.Exit.LocalScript
+    local script = Instance.new("LocalScript")
+    script.Name = "LocalScript"
+    script.Parent = Converted["_Exit"]
+    local req = require
+    local require = function(obj)
+        local routine = routine_module_scripts[obj]
+        if routine then
+            return routine()
+        end
+        return req(obj)
+    end
+
+
+	script.Parent.MouseButton1Click:Connect(function()
+		getgenv().H3XA_MM2FUNCTIONS.closeFinetuneFB()
+	end)
 end
 
-local function instantLaunch()
-    local loads = findGameButtons({"load", "cargar"})
-    if #loads > 0 then
-        activateGuiButton(loads[1].button)
-        task.wait(0.8)
-    end
-    return launchBoat()
-end
+coroutine.wrap(CEBY_routine)()
+coroutine.wrap(DSZIHQM_routine)()
+coroutine.wrap(XXZOB_routine)()
+coroutine.wrap(ONOAH_routine)()
+coroutine.wrap(JFQXCG_routine)()
+coroutine.wrap(EJGX_routine)()
+coroutine.wrap(FRPPL_routine)()
+coroutine.wrap(VOBA_routine)()
+coroutine.wrap(SZSARYI_routine)()
+coroutine.wrap(UVBTWP_routine)()
+coroutine.wrap(HCWF_routine)()
+coroutine.wrap(AWDPHWS_routine)()
+coroutine.wrap(VTLALB_routine)()
+coroutine.wrap(TVLRH_routine)()
+coroutine.wrap(KUFNO_routine)()
+coroutine.wrap(XLYNZG_routine)()
+coroutine.wrap(XAPKH_routine)()
 
-local function getQuestTargets(preferredQuest)
-    local now = os.clock()
-    local normalizedPreferred = lower(preferredQuest or activeStates._selectedQuestName or "")
-    local scanKey = normalizedPreferred ~= "" and normalizedPreferred or "all"
-    local cached = activeStates._questTargets
+-- H3XA X MM2 GLASSMORPHISM / ACRYLIC DARK UI (+ Mobile / PC layout)
+do
+    local root = Converted["_H3XA_MM2"]
+    local menu = Converted["_Menu"]
+    local env = (getgenv and getgenv()) or _G
+    local isMobile = (env.H3XA_MM2_DEVICE == "MOBILE") or (H3XA_MM2_DEVICE == "MOBILE")
 
-    if type(cached) == "table"
-        and activeStates._questScanAt
-        and activeStates._questScanKey == scanKey
-        and now - activeStates._questScanAt < 5 then
+    menu.BackgroundColor3 = Color3.fromRGB(2, 2, 6)
+    menu.BackgroundTransparency = 0
+    menu.ClipsDescendants = true
 
-        local valid = {}
-        for _, target in ipairs(cached) do
-            if typeof(target) == "Instance" and target.Parent then
-                valid[#valid + 1] = target
+    if isMobile then
+        -- MOBILE: MISMO layout HORIZONTAL que PC (lista izq + contenido der), solo más compacto
+        -- Top fijo en px para NO atravesar logo + título (BrandLogo ~ y18-66)
+        menu.Size = UDim2.fromOffset(560, 380)
+        menu.Position = UDim2.fromScale(0.5, 0.5)
+        menu.AnchorPoint = Vector2.new(0.5, 0.5)
+
+        Converted["_List"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_List"].Position = UDim2.new(0, 10, 0, 76)
+        Converted["_List"].Size = UDim2.new(0.30, 0, 1, -88)
+        Converted["_List"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        Converted["_List"].BackgroundTransparency = 1
+
+        Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_Area"].Position = UDim2.new(0.32, 6, 0, 76)
+        Converted["_Area"].Size = UDim2.new(0.66, -16, 1, -88)
+
+        local listSF = Converted["_List"]:FindFirstChildOfClass("ScrollingFrame")
+        if listSF then
+            listSF.ScrollBarThickness = 3
+            local pad = listSF:FindFirstChildOfClass("UIPadding")
+            if pad then
+                pad.PaddingLeft = UDim.new(0, 6)
+                pad.PaddingRight = UDim.new(0, 6)
+                pad.PaddingTop = UDim.new(0, 6)
+                pad.PaddingBottom = UDim.new(0, 6)
+            end
+            local ll = listSF:FindFirstChildOfClass("UIListLayout")
+            if ll then
+                ll.Padding = UDim.new(0, 8)
+                ll.HorizontalAlignment = Enum.HorizontalAlignment.Center
             end
         end
-        activeStates._questTargets = valid
-        return valid
+
+        local areaInner = Converted["_Area"]:FindFirstChild("Area")
+        if areaInner then
+            areaInner.BackgroundTransparency = 1
+            areaInner.BorderSizePixel = 0
+            if areaInner:IsA("ScrollingFrame") then
+                areaInner.ScrollBarThickness = 3
+            end
+        end
+
+        -- Filas un poco más altas para dedo, sin romper el layout horizontal
+        if Converted["_Toggle"] then
+            Converted["_Toggle"].Size = UDim2.new(1, 0, 0, 48)
+        end
+        if Converted["_Dropdown"] then
+            Converted["_Dropdown"].Size = UDim2.new(1, 0, 0, 40)
+        end
+        if Converted["_Range"] then
+            Converted["_Range"].Size = UDim2.new(1, 0, 0, 40)
+        end
+        if Converted["_ListButton"] then
+            Converted["_ListButton"].Size = UDim2.new(1, 0, 0, 36)
+            Converted["_ListButton"].TextSize = 14
+        end
+
+        -- Floating HUD buttons: más anchos para que el texto no se aplaste
+        if Converted["_FloatingButton"] then
+            Converted["_FloatingButton"].Size = UDim2.new(0, 72, 0, 100)
+            Converted["_FloatingButton"].TextSize = 12
+            local fbPad = Converted["_FloatingButton"]:FindFirstChildOfClass("UIPadding")
+            if fbPad then
+                fbPad.PaddingTop = UDim.new(0, 8)
+                fbPad.PaddingBottom = UDim.new(0, 8)
+                fbPad.PaddingLeft = UDim.new(0, 8)
+                fbPad.PaddingRight = UDim.new(0, 8)
+            end
+            local lock = Converted["_FloatingButton"]:FindFirstChild("Lock")
+            if lock then
+                lock.Size = UDim2.new(0, 16, 0, 16)
+                lock.Position = UDim2.new(1, -8, 1, -8)
+            end
+        end
+
+        if Converted["_Notifications"] then
+            Converted["_Notifications"].Size = UDim2.new(0, 240, 0, 320)
+            Converted["_Notifications"].Position = UDim2.new(1, -8, 0, 8)
+        end
+
+        if Converted["_Dialog"] then
+            Converted["_Dialog"].Size = UDim2.new(0, 280, 0, 150)
+        end
+
+        if Converted["_AddCustomModule"] then
+            Converted["_AddCustomModule"].Size = UDim2.new(0, 320, 0, 240)
+        end
+
+        local menuCorner = menu:FindFirstChildOfClass("UICorner")
+        if menuCorner then menuCorner.CornerRadius = UDim.new(0, 24) end
+    else
+        -- PC: horizontal layout, List/Area DEBAJO del logo+título (no atraviesan)
+        menu.Size = UDim2.fromOffset(720, 470)
+        Converted["_List"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_List"].Position = UDim2.new(0, 14, 0, 78)
+        Converted["_List"].Size = UDim2.new(0.28, 0, 1, -92)
+        Converted["_Area"].AnchorPoint = Vector2.new(0, 0)
+        Converted["_Area"].Position = UDim2.new(0.32, 8, 0, 78)
+        Converted["_Area"].Size = UDim2.new(0.66, -22, 1, -92)
+
+        local menuCorner = menu:FindFirstChildOfClass("UICorner")
+        if menuCorner then menuCorner.CornerRadius = UDim.new(0, 32) end
     end
 
-    local results = {}
-    local scored = {}
-    local seen = {}
-    local char = getChar()
-    local ownBuild = Workspace:FindFirstChild(LP.Name)
-    local teamAnchor = getTeamSpawn()
-    if teamAnchor and not teamAnchor:IsA("BasePart") then
-        teamAnchor = findFirstPart(teamAnchor)
+    Converted["_List"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Converted["_List"].BackgroundTransparency = 1
+    local finalListStroke = Converted["_List"]:FindFirstChildOfClass("UIStroke")
+    if finalListStroke then
+        finalListStroke.Color = Color3.fromRGB(255, 255, 255)
+        finalListStroke.Thickness = isMobile and 1.1 or 1.2
+        finalListStroke.Transparency = 0
+    end
+    Converted["_Area"].BackgroundTransparency = 1
+    Converted["_Area"].BorderSizePixel = 0
+    if Converted["_Area"]:IsA("CanvasGroup") then
+        Converted["_Area"].GroupTransparency = 0
+    end
+    local areaInner = Converted["_Area"]:FindFirstChild("Area")
+    if areaInner then
+        areaInner.BackgroundTransparency = 1
+        areaInner.BorderSizePixel = 0
     end
 
-    local preferredWords = {}
-    if containsAny(normalizedPreferred, {"find me"}) then
-        preferredWords = {"find me", "butter", "glue"}
-    elseif containsAny(normalizedPreferred, {"cloud"}) then
-        preferredWords = {"cloud"}
-    elseif containsAny(normalizedPreferred, {"soccer"}) then
-        preferredWords = {"soccer", "football", "ball", "goal"}
-    elseif containsAny(normalizedPreferred, {"target"}) then
-        preferredWords = {"target", "bullseye"}
-    elseif containsAny(normalizedPreferred, {"ramp"}) then
-        preferredWords = {"ramp", "hoop", "ring"}
-    elseif containsAny(normalizedPreferred, {"dragon"}) then
-        preferredWords = {"dragon"}
-    elseif containsAny(normalizedPreferred, {"the box", "box"}) then
-        preferredWords = {"mystery", "question", "questionmark", "box"}
-    elseif containsAny(normalizedPreferred, {"thin ice"}) then
-        preferredWords = {"thin ice", "ice"}
-    elseif containsAny(normalizedPreferred, {"invasion"}) then
-        preferredWords = {"invasion", "gingerbread", "present", "gift", "candy"}
+    -- DESTROY residual black squares forever
+    for _, child in ipairs(menu:GetDescendants()) do
+        if child.Name == "Stub" or child.Name == "BottomGlow" then
+            child:Destroy()
+        end
+    end
+    local ca = menu:FindFirstChild("CloseArea")
+    if ca then
+        ca.Visible = false
+        for _, d in ipairs(ca:GetDescendants()) do
+            if d:IsA("GuiObject") then
+                d.Visible = false
+                d.BackgroundTransparency = 1
+            end
+        end
+    end
+    local cg = menu:FindFirstChild("CanvasGroup")
+    if cg and not menu:GetAttribute("H3XA_Minimized") then
+        cg.Visible = false
+        cg.GroupTransparency = 1
+        cg.BackgroundTransparency = 1
     end
 
-    local universalWords = {
-        "quest", "mission", "objective",
-        "find me", "butter", "glue",
-        "cloud", "soccer", "football", "ball", "goal",
-        "target", "bullseye", "ramp", "hoop", "ring",
-        "dragon", "mystery", "question", "thin ice",
-        "invasion", "gingerbread", "present", "gift"
-    }
+    local menuStroke = menu:FindFirstChildOfClass("UIStroke")
+    if menuStroke then
+        menuStroke.Color = Color3.fromRGB(255, 255, 255)
+        menuStroke.Thickness = isMobile and 1.15 or 1
+        menuStroke.Transparency = isMobile and 0.55 or 0.78
+    end
 
-    local function partFor(obj)
-        if not obj then return nil end
-        if obj:IsA("BasePart") then return obj end
-        if obj:IsA("Model") then return findFirstPart(obj) end
-        if obj:IsA("ClickDetector") or obj:IsA("ProximityPrompt") or obj:IsA("TouchTransmitter")
-            or obj:IsA("SurfaceGui") or obj:IsA("BillboardGui") or obj:IsA("Decal") then
+    -- Soft glass strokes, but keep full-white neon borders on cards + buttons
+    for _, obj in ipairs(root:GetDescendants()) do
+        if obj:IsA("UIStroke") then
+            obj.Color = Color3.fromRGB(255, 255, 255)
             local parent = obj.Parent
-            if parent then
-                if parent:IsA("BasePart") then return parent end
-                return findFirstPart(parent)
-            end
-        end
-        return nil
-    end
-
-    local function textFor(obj)
-        local hay = lower(obj.Name)
-        if obj:IsA("ProximityPrompt") then
-            hay ..= " " .. lower(obj.ActionText) .. " " .. lower(obj.ObjectText)
-        end
-
-        local cur = obj.Parent
-        for _ = 1, 6 do
-            if not cur then break end
-            hay ..= " " .. lower(cur.Name)
-            cur = cur.Parent
-        end
-
-        local root = partFor(obj) or obj
-        if root then
-            local checked = 0
-            for _, child in ipairs(root:GetDescendants()) do
-                if child:IsA("TextLabel") or child:IsA("TextButton") then
-                    hay ..= " " .. lower(child.Text)
-                    checked += 1
-                elseif child:IsA("Decal") or child:IsA("Texture") then
-                    hay ..= " " .. lower(child.Name)
-                    checked += 1
-                end
-                if checked >= 12 then break end
-            end
-        end
-
-        return hay
-    end
-
-    local function distanceToTeam(part)
-        if not teamAnchor or not part then return math.huge end
-        return (part.Position - teamAnchor.Position).Magnitude
-    end
-
-    local function addCandidate(obj, extraScore)
-        if not obj or not obj.Parent or seen[obj] then return end
-        if char and obj:IsDescendantOf(char) then return end
-        if ownBuild and obj:IsDescendantOf(ownBuild) then return end
-
-        local part = partFor(obj)
-        if not part or not part.Parent then return end
-
-        local hay = textFor(obj)
-        local score = extraScore or 0
-        local dist = distanceToTeam(part)
-
-        if containsAny(hay, universalWords) then score += 6 end
-        if #preferredWords > 0 and containsAny(hay, preferredWords) then score += 22 end
-
-        if obj:IsA("ClickDetector") then score += 10 end
-        if obj:IsA("ProximityPrompt") then score += 8 end
-        if obj:IsA("TouchTransmitter") then score += 6 end
-        if obj:IsA("SurfaceGui") or obj:IsA("BillboardGui") then score += 7 end
-
-        if dist < 350 then score += 4 end
-        if dist < 180 then score += 4 end
-
-        -- Quest-specific physical fallbacks. These are deliberately only
-        -- enabled when that quest was selected so random map parts are not shown.
-        if normalizedPreferred ~= "" and teamAnchor then
-            local relativeY = part.Position.Y - teamAnchor.Position.Y
-            local sizeMag = part.Size.Magnitude
-
-            if containsAny(normalizedPreferred, {"find me"}) then
-                if obj:IsA("ClickDetector") and dist < 450 then score += 18 end
-                if containsAny(hay, {"find me", "butter", "glue"}) then score += 25 end
-
-            elseif containsAny(normalizedPreferred, {"cloud"}) then
-                if relativeY > 20 and dist < 320 and sizeMag > 12 then
-                    score += 18
-                    if not part.CanCollide or part.Transparency > 0.2 then score += 6 end
-                end
-
-            elseif containsAny(normalizedPreferred, {"soccer"}) then
-                if part:IsA("Part") and part.Shape == Enum.PartType.Ball and sizeMag > 6 and dist < 300 then
-                    score += 22
-                end
-                if containsAny(hay, {"ball", "goal", "soccer", "football"}) then score += 20 end
-
-            elseif containsAny(normalizedPreferred, {"target"}) then
-                if relativeY > 10 and dist < 320 and sizeMag > 7 then score += 13 end
-                if containsAny(hay, {"target", "bullseye"}) then score += 24 end
-
-            elseif containsAny(normalizedPreferred, {"ramp"}) then
-                if containsAny(hay, {"ramp", "hoop", "ring"}) and dist < 450 then score += 24 end
-
-            elseif containsAny(normalizedPreferred, {"dragon"}) then
-                if containsAny(hay, {"dragon"}) then score += 30 end
-
-            elseif containsAny(normalizedPreferred, {"the box", "box"}) then
-                if containsAny(hay, {"mystery", "question", "box"}) then score += 28 end
-
-            elseif containsAny(normalizedPreferred, {"thin ice"}) then
-                if containsAny(hay, {"ice"}) then score += 18 end
-
-            elseif containsAny(normalizedPreferred, {"invasion"}) then
-                if containsAny(hay, {"gingerbread", "present", "gift", "candy", "invasion"}) then score += 25 end
-            end
-        end
-
-        local threshold = normalizedPreferred ~= "" and 10 or 12
-        if score < threshold then return end
-
-        seen[obj] = true
-        scored[#scored + 1] = {
-            target = obj,
-            part = part,
-            score = score,
-            distance = dist,
-        }
-    end
-
-    local descendants = Workspace:GetDescendants()
-    for i, d in ipairs(descendants) do
-        if d:IsA("ClickDetector") then
-            addCandidate(d, 3)
-        elseif d:IsA("ProximityPrompt") then
-            addCandidate(d, 2)
-        elseif d:IsA("TouchTransmitter") then
-            addCandidate(d, 1)
-        elseif d:IsA("SurfaceGui") or d:IsA("BillboardGui") then
-            addCandidate(d, 2)
-        elseif d:IsA("BasePart") then
-            local hay = lower(d.Name)
-            if containsAny(hay, universalWords)
-                or (#preferredWords > 0 and containsAny(hay, preferredWords)) then
-                addCandidate(d, 2)
-            elseif normalizedPreferred ~= "" and teamAnchor then
-                local dist = distanceToTeam(d)
-                if dist < 350 then
-                    -- Selected-quest physical heuristics need to inspect nearby
-                    -- generic Part/MeshPart names too.
-                    if containsAny(normalizedPreferred, {"cloud", "soccer", "target", "find me"}) then
-                        addCandidate(d, 0)
-                    end
-                end
-            end
-        elseif d:IsA("Model") then
-            local hay = lower(d.Name)
-            if containsAny(hay, universalWords)
-                or (#preferredWords > 0 and containsAny(hay, preferredWords)) then
-                addCandidate(d, 2)
-            end
-        end
-
-        if i % 300 == 0 then task.wait() end
-    end
-
-    table.sort(scored, function(a, b)
-        if a.score ~= b.score then return a.score > b.score end
-        return a.distance < b.distance
-    end)
-
-    local usedParts = {}
-    for _, item in ipairs(scored) do
-        if item.part and not usedParts[item.part] then
-            usedParts[item.part] = true
-            results[#results + 1] = item.target
-            if #results >= 50 then break end
-        end
-    end
-
-    activeStates._questTargets = results
-    activeStates._questScanAt = now
-    activeStates._questScanKey = scanKey
-    return results
-end
-
-local function interactQuestPrompt(target)
-    if not target or not target.Parent then return false end
-
-    local part
-    if target:IsA("BasePart") then
-        part = target
-    elseif target:IsA("Model") then
-        part = findFirstPart(target)
-    elseif target:IsA("ClickDetector") or target:IsA("ProximityPrompt") or target:IsA("TouchTransmitter") then
-        part = target.Parent and (target.Parent:IsA("BasePart") and target.Parent or findFirstPart(target.Parent))
-    end
-    if not part then return false end
-
-    tpToPart(part, Vector3.new(0, 2, 0))
-    task.wait(0.18)
-
-    local prompt = target:IsA("ProximityPrompt") and target or target:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt and fireproximityprompt then
-        local ok = pcall(fireproximityprompt, prompt)
-        if ok then return true end
-    end
-
-    local click = target:IsA("ClickDetector") and target or target:FindFirstChildWhichIsA("ClickDetector", true)
-    if click and fireclickdetector then
-        local ok = pcall(fireclickdetector, click)
-        if ok then return true end
-    end
-
-    -- Touch-based quest objectives such as Target / Cloud can be completed
-    -- simply by reaching their spawned objective.
-    if part then
-        return touchPart(part)
-    end
-
-    return false
-end
-
-activeStates._questDisplayInfo = function(target)
-    if not target or not target.Parent then
-        return "Objetivo", ""
-    end
-
-    local part
-    if target:IsA("BasePart") then
-        part = target
-    elseif target:IsA("Model") then
-        part = findFirstPart(target)
-    else
-        part = target.Parent and (target.Parent:IsA("BasePart") and target.Parent or findFirstPart(target.Parent))
-    end
-
-    local hay = lower(target.Name)
-    local cur = target.Parent
-    for _ = 1, 6 do
-        if not cur then break end
-        hay ..= " " .. lower(cur.Name)
-        cur = cur.Parent
-    end
-
-    if target:IsA("ProximityPrompt") then
-        hay ..= " " .. lower(target.ActionText) .. " " .. lower(target.ObjectText)
-    end
-
-    local scanRoot = part or target
-    if scanRoot then
-        local checked = 0
-        for _, child in ipairs(scanRoot:GetDescendants()) do
-            if child:IsA("TextLabel") or child:IsA("TextButton") then
-                hay ..= " " .. lower(child.Text)
-                checked += 1
-                if checked >= 8 then break end
-            end
-        end
-    end
-
-    local questName
-    if containsAny(hay, {"find me", "butter", "glue"}) then
-        questName = "Find Me"
-    elseif containsAny(hay, {"cloud"}) then
-        questName = "Cloud"
-    elseif containsAny(hay, {"soccer", "football", "goal", "ball"}) then
-        questName = "Soccer"
-    elseif containsAny(hay, {"bullseye", "target"}) then
-        questName = "Target"
-    elseif containsAny(hay, {"ramp", "hoop", "ring"}) then
-        questName = "Ramp"
-    elseif containsAny(hay, {"dragon"}) then
-        questName = "Dragon"
-    elseif containsAny(hay, {"mystery", "question", "the box"}) then
-        questName = "The Box"
-    elseif containsAny(hay, {"thin ice", "ice"}) then
-        questName = "Thin Ice"
-    elseif containsAny(hay, {"invasion", "gingerbread", "present", "gift"}) then
-        questName = "Invasion"
-    end
-
-    local rawName = part and part.Name or target.Name
-    if target:IsA("ProximityPrompt") and target.ObjectText ~= "" then
-        rawName = target.ObjectText
-    elseif target:IsA("ClickDetector") and target.Parent then
-        rawName = target.Parent.Name
-    end
-
-    return questName or activeStates._selectedQuestName or rawName, rawName
-end
-
-activeStates._showQuestZeroPanel = function(retryCallback)
-    local selected = activeStates._selectedQuestName or (ENV.__HX_LANG == "en" and "QUEST OBJECTIVE" or "OBJETIVO DE MISIÓN")
-    activeStates._showNotFoundPanel(
-        (ENV.__HX_LANG == "en" and "QUEST OBJECTIVE - " or "OBJETIVO DE MISIÓN - ") .. tostring(selected),
-        retryCallback,
-        nil
-    )
-end
-
-activeStates._runQuestDetection = function(onDone)
-    local selectedName = activeStates._selectedQuestName
-    local searchLabel = (ENV.__HX_LANG == "en" and "QUEST OBJECTIVE - " or "OBJETIVO DE MISIÓN - ")
-        .. tostring(selectedName or (ENV.__HX_LANG == "en" and "ACTIVE QUEST" or "MISIÓN ACTIVA"))
-
-    local function retryQuestSearch()
-        if not alive then return end
-        openModal("Misiones / Objetivos", function()
-            modalButton(
-                "Detectando misiones...",
-                ENV.__HX_TR("Máximo 10 segundos"),
-                function() end
+            local keepSolid = parent and (
+                parent.Name == "List"
+                or parent.Name == "SectionFlat"
+                or parent.Name == "Menu"
+                or parent.Name == "ToggleRow"
+                or parent:IsA("TextButton")
             )
-            activeStates._runQuestDetection(onDone)
-        end)
+            if not keepSolid and obj.Transparency < 0.5 then
+                obj.Transparency = 0.75
+            end
+            if parent and parent.Name == "List" then
+                obj.Transparency = 0
+                obj.Thickness = isMobile and 1.1 or 1.2
+            end
+            if parent and parent.Name == "SectionFlat" then
+                -- flat sections: no forced stroke
+            end
+            if parent and (parent.Name == "ToggleRow" or parent:IsA("TextButton")) then
+                obj.Transparency = 0
+                if obj.Thickness < 1 then obj.Thickness = 1.15 end
+            end
+        elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            obj.TextStrokeTransparency = 1
+            if isMobile and obj:IsA("TextLabel") and obj.TextScaled then
+                -- keep TextScaled; mobile rows already taller
+            end
+        end
     end
 
-    return activeStates._runSearch10(
-        searchLabel,
-        function()
-            activeStates._questScanAt = 0
-            local targets = getQuestTargets(selectedName)
-            if type(targets) == "table" and #targets > 0 then
-                return targets
-            end
-            return nil
-        end,
-        function(targets)
-            if not Modal.Visible then return end
-            clearModal()
-            if onDone then onDone(targets) end
-        end,
-        retryQuestSearch,
-        true,
-        nil,
-        nil
-    )
+    Converted["_HubDesc"].Text = ""
+    Converted["_HubDesc"].Visible = false
+    Converted["_HubName"].Text = ""
+    Converted["_HubName"].Visible = false
 end
 
-local function lowPlayerServer()
-    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    local body
-    local ok, result = pcall(function() return game:HttpGet(url) end)
-    if ok then body = result end
-
-    if not body then
-        local req = (syn and syn.request) or http_request or request
-        if req then
-            local okReq, response = pcall(req, {Url = url, Method = "GET"})
-            if okReq and response then body = response.Body end
-        end
-    end
-
-    if not body then return nil end
-
-    local okJson, data = pcall(function() return HttpService:JSONDecode(body) end)
-    if not okJson or not data or type(data.data) ~= "table" then return nil end
-
-    table.sort(data.data, function(a, b)
-        return (a.playing or 999) < (b.playing or 999)
-    end)
-
-    for _, server in ipairs(data.data) do
-        if server.id ~= game.JobId and server.playing < server.maxPlayers then
-            return server
-        end
-    end
-
-    return nil
-end
-
-local function restoreHiddenPlayers()
-    for part, old in pairs(hiddenPlayerCache) do
-        if part and part.Parent then pcall(function() part.LocalTransparencyModifier = old end) end
-    end
-    table.clear(hiddenPlayerCache)
-end
-
-local function applyHideOtherPlayers()
-    if not activeStates.hideOtherPlayers then return restoreHiddenPlayers() end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character then
-            for _, d in ipairs(plr.Character:GetDescendants()) do
-                if d:IsA("BasePart") then
-                    if hiddenPlayerCache[d] == nil then hiddenPlayerCache[d] = d.LocalTransparencyModifier end
-                    d.LocalTransparencyModifier = 1
-                end
-            end
-        end
-    end
-end
-
-local function restoreHiddenBoats()
-    for part, old in pairs(hiddenBoatCache) do
-        if part and part.Parent then pcall(function() part.LocalTransparencyModifier = old end) end
-    end
-    table.clear(hiddenBoatCache)
-end
-
-local function applyHideOtherBoats()
-    if not activeStates.hideOtherBoats then return restoreHiddenBoats() end
-    local root = getRoot()
-    if not root then return end
-    local ownRoot = getBoatRoot()
-    local own = {}
-    if ownRoot then
-        local okOwn, parts = pcall(function() return ownRoot:GetConnectedParts(true) end)
-        if okOwn then for _, p in ipairs(parts) do own[p] = true end end
-        own[ownRoot] = true
-    end
-
-    local params = OverlapParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local char = getChar()
-    if char then params.FilterDescendantsInstances = {char} end
-    params.MaxParts = 500
-
-    local ok, nearby = pcall(function()
-        return Workspace:GetPartBoundsInRadius(root.Position, 1200, params)
-    end)
-    if not ok or not nearby then return end
-
-    local processedRoots = {}
-    for _, seat in ipairs(nearby) do
-        if (seat:IsA("Seat") or seat:IsA("VehicleSeat")) and not isCharacterPart(seat) then
-            local assembly = seat.AssemblyRootPart or seat
-            if not processedRoots[assembly] and not own[assembly] then
-                processedRoots[assembly] = true
-                local okParts, parts = pcall(function() return assembly:GetConnectedParts(true) end)
-                if okParts then
-                    for _, p in ipairs(parts) do
-                        if p:IsA("BasePart") and not own[p] then
-                            if hiddenBoatCache[p] == nil then hiddenBoatCache[p] = p.LocalTransparencyModifier end
-                            p.LocalTransparencyModifier = 1
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function applyPerformanceState()
-    local disableParticles = activeStates.removeParticles or activeStates.fpsBooster
-    local disableShadows = activeStates.disableShadows or activeStates.fpsBooster or activeStates.lowGraphics
-    local removeWater = activeStates.removeWaterEffects or activeStates.fpsBooster or activeStates.lowGraphics
-    local lowQuality = activeStates.lowGraphics or activeStates.fpsBooster
-
-    -- One Workspace pass maximum. The previous build could traverse the entire
-    -- map multiple times for one graphics update.
-    if disableParticles or disableShadows then
-        local descendants = Workspace:GetDescendants()
-        for i, d in ipairs(descendants) do
-            if disableParticles and (d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") or d:IsA("Smoke") or d:IsA("Fire") or d:IsA("Sparkles")) then
-                if particleCache[d] == nil then particleCache[d] = d.Enabled end
-                d.Enabled = false
-            end
-            if disableShadows and d:IsA("BasePart") then
-                if shadowCache[d] == nil then shadowCache[d] = d.CastShadow end
-                d.CastShadow = false
-            end
-            if i % 320 == 0 then task.wait() end
-        end
-    end
-
-    if not disableParticles then
-        for d, old in pairs(particleCache) do if d and d.Parent then pcall(function() d.Enabled = old end) end end
-        table.clear(particleCache)
-    end
-
-    if disableShadows then
-        Lighting.GlobalShadows = false
-    else
-        Lighting.GlobalShadows = ENV.__HX_initialGlobalShadows
-        for d, old in pairs(shadowCache) do if d and d.Parent then pcall(function() d.CastShadow = old end) end end
-        table.clear(shadowCache)
-    end
-
-    if removeWater then
-        pcall(function()
-            Workspace.Terrain.WaterWaveSize = 0
-            Workspace.Terrain.WaterWaveSpeed = 0
-            Workspace.Terrain.WaterReflectance = 0
-            Workspace.Terrain.WaterTransparency = 1
-        end)
-    else
-        pcall(function()
-            Workspace.Terrain.WaterWaveSize = ENV.__HX_initialTerrain.WaterWaveSize
-            Workspace.Terrain.WaterWaveSpeed = ENV.__HX_initialTerrain.WaterWaveSpeed
-            Workspace.Terrain.WaterReflectance = ENV.__HX_initialTerrain.WaterReflectance
-            Workspace.Terrain.WaterTransparency = ENV.__HX_initialTerrain.WaterTransparency
-        end)
-    end
-
-    pcall(function()
-        if lowQuality then settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        elseif ENV.__HX_initialQuality then settings().Rendering.QualityLevel = ENV.__HX_initialQuality end
-    end)
-end
-
---====================================================
--- Populate UI
---====================================================
--- FARM
-makeSection(pages.Farm, "FARM", "Finalización, oro y recolección automática.")
-
-toggleRow(pages.Farm, "Auto Farm Gold / Auto Finish",
-    "Completa el recorrido automáticamente para obtener oro.",
-    "autoFarm", false, function(on)
-        if on and activeStates._buildFarmBusy then
-            activeStates.autoFarm = false
-            toast("Ya se está farmeando oro para una construcción.")
-            return
-        end
-
-        activeStates._farmToken = (tonumber(activeStates._farmToken) or 0) + 1
-        local token = activeStates._farmToken
-
-        if on then
-            if not ENV.__HX_farmStartedAt then ENV.__HX_farmStartedAt = os.clock() end
-            task.spawn(function()
-                while alive and activeStates.autoFarm and activeStates._farmToken == token do
-                    if getRoot() and not activeStates._finishBusy then
-                        local ok, msg = finishRun(0.40, token)
-                        if not ok and msg and msg ~= "Auto Farm detenido" and msg ~= "Ya hay una finalización en curso" then
-                            toast(msg)
-                        end
-
-                        -- Do not immediately hammer every stage again while the
-                        -- game is still streaming/resetting after the Treasure.
-                        local cooldown = ok and 6.0 or 2.0
-                        local waited = 0
-                        while waited < cooldown and alive and activeStates.autoFarm and activeStates._farmToken == token do
-                            task.wait(0.5)
-                            waited += 0.5
-                        end
-                    else
-                        task.wait(0.75)
-                    end
-                end
-            end)
-        elseif ENV.__HX_farmStartedAt then
-            ENV.__HX_farmAccumulated += os.clock() - ENV.__HX_farmStartedAt
-            ENV.__HX_farmStartedAt = nil
-        end
-    end)
-
-actionButton(pages.Farm, "Auto Finish ahora", "Completa el recorrido una vez.", function()
-    local statusToken = activeStates._beginTimedStatus("Completando recorrido...", "")
-    local ok, msg = finishRun(0.40)
-    activeStates._endTimedStatus(statusToken)
-    toast(ok and "Finalización ejecutada" or (msg or "No se pudo finalizar"))
-end, "FINALIZAR")
-
-toggleRow(pages.Farm, "Auto Collect", "Recoge automáticamente recompensas y objetos cercanos.", "autoCollect", false)
-
-toggleRow(pages.Farm, "Auto Launch", "Lanza el barco automáticamente cuando sea necesario.", "autoLaunch", false, function(on)
-    activeStates._launchToken = (tonumber(activeStates._launchToken) or 0) + 1
-    local token = activeStates._launchToken
-    if on then
-        task.spawn(function()
-            while alive and activeStates.autoLaunch and activeStates._launchToken == token do
-                launchBoat()
-                for _ = 1, 8 do
-                    if not alive or not activeStates.autoLaunch or activeStates._launchToken ~= token then break end
-                    task.wait(0.5)
-                end
-            end
-        end)
-    end
-end)
-
-toggleRow(pages.Farm, "Auto Quest compatible", "Completa automáticamente la misión seleccionada cuando esté disponible.", "autoQuest", false, function(on)
-    activeStates._autoQuestSearchToken = (tonumber(activeStates._autoQuestSearchToken) or 0) + 1
-    if not on then
-        selectedQuestTarget = nil
-        activeStates._autoQuestSearchBusy = false
-        activeStates._questTargets = nil
-        activeStates._questScanAt = 0
-        if activeStates._activeSearchStateKey == "autoQuest" then
-            activeStates._cancelActiveSearch()
-        end
-    end
-end)
-
-actionButton(pages.Farm, "Selector de Misiones", "Selecciona la misión que quieres buscar o automatizar.", function()
-    openModal("Selector de Misiones", function()
-        local questChoices = {
-            "Cloud",
-            "Dragon",
-            "Find Me",
-            "Soccer",
-            "The Box",
-            "Thin Ice",
-            "Ramp",
-            "Target",
-            "Invasion",
-        }
-
-        for i, questName in ipairs(questChoices) do
-            local selected = lower(activeStates._selectedQuestName or "") == lower(questName)
-
-            modalButton(
-                string.format("%02d · %s%s", i, questName, selected and " ✓" or ""),
-                selected
-                    and (ENV.__HX_TR("Misión activa para búsqueda: ") .. questName)
-                    or ENV.__HX_TR("Selecciona la misión que quieres buscar o automatizar."),
-                function()
-                    activeStates._selectedQuestName = questName
-                    selectedQuestTarget = nil
-                    activeStates._questTargets = nil
-                    activeStates._questScanAt = 0
-                    activeStates._questScanKey = nil
-                    closeModal()
-                    toast(ENV.__HX_TR("Misión seleccionada: ") .. questName)
-                end
-            )
-        end
-    end)
-end, "SELECCIONAR")
-
-activeStates._startAutoQuestSearch = function()
-    if not alive or not activeStates.autoQuest or activeStates._autoQuestSearchBusy then return end
-
-    activeStates._autoQuestSearchBusy = true
-    local selectedName = activeStates._selectedQuestName
-    local label = (ENV.__HX_LANG == "en" and "QUEST OBJECTIVE - " or "OBJETIVO DE MISIÓN - ")
-        .. tostring(selectedName or (ENV.__HX_LANG == "en" and "ACTIVE QUEST" or "MISIÓN ACTIVA"))
-
-    local function retryAutoQuest()
-        if not alive or not activeStates.autoQuest then return end
-        activeStates._autoQuestSearchBusy = false
-        task.delay(0.08, function()
-            if alive and activeStates.autoQuest then
-                activeStates._startAutoQuestSearch()
-            end
-        end)
-    end
-
-    local function cancelAutoQuest()
-        activeStates.autoQuest = false
-        activeStates._autoQuestSearchBusy = false
-        selectedQuestTarget = nil
-        local render = activeStates._toggleRenderers and activeStates._toggleRenderers.autoQuest
-        if render then pcall(render, false) end
-    end
-
-    local ok, reason = activeStates._runSearch10(
-        label,
-        function()
-            activeStates._questScanAt = 0
-            local quests = getQuestTargets(selectedName)
-            return type(quests) == "table" and quests[1] or nil
-        end,
-        function(target)
-            selectedQuestTarget = target
-            activeStates._autoQuestSearchBusy = false
-        end,
-        retryAutoQuest,
-        false,
-        "autoQuest",
-        cancelAutoQuest
-    )
-
-    if reason == "cancelled" then
-        activeStates._autoQuestSearchBusy = false
-    end
-end
-
-local farmStatsRow, farmStatsTitle, farmStatsDesc = makeRow(pages.Farm, "FARM STATS", "Esperando datos de oro...")
-farmStatsRow.Size = UDim2.new(1, 0, 0, 92)
-farmStatsTitle.Size = UDim2.new(1, -32, 0, 20)
-farmStatsDesc.Size = UDim2.new(1, -32, 0, 46)
-farmStatsDesc.TextYAlignment = Enum.TextYAlignment.Top
-
--- AUTO BUILD
-makeSection(pages.AutoBuild, "CREACIÓN AUTOMÁTICA", "Crea barcos, carros y aviones adaptándose a los materiales disponibles.")
-
--- Farm exclusivo de una construcción pendiente.
--- Solo se usa cuando el oro ACTUAL no cubre el coste total estimado.
-activeStates._farmGoldForBuild = function(targetGold, resumeCallback)
-    if activeStates._buildFarmBusy then
-        toast("Ya se está farmeando oro para una construcción.")
-        return
-    end
-
-    activeStates._buildFarmBusy = true
-    local statusToken = activeStates._beginTimedStatus("Farmeando para construir...", "")
-    activeStates._buildFarmTarget = math.max(0, math.floor(tonumber(targetGold) or 0))
-    activeStates._buildFarmToken = (tonumber(activeStates._buildFarmToken) or 0) + 1
-    local token = activeStates._buildFarmToken
-
-    closeModal()
-    toast("Farmeando oro para completar la construcción...")
-
-    task.spawn(function()
-        local failures = 0
-
-        while alive
-            and activeStates._buildFarmBusy
-            and activeStates._buildFarmToken == token
-            and (tonumber(getGoldValue()) or 0) < activeStates._buildFarmTarget do
-
-            local beforeGold = tonumber(getGoldValue()) or 0
-            local ok, msg = finishRun(0.40)
-
-            if ok then
-                failures = 0
-
-                -- Espera a que el juego entregue el oro/resetee la ronda.
-                local waited = 0
-                while waited < 7
-                    and alive
-                    and activeStates._buildFarmBusy
-                    and activeStates._buildFarmToken == token
-                    and (tonumber(getGoldValue()) or 0) < activeStates._buildFarmTarget do
-
-                    task.wait(0.5)
-                    waited += 0.5
-
-                    if (tonumber(getGoldValue()) or 0) > beforeGold and waited >= 2 then
-                        break
-                    end
-                end
-
-                task.wait(1.0)
-            else
-                failures += 1
-                if msg and msg ~= "Ya hay una finalización en curso" then
-                    toast(msg)
-                end
-
-                if failures >= 8 then break end
-                task.wait(2.0)
-            end
-        end
-
-        local reachedTarget = alive
-            and activeStates._buildFarmToken == token
-            and (tonumber(getGoldValue()) or 0) >= (activeStates._buildFarmTarget or 0)
-
-        activeStates._buildFarmBusy = false
-        activeStates._buildFarmTarget = nil
-        activeStates._endTimedStatus(statusToken)
-
-        if reachedTarget then
-            toast("Oro suficiente. Comprando automáticamente los recursos faltantes...")
-            task.wait(0.35)
-            if resumeCallback then task.spawn(resumeCallback) end
-        elseif alive and activeStates._buildFarmToken == token then
-            toast("No pude conseguir suficiente oro para continuar automáticamente.")
-        end
-    end)
-end
-
-actionButton(pages.AutoBuild, "Auto Crear Barco", "Crea automáticamente uno de tres barcos usando tus bloques disponibles.", function()
-    openModal("Selecciona un barco", function()
-        local function buildPreset(level, purchaseChoice)
-            if activeStates.autoBuildBoatBusy then
-                toast("Ya se está creando un barco.")
-                return
-            end
-            if activeStates.autoFarm or activeStates._finishBusy then
-                toast("Desactiva Auto Farm antes de crear un barco.")
-                return
-            end
-
-            local data = LP:FindFirstChild("Data")
-            if not data then
-                toast("No encontré los datos de bloques del jugador.")
-                return
-            end
-
-            -- Only structural materials are counted toward the hull.
-            local structureNames = {
-                "WoodBlock", "SmoothWoodBlock", "StoneBlock", "RustedBlock",
-                "MetalBlock", "IronBlock", "SteelBlock", "ConcreteBlock",
-                "BrickBlock", "MarbleBlock", "CoalBlock", "TitaniumBlock",
-                "ObsidianBlock", "PlasticBlock", "GlassBlock", "SandBlock"
-            }
-
-            local function stock(name)
-                local obj = data:FindFirstChild(name)
-                return obj and tonumber(obj.Value) or 0
-            end
-
-            local function structuralStock()
-                local total = 0
-                for _, name in ipairs(structureNames) do
-                    total += math.max(0, math.floor(stock(name)))
-                end
-                return total
-            end
-
-            local selectedTarget = level == "advanced" and 220 or (level == "intermediate" and 120 or 60)
-            local missingHull = math.max(selectedTarget - structuralStock(), 0)
-            local missingDrive = stock("BoatMotor") <= 0 or stock("CarSeat") <= 0
-            local gold = tonumber(getGoldValue()) or 0
-
-            -- Material packs contain 50 blocks. Use one predictable material
-            -- pack per preset so the required Gold can be calculated before asking.
-            local materialPackPrice = level == "advanced" and 400 or (level == "intermediate" and 325 or 250)
-            local materialPacksNeeded = math.ceil(missingHull / 50)
-            local requiredGold = (materialPacksNeeded * materialPackPrice) + (missingDrive and 450 or 0)
-
-            if purchaseChoice == nil and (missingHull > 0 or missingDrive) then
-                if gold >= requiredGold then
-                    -- The player can already afford EVERYTHING missing:
-                    -- ask only whether they want HX Boat to buy it.
-                    openModal("Recursos insuficientes", function()
-                        local info
-                        if ENV.__HX_LANG == "en" then
-                            info = string.format(
-                                "Missing hull blocks: %d · Gold: %d / %d%s",
-                                missingHull,
-                                gold,
-                                requiredGold,
-                                missingDrive and " · Boat Motor/Car Seat missing" or ""
-                            )
-                        else
-                            info = string.format(
-                                "Bloques de casco faltantes: %d · Oro: %d / %d%s",
-                                missingHull,
-                                gold,
-                                requiredGold,
-                                missingDrive and " · Falta Boat Motor/Car Seat" or ""
-                            )
-                        end
-
-                        modalButton(
-                            "SÍ, COMPRAR Y CONTINUAR",
-                            info .. "\n" .. ENV.__HX_TR("HX Boat comprará únicamente con el oro del juego y continuará automáticamente."),
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, true)
-                            end
-                        )
-
-                        modalButton(
-                            "NO, CONTINUAR SIN COMPRAR",
-                            "Continuar con los materiales actuales; el barco puede reducirse.",
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, false)
-                            end
-                        )
-                    end)
-                else
-                    -- Only here do we offer farming: current Gold does NOT cover
-                    -- the full estimated purchase.
-                    openModal("Farmear para completar", function()
-                        local info
-                        if ENV.__HX_LANG == "en" then
-                            info = string.format(
-                                "Current Gold: %d · Needed: %d · Missing Gold: %d",
-                                gold,
-                                requiredGold,
-                                math.max(requiredGold - gold, 0)
-                            )
-                        else
-                            info = string.format(
-                                "Oro actual: %d · Necesario: %d · Oro faltante: %d",
-                                gold,
-                                requiredGold,
-                                math.max(requiredGold - gold, 0)
-                            )
-                        end
-
-                        modalButton(
-                            "FARMEAR Y COMPRAR",
-                            info .. "\n" .. ENV.__HX_TR("Te faltan recursos y tu oro actual no alcanza para comprarlos. HX Boat puede farmear hasta conseguir el oro necesario, comprar automáticamente lo faltante y continuar."),
-                            function()
-                                closeModal()
-                                activeStates._farmGoldForBuild(requiredGold, function()
-                                    buildPreset(level, true)
-                                end)
-                            end
-                        )
-
-                        modalButton(
-                            "CONTINUAR SIN FARMEAR",
-                            "Continuar con los materiales actuales; el barco puede reducirse.",
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, false)
-                            end
-                        )
-                    end)
-                end
-                return
-            end
-
-            activeStates.autoBuildBoatBusy = true
-            local statusToken = activeStates._beginTimedStatus("Construyendo...", "Preparando construcción")
-            closeModal()
-            toast("Creando nuevo barco. El resultado dependerá de los materiales y de la cantidad que tengas de cada uno.")
-            task.wait(0.20)
-
-            local okBuild, errBuild = pcall(function()
-                local char = getChar()
-                local hum = getHum()
-                local root = getRoot()
-                if not char or not hum or not root then error("Personaje no disponible") end
-
-                local tool = char:FindFirstChild("BuildingTool")
-                if not tool then
-                    local backpack = LP:FindFirstChildOfClass("Backpack")
-                    local backpackTool = backpack and backpack:FindFirstChild("BuildingTool")
-                    if backpackTool then
-                        hum:EquipTool(backpackTool)
-                        task.wait(0.18)
-                        tool = char:FindFirstChild("BuildingTool") or backpackTool
-                    end
-                end
-                if not tool then
-                    local playerBuild = Workspace:FindFirstChild(LP.Name)
-                    tool = playerBuild and playerBuild:FindFirstChild("BuildingTool")
-                end
-
-                local rf = tool and tool:FindFirstChild("RF", true)
-                if not rf or not rf:IsA("RemoteFunction") then
-                    error(ENV.__HX_TR("No encontré BuildingTool. Abre el modo de construcción e inténtalo otra vez."))
-                end
-
-                data = LP:FindFirstChild("Data")
-                if not data then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local function liveStock(name)
-                    local obj = data:FindFirstChild(name)
-                    return obj and tonumber(obj.Value) or 0
-                end
-
-                local function liveStructuralStock()
-                    local total = 0
-                    for _, name in ipairs(structureNames) do
-                        total += math.max(0, math.floor(liveStock(name)))
-                    end
-                    return total
-                end
-
-                ----------------------------------------------------------------
-                -- OPTIONAL PURCHASE FLOW
-                -- Uses the game's own shop event; the server still validates
-                -- the product and deducts the player's normal in-game Gold.
-                ----------------------------------------------------------------
-                if purchaseChoice == true then
-                    local shopRemote = Workspace:FindFirstChild("ItemBoughtFromShop")
-                    local boughtAnything = false
-
-                    local function buyProduct(productName, price, watchNames)
-                        if not shopRemote or not shopRemote:IsA("RemoteEvent") then return false end
-                        local currentGold = tonumber(getGoldValue()) or 0
-                        if currentGold < price then return false end
-
-                        local before = 0
-                        for _, n in ipairs(watchNames) do before += liveStock(n) end
-
-                        local ok = pcall(function()
-                            shopRemote:FireServer(productName)
-                        end)
-                        if not ok then return false end
-
-                        task.wait(0.50)
-
-                        local after = 0
-                        for _, n in ipairs(watchNames) do after += liveStock(n) end
-                        local newGold = tonumber(getGoldValue()) or currentGold
-                        return after > before or newGold < currentGold
-                    end
-
-                    if liveStock("BoatMotor") <= 0 or liveStock("CarSeat") <= 0 then
-                        if buyProduct("Boat Motor", 450, {"BoatMotor", "CarSeat"}) then
-                            boughtAnything = true
-                        end
-                    end
-
-                    local target = level == "advanced" and 220 or (level == "intermediate" and 120 or 60)
-                    local productName = level == "advanced" and "Titanium Block"
-                        or (level == "intermediate" and "Metal Block" or "Wood Block")
-                    local internalName = level == "advanced" and "TitaniumBlock"
-                        or (level == "intermediate" and "MetalBlock" or "WoodBlock")
-                    local packPrice = level == "advanced" and 400
-                        or (level == "intermediate" and 325 or 250)
-
-                    local packsNeeded = math.ceil(math.max(target - liveStructuralStock(), 0) / 50)
-                    for _ = 1, packsNeeded do
-                        if not buyProduct(productName, packPrice, {internalName}) then break end
-                        boughtAnything = true
-                    end
-
-                    if boughtAnything then
-                        toast("Compra automática completada. Continuando construcción...")
-                    else
-                        toast("No pude completar una compra automática; continuaré con los recursos disponibles.")
-                    end
-                    task.wait(0.15)
-                end
-
-                ----------------------------------------------------------------
-                -- BUILD ZONE + ORIGIN
-                ----------------------------------------------------------------
-                local zone
-                for _, v in ipairs(Workspace:GetChildren()) do
-                    local teamValue = v:FindFirstChild("TeamColor")
-                    if teamValue then
-                        local okTeam, value = pcall(function() return teamValue.Value end)
-                        if okTeam and value == LP.TeamColor then
-                            zone = v
-                            break
-                        end
-                    end
-                end
-                if not zone then zone = getTeamSpawn() end
-
-                local zonePart = zone and (zone:IsA("BasePart") and zone or findFirstPart(zone))
-                if not zonePart then
-                    error(ENV.__HX_TR("No pude detectar tu zona de construcción."))
-                end
-
-                local totalAvailable = liveStructuralStock()
-                local buildLevel = level
-                if level == "advanced" and totalAvailable < 150 then
-                    buildLevel = totalAvailable >= 82 and "intermediate" or "basic"
-                    toast("No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.")
-                elseif level == "intermediate" and totalAvailable < 82 then
-                    buildLevel = "basic"
-                    toast("No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.")
-                end
-
-                if totalAvailable < 15 then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local localRoot = zonePart.CFrame:PointToObjectSpace(root.Position)
-                local margin = buildLevel == "advanced" and 9 or (buildLevel == "intermediate" and 7 or 5)
-                local halfX = math.max((zonePart.Size.X * 0.5) - margin, 0)
-                local halfZ = math.max((zonePart.Size.Z * 0.5) - margin, 0)
-                local clampedX = math.clamp(localRoot.X, -halfX, halfX)
-                local clampedZ = math.clamp(localRoot.Z, -halfZ, halfZ)
-                local topLocal = Vector3.new(clampedX, (zonePart.Size.Y * 0.5) + 1.5, clampedZ)
-                local basePosition = zonePart.CFrame:PointToWorldSpace(topLocal)
-
-                local look = root.CFrame.LookVector
-                local flatLook = Vector3.new(look.X, 0, look.Z)
-                if flatLook.Magnitude < 0.01 then flatLook = Vector3.new(0, 0, -1) end
-                flatLook = flatLook.Unit
-                local origin = CFrame.lookAt(basePosition, basePosition + flatLook)
-
-                ----------------------------------------------------------------
-                -- INVENTORY + MATERIAL SELECTION
-                ----------------------------------------------------------------
-                local remaining = {}
-                for _, name in ipairs(structureNames) do
-                    local n = liveStock(name)
-                    if n > 0 then remaining[name] = math.floor(n) end
-                end
-                for _, name in ipairs({
-                    "BoatMotor", "WinterBoatMotor", "UltraBoatMotor",
-                    "CarSeat", "PilotSeat", "Seat"
-                }) do
-                    local n = liveStock(name)
-                    if n > 0 then remaining[name] = math.floor(n) end
-                end
-
-                local function countOf(name)
-                    return remaining[name] or 0
-                end
-
-                local function reserve(name, amount)
-                    amount = amount or 1
-                    if countOf(name) < amount then return false end
-                    remaining[name] = countOf(name) - amount
-                    return true
-                end
-
-                local materialPriority
-                if buildLevel == "basic" then
-                    materialPriority = {
-                        "WoodBlock", "SmoothWoodBlock", "StoneBlock", "RustedBlock",
-                        "PlasticBlock", "MetalBlock", "IronBlock", "SteelBlock",
-                        "ConcreteBlock", "TitaniumBlock", "ObsidianBlock"
-                    }
-                elseif buildLevel == "intermediate" then
-                    materialPriority = {
-                        "MetalBlock", "IronBlock", "SteelBlock", "StoneBlock",
-                        "ConcreteBlock", "BrickBlock", "MarbleBlock", "WoodBlock",
-                        "SmoothWoodBlock", "TitaniumBlock", "ObsidianBlock"
-                    }
-                else
-                    materialPriority = {
-                        "TitaniumBlock", "ObsidianBlock", "MetalBlock", "SteelBlock",
-                        "IronBlock", "ConcreteBlock", "MarbleBlock", "BrickBlock",
-                        "StoneBlock", "WoodBlock", "SmoothWoodBlock"
-                    }
-                end
-
-                local function bestMaterial()
-                    local best, bestCount
-                    for _, name in ipairs(materialPriority) do
-                        local n = countOf(name)
-                        if n > 0 and (not bestCount or n > bestCount) then
-                            best, bestCount = name, n
-                        end
-                    end
-                    return best
-                end
-
-                local primaryMaterial = bestMaterial()
-                if not primaryMaterial then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local points = {}
-                local function add(x, y, z, role)
-                    points[#points + 1] = {x = x, y = y, z = z, role = role or "hull"}
-                end
-
-                ----------------------------------------------------------------
-                -- BOAT SHAPES (v42 advanced)
-                -- Multi-layer hull, keel, tapered bow, raised gunwales,
-                -- open cockpit pedestal zone, motor bay and windshield frames.
-                ----------------------------------------------------------------
-                if buildLevel == "basic" then
-                    -- BASIC: compact sport runabout with keel + double-layer sides.
-                    -- Bottom hull with tapered bow and flat transom.
-                    for z = -5, 3 do
-                        local width
-                        if z <= -5 then width = 0
-                        elseif z == -4 then width = 1
-                        else width = 1 end
-                        for x = -width, width do
-                            add(x, 0, z, "hull")
-                        end
-                    end
-                    -- Keel strip for stability.
-                    for z = -3, 2 do add(0, -1, z, "hull") end
-
-                    -- Second hull layer (sides rise one step).
-                    for z = -4, 3 do
-                        local width = z == -4 and 0 or 1
-                        for x = -width, width do
-                            if not (x == 0 and z >= -1 and z <= 1) then
-                                add(x, 1, z, "hull")
-                            end
-                        end
-                    end
-
-                    -- Pointed prow stack.
-                    add(0, 1, -5, "armor")
-                    add(0, 2, -5, "armor")
-                    add(-1, 1, -4, "armor")
-                    add(0, 1, -4, "armor")
-                    add(1, 1, -4, "armor")
-                    add(0, 2, -4, "armor")
-
-                    -- Gunwales / side rails (cockpit open at center).
-                    for z = -3, 2 do
-                        add(-1, 2, z, "armor")
-                        add(1, 2, z, "armor")
-                    end
-
-                    -- Foredeck in front of driver.
-                    for x = -1, 1 do add(x, 1, -3, "hull") end
-                    for x = -1, 1 do add(x, 1, -2, "hull") end
-
-                    -- Transom + motor mount pad.
-                    for x = -1, 1 do
-                        add(x, 1, 3, "armor")
-                        add(x, 2, 3, "armor")
-                    end
-                    add(0, 1, 2, "hull")
-
-                    -- Mini windshield posts.
-                    add(-1, 3, -1, "glass")
-                    add(0, 3, -1, "glass")
-                    add(1, 3, -1, "glass")
-
-                elseif buildLevel == "intermediate" then
-                    -- INTERMEDIATE: 5-wide V-hull cruiser with deck, bulkheads and windshield.
-                    for z = -6, 5 do
-                        local width
-                        if z <= -6 then width = 0
-                        elseif z == -5 then width = 1
-                        elseif z == -4 then width = 2
-                        else width = 2 end
-                        for x = -width, width do
-                            add(x, 0, z, "hull")
-                        end
-                    end
-                    -- Keel + chine reinforcement.
-                    for z = -4, 3 do add(0, -1, z, "hull") end
-                    for z = -3, 3 do
-                        add(-2, -1, z, "hull")
-                        add(2, -1, z, "hull")
-                    end
-
-                    -- Deck layer with open cockpit well around (0,1,0)/(0,1,1).
-                    for z = -5, 5 do
-                        local width
-                        if z <= -5 then width = 0
-                        elseif z == -4 then width = 1
-                        else width = 2 end
-                        for x = -width, width do
-                            local cockpit = (x == 0 and z >= -1 and z <= 1)
-                            if not cockpit then
-                                add(x, 1, z, "hull")
-                            end
-                        end
-                    end
-
-                    -- Raised bow deck stack.
-                    add(0, 1, -6, "armor")
-                    add(0, 2, -6, "armor")
-                    for x = -1, 1 do
-                        add(x, 1, -5, "armor")
-                        add(x, 2, -5, "armor")
-                    end
-                    for x = -2, 2 do add(x, 2, -4, "armor") end
-
-                    -- Side gunwales full length.
-                    for z = -3, 5 do
-                        add(-2, 2, z, "armor")
-                        add(2, 2, z, "armor")
-                    end
-                    -- Interior bulkheads leaving driver free.
-                    for z = -2, 2 do
-                        add(-1, 2, z, "armor")
-                        add(1, 2, z, "armor")
-                    end
-
-                    -- Stern deck / motor bay.
-                    for x = -2, 2 do
-                        add(x, 1, 5, "armor")
-                        add(x, 2, 5, "armor")
-                    end
-                    for x = -1, 1 do add(x, 1, 4, "hull") end
-
-                    -- Windshield frame.
-                    for x = -2, 2 do add(x, 3, -2, "glass") end
-                    add(-2, 3, -1, "armor")
-                    add(2, 3, -1, "armor")
-
-                    -- Small rear cabin pillars.
-                    add(-2, 3, 3, "armor")
-                    add(2, 3, 3, "armor")
-                    for x = -1, 1 do add(x, 3, 4, "armor") end
-
-                else
-                    -- ADVANCED: 7-wide multi-deck yacht-style hull.
-                    for z = -8, 6 do
-                        local width
-                        if z <= -8 then width = 0
-                        elseif z == -7 then width = 1
-                        elseif z == -6 then width = 2
-                        elseif z == -5 then width = 3
-                        else width = 3 end
-                        for x = -width, width do
-                            add(x, 0, z, "hull")
-                        end
-                    end
-                    -- Deep keel + bilge rails.
-                    for z = -5, 4 do add(0, -1, z, "hull") end
-                    for z = -4, 4 do
-                        add(-1, -1, z, "hull")
-                        add(1, -1, z, "hull")
-                    end
-                    for z = -3, 3 do
-                        add(-3, -1, z, "armor")
-                        add(3, -1, z, "armor")
-                    end
-
-                    -- Main deck with open cockpit at center.
-                    for z = -7, 6 do
-                        local width
-                        if z <= -7 then width = 0
-                        elseif z == -6 then width = 1
-                        elseif z == -5 then width = 2
-                        else width = 3 end
-                        for x = -width, width do
-                            local cockpit = (math.abs(x) <= 1 and z >= -1 and z <= 1)
-                            if not cockpit then
-                                add(x, 1, z, "hull")
-                            end
-                        end
-                    end
-
-                    -- Stepped prow with layered armor.
-                    add(0, 1, -8, "armor")
-                    add(0, 2, -8, "armor")
-                    add(0, 3, -8, "armor")
-                    for x = -1, 1 do
-                        add(x, 1, -7, "armor")
-                        add(x, 2, -7, "armor")
-                    end
-                    for x = -2, 2 do
-                        add(x, 1, -6, "armor")
-                        add(x, 2, -6, "armor")
-                    end
-                    for x = -3, 3 do add(x, 2, -5, "armor") end
-
-                    -- Full gunwales + interior longitudinal bulkheads.
-                    for z = -4, 6 do
-                        add(-3, 2, z, "armor")
-                        add(3, 2, z, "armor")
-                    end
-                    for z = -3, 3 do
-                        add(-2, 2, z, "armor")
-                        add(2, 2, z, "armor")
-                    end
-
-                    -- Foredeck plate.
-                    for x = -2, 2 do
-                        for z = -4, -2 do add(x, 1, z, "hull") end
-                    end
-
-                    -- Twin motor pads on transom.
-                    for x = -3, 3 do
-                        add(x, 1, 6, "armor")
-                        add(x, 2, 6, "armor")
-                    end
-                    add(-2, 1, 5, "hull")
-                    add(2, 1, 5, "hull")
-                    add(0, 1, 5, "hull")
-
-                    -- Cabin sides + rear bulkhead (seat zone kept free).
-                    for z = 1, 4 do
-                        add(-2, 3, z, "armor")
-                        add(2, 3, z, "armor")
-                    end
-                    for x = -2, 2 do add(x, 3, 4, "armor") end
-
-                    -- Windshield across cabin face.
-                    for x = -2, 2 do add(x, 3, -1, "glass") end
-                    add(-2, 3, -2, "armor")
-                    add(2, 3, -2, "armor")
-
-                    -- Cabin roof (rear only).
-                    for x = -2, 2 do
-                        for z = 2, 4 do add(x, 4, z, "armor") end
-                    end
-                    -- Roof supports.
-                    add(-2, 4, 1, "armor")
-                    add(2, 4, 1, "armor")
-                end
-
-                ----------------------------------------------------------------
-                -- PLACEMENT
-                ----------------------------------------------------------------
-                local placed = 0
-                local usedMaterials = {}
-                local delayPerBlock = ENV.__HX_DEVICE == "mobile" and 0.080 or 0.055
-
-                local function materialForRole(role)
-                    if role == "glass" then
-                        if countOf("GlassBlock") > 0 then return "GlassBlock" end
-                        if countOf(primaryMaterial) > 0 then return primaryMaterial end
-                    end
-
-                    if role == "armor" then
-                        local armorPriority = buildLevel == "advanced"
-                            and {"ObsidianBlock", "TitaniumBlock", "MetalBlock", "SteelBlock", "IronBlock", "ConcreteBlock", "StoneBlock", "WoodBlock"}
-                            or {"MetalBlock", "SteelBlock", "IronBlock", "ConcreteBlock", "StoneBlock", "WoodBlock", "SmoothWoodBlock"}
-                        for _, name in ipairs(armorPriority) do
-                            if countOf(name) > 0 then return name end
-                        end
-                    end
-                    if countOf(primaryMaterial) > 0 then return primaryMaterial end
-                    return bestMaterial()
-                end
-
-                local function placeNamed(blockName, worldCF)
-                    if not blockName or countOf(blockName) <= 0 then return false end
-                    local idObject = data:FindFirstChild(blockName)
-                    if not idObject then return false end
-
-                    local before = tonumber(idObject.Value) or 0
-                    if before <= 0 then return false end
-
-                    local relativeCF = zonePart.CFrame:ToObjectSpace(worldCF)
-                    local okPlace = pcall(function()
-                        rf:InvokeServer(
-                            blockName,
-                            before,
-                            zonePart,
-                            relativeCF,
-                            true,
-                            worldCF,
-                            false
-                        )
-                    end)
-
-                    if not okPlace then return false end
-                    task.wait(0.025)
-
-                    local after = tonumber(idObject.Value) or before
-                    -- Most executors/game versions update Data immediately.
-                    -- Even if replication is delayed, reserve locally once RF returned.
-                    reserve(blockName, 1)
-                    usedMaterials[blockName] = (usedMaterials[blockName] or 0) + 1
-                    placed += 1
-                    return true
-                end
-
-                if buildLevel == "basic" then
-                    toast("Creando barco básico...")
-                elseif buildLevel == "intermediate" then
-                    toast("Creando barco intermedio...")
-                else
-                    toast("Creando barco avanzado...")
-                end
-
-                for i, item in ipairs(points) do
-                    if not alive then error("Cerrado") end
-                    local material = materialForRole(item.role)
-                    if not material then break end
-
-                    local worldCF = origin * CFrame.new(item.x * 2, item.y * 2, item.z * 2)
-                    placeNamed(material, worldCF)
-
-                    if i % 12 == 0 then
-                        task.wait(delayPerBlock * 2)
-                    else
-                        task.wait(delayPerBlock)
-                    end
-                end
-
-                ----------------------------------------------------------------
-                -- DRIVING SYSTEM FIX
-                --
-                -- Important order:
-                -- 1. Boat Motor(s) mounted directly on the stern structure
-                -- 2. Car Seat LAST
-                --
-                -- The motor must belong to the same physical assembly as the hull.
-                -- The Car Seat is then placed last so it can bind to the mounted
-                -- motors without leaving a controllable loose motor behind.
-                ----------------------------------------------------------------
-                local function firstOwned(candidates)
-                    for _, name in ipairs(candidates) do
-                        if countOf(name) > 0 and data:FindFirstChild(name) then
-                            return name
-                        end
-                    end
-                    return nil
-                end
-
-                local motorName = firstOwned({"UltraBoatMotor", "WinterBoatMotor", "BoatMotor"})
-                local driverSeatName = firstOwned({"CarSeat"})
-
-                local desiredMotors = buildLevel == "advanced" and 2 or 1
-                local motorCount = motorName and math.min(desiredMotors, countOf(motorName)) or 0
-
-                if motorName and motorCount > 0 then
-                    -- IMPORTANT: motors are mounted ON the stern structure, not
-                    -- behind it. In the previous build there was a small physical
-                    -- gap: the Car Seat could control the motor, but the motor was
-                    -- not part of the hull assembly and detached after launch.
-                    --
-                    -- These coordinates intentionally sink the motor base slightly
-                    -- into the stern mounting block so BABFT creates one connected
-                    -- physical assembly when the block is placed.
-                    local motorZGrid = buildLevel == "basic" and 3 or (buildLevel == "intermediate" and 4 or 5)
-                    local motorHeight = 4.5
-
-                    for n = 1, motorCount do
-                        local xGrid = 0
-                        if motorCount == 2 then
-                            xGrid = n == 1 and -2 or 2
-                        end
-
-                        local motorCF = origin * CFrame.new(
-                            xGrid * 2,
-                            motorHeight,
-                            motorZGrid * 2
-                        )
-
-                        placeNamed(motorName, motorCF)
-
-                        -- Give the server time to create the physical connection
-                        -- before another ability block is added.
-                        task.wait(0.32)
-                    end
-
-                    -- Let every motor finish replicating before the Car Seat is
-                    -- placed and performs its automatic binding pass.
-                    task.wait(0.38)
-                end
-
-                -- Place the controller only AFTER the motors so it can bind to them.
-                -- The cockpit is intentionally elevated above the hull. A structural
-                -- pedestal is placed first, then the seat is placed one full grid
-                -- level above it so the seat cannot be embedded between hull blocks.
-                if driverSeatName and countOf(driverSeatName) > 0 then
-                    -- Driver sits near the center of mass, facing the bow.
-                    -- The cockpit is never filled by hull generation.
-                    local cockpitZ = buildLevel == "basic" and 0 or (buildLevel == "intermediate" and 0 or 0)
-                    local pedestalMaterial = materialForRole("hull")
-
-                    if pedestalMaterial then
-                        local pedestalCF = origin * CFrame.new(0, 2, cockpitZ * 2)
-                        placeNamed(pedestalMaterial, pedestalCF)
-                        task.wait(0.10)
-                    end
-
-                    local seatCF = origin * CFrame.new(0, 5.5, cockpitZ * 2)
-                    placeNamed(driverSeatName, seatCF)
-                    task.wait(0.90)
-                end
-
-                if motorCount > 0 and driverSeatName then
-                    toast("Sistema de conducción añadido: Boat Motor + Car Seat.")
-                else
-                    -- A normal Seat can still be added for sitting, but it is not
-                    -- treated as a steering controller.
-                    if countOf("Seat") > 0 then
-                        local seatCF = origin * CFrame.new(0, 2, 0)
-                        placeNamed("Seat", seatCF)
-                    end
-                    toast("No hay Boat Motor o Car Seat disponible; el barco no tendrá conducción normal.")
-                end
-
-                ----------------------------------------------------------------
-                -- Refresh seat/boat caches.
-                ----------------------------------------------------------------
-                worldCache.boatRoot = nil
-                worldCache.nearestSeat = nil
-                worldCache.boatRootAt = 0
-                worldCache.seatAt = 0
-
-                if placed <= 0 then
-                    error("BuildingTool rechazó las colocaciones")
-                end
-
-                toast(
-                    ENV.__HX_TR("Material principal: ")
-                    .. tostring(primaryMaterial)
-                    .. ENV.__HX_TR(" · Bloques disponibles usados: ")
-                    .. tostring(placed)
-                )
-            end)
-
-            activeStates.autoBuildBoatBusy = false
-            activeStates._endTimedStatus(statusToken)
-
-            if okBuild then
-                toast("Barco creado correctamente.")
-            else
-                toast(ENV.__HX_TR("No se pudo completar el barco: ") .. tostring(errBuild))
-            end
-        end
-
-        modalButton("Básico", "Lancha deportiva con quilla, casco de doble capa, proa puntiaguda, barandillas y parabrisas.", function()
-            buildPreset("basic")
-        end)
-
-        modalButton("Intermedio", "Crucero V-hull de 5 anchos con cubierta completa, mamparos, bahía de motor y parabrisas.", function()
-            buildPreset("intermediate")
-        end)
-
-        modalButton("Avanzado", "Yate multi-cubierta de 7 anchos: quilla profunda, proa escalonada, cabina con techo y bahía dual de motores.", function()
-            buildPreset("advanced")
-        end)
-    end)
-end, "CONSTRUIR")
-
--- Shared filtered builder for CAR and PLANE.
--- It intentionally uses the same safeguards as Auto Crear Barco:
--- inventory checks, Gold purchase confirmation, preset downgrade,
--- nearest valid build position and one-build-at-a-time locking.
-activeStates._openAutoVehicle = function(kind)
-    local isCar = kind == "car"
-    openModal(isCar and "Selecciona un carro" or "Selecciona un avión", function()
-        local function buildPreset(level, purchaseChoice)
-            if activeStates.autoBuildBoatBusy then
-                toast("Ya se está creando un vehículo.")
-                return
-            end
-            if activeStates.autoFarm or activeStates._finishBusy then
-                toast("Desactiva Auto Farm antes de crear un vehículo.")
-                return
-            end
-
-            local data = LP:FindFirstChild("Data")
-            if not data then
-                toast("No encontré los datos de bloques del jugador.")
-                return
-            end
-
-            local structureNames = {
-                "WoodBlock", "SmoothWoodBlock", "StoneBlock", "RustedBlock",
-                "MetalBlock", "IronBlock", "SteelBlock", "ConcreteBlock",
-                "BrickBlock", "MarbleBlock", "CoalBlock", "TitaniumBlock",
-                "ObsidianBlock", "PlasticBlock", "GlassBlock", "SandBlock"
-            }
-
-            local wheelCandidates = {
-                "Wheel", "SmallWheel", "CarWheel", "FrontWheel", "BackWheel"
-            }
-            local planePropulsionCandidates = {
-                "JetTurbine", "Jet", "UltraThruster", "Thruster", "Rocket"
-            }
-
-            local function stock(name)
-                local obj = data:FindFirstChild(name)
-                return obj and tonumber(obj.Value) or 0
-            end
-
-            local function structuralStock()
-                local total = 0
-                for _, name in ipairs(structureNames) do
-                    total += math.max(0, math.floor(stock(name)))
-                end
-                return total
-            end
-
-            local function bestOwned(candidates)
-                local best, bestCount
-                for _, name in ipairs(candidates) do
-                    local amount = stock(name)
-                    if amount > 0 and (not bestCount or amount > bestCount) then
-                        best, bestCount = name, amount
-                    end
-                end
-                return best, bestCount or 0
-            end
-
-            local target
-            if isCar then
-                target = level == "advanced" and 118 or (level == "intermediate" and 76 or 40)
-            else
-                target = level == "advanced" and 142 or (level == "intermediate" and 88 or 48)
-            end
-
-            local missingStructure = math.max(target - structuralStock(), 0)
-            local componentMissing
-            local componentPacksNeeded = 0
-
-            if isCar then
-                local wheelStock = 0
-                for _, wheelName in ipairs(wheelCandidates) do
-                    wheelStock += math.max(0, math.floor(stock(wheelName)))
-                end
-
-                local neededWheels = level == "advanced" and 6 or 4
-                local missingWheels = math.max(neededWheels - wheelStock, 0)
-                local seatMissing = stock("CarSeat") <= 0
-
-                -- New Car Pack = Car Seat + 4 wheels.
-                componentPacksNeeded = math.max(
-                    math.ceil(missingWheels / 4),
-                    seatMissing and 1 or 0
-                )
-                componentMissing = componentPacksNeeded > 0
-            else
-                local propulsionStock = 0
-                for _, propulsionName in ipairs(planePropulsionCandidates) do
-                    propulsionStock += math.max(0, math.floor(stock(propulsionName)))
-                end
-
-                local neededPropulsion = level == "advanced" and 3 or (level == "intermediate" and 2 or 1)
-                local seatMissing = stock("PilotSeat") <= 0
-                local propulsionMissing = propulsionStock < neededPropulsion
-
-                -- Plane Blocks contains 3 Jet Turbines + Pilot Seat.
-                componentPacksNeeded = (seatMissing or propulsionMissing) and 1 or 0
-                componentMissing = componentPacksNeeded > 0
-            end
-
-            local gold = tonumber(getGoldValue()) or 0
-            local materialPackPrice = level == "advanced" and 400 or (level == "intermediate" and 325 or 250)
-            local materialPacksNeeded = math.ceil(missingStructure / 50)
-            local componentGold = isCar and (componentPacksNeeded * 750) or (componentPacksNeeded * 4000)
-            local requiredGold = (materialPacksNeeded * materialPackPrice) + componentGold
-
-            if purchaseChoice == nil and (missingStructure > 0 or componentMissing) then
-                if gold >= requiredGold then
-                    -- Enough Gold for the complete missing set -> ask to purchase.
-                    openModal("Recursos insuficientes", function()
-                        local info
-                        if ENV.__HX_LANG == "en" then
-                            info = string.format(
-                                "Missing structural blocks: %d · Gold: %d / %d%s",
-                                missingStructure,
-                                gold,
-                                requiredGold,
-                                componentMissing and " · Vehicle components missing" or ""
-                            )
-                        else
-                            info = string.format(
-                                "Bloques estructurales faltantes: %d · Oro: %d / %d%s",
-                                missingStructure,
-                                gold,
-                                requiredGold,
-                                componentMissing and " · Faltan componentes del vehículo" or ""
-                            )
-                        end
-
-                        modalButton(
-                            "SÍ, COMPRAR Y CONTINUAR",
-                            info .. "\n" .. ENV.__HX_TR("HX Boat comprará únicamente con el oro del juego y continuará automáticamente."),
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, true)
-                            end
-                        )
-
-                        modalButton(
-                            "NO, CONTINUAR SIN COMPRAR",
-                            "Continuar con los materiales actuales; el vehículo puede reducirse.",
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, false)
-                            end
-                        )
-                    end)
-                else
-                    -- Not enough Gold for the full missing set -> and ONLY then
-                    -- offer temporary farming.
-                    openModal("Farmear para completar", function()
-                        local info
-                        if ENV.__HX_LANG == "en" then
-                            info = string.format(
-                                "Current Gold: %d · Needed: %d · Missing Gold: %d",
-                                gold,
-                                requiredGold,
-                                math.max(requiredGold - gold, 0)
-                            )
-                        else
-                            info = string.format(
-                                "Oro actual: %d · Necesario: %d · Oro faltante: %d",
-                                gold,
-                                requiredGold,
-                                math.max(requiredGold - gold, 0)
-                            )
-                        end
-
-                        modalButton(
-                            "FARMEAR Y COMPRAR",
-                            info .. "\n" .. ENV.__HX_TR("Te faltan recursos y tu oro actual no alcanza para comprarlos. HX Boat puede farmear hasta conseguir el oro necesario, comprar automáticamente lo faltante y continuar."),
-                            function()
-                                closeModal()
-                                activeStates._farmGoldForBuild(requiredGold, function()
-                                    buildPreset(level, true)
-                                end)
-                            end
-                        )
-
-                        modalButton(
-                            "CONTINUAR SIN FARMEAR",
-                            "Continuar con los materiales actuales; el vehículo puede reducirse.",
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, false)
-                            end
-                        )
-                    end)
-                end
-                return
-            end
-
-            activeStates.autoBuildBoatBusy = true
-            local statusToken = activeStates._beginTimedStatus("Construyendo...", "Preparando construcción")
-            closeModal()
-
-            if isCar then
-                toast("Creando nuevo carro. El resultado dependerá de los materiales y componentes que tengas.")
-            else
-                toast("Creando nuevo avión. El resultado dependerá de los materiales y componentes que tengas.")
-            end
-            task.wait(0.20)
-
-            local okBuild, errBuild = pcall(function()
-                local char = getChar()
-                local hum = getHum()
-                local root = getRoot()
-                if not char or not hum or not root then error("Personaje no disponible") end
-
-                local tool = char:FindFirstChild("BuildingTool")
-                if not tool then
-                    local backpack = LP:FindFirstChildOfClass("Backpack")
-                    local backpackTool = backpack and backpack:FindFirstChild("BuildingTool")
-                    if backpackTool then
-                        hum:EquipTool(backpackTool)
-                        task.wait(0.18)
-                        tool = char:FindFirstChild("BuildingTool") or backpackTool
-                    end
-                end
-                if not tool then
-                    local playerBuild = Workspace:FindFirstChild(LP.Name)
-                    tool = playerBuild and playerBuild:FindFirstChild("BuildingTool")
-                end
-
-                local rf = tool and tool:FindFirstChild("RF", true)
-                if not rf or not rf:IsA("RemoteFunction") then
-                    error(ENV.__HX_TR("No encontré BuildingTool. Abre el modo de construcción e inténtalo otra vez."))
-                end
-
-                data = LP:FindFirstChild("Data")
-                if not data then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local function liveStock(name)
-                    local obj = data:FindFirstChild(name)
-                    return obj and tonumber(obj.Value) or 0
-                end
-
-                local function liveStructuralStock()
-                    local total = 0
-                    for _, name in ipairs(structureNames) do
-                        total += math.max(0, math.floor(liveStock(name)))
-                    end
-                    return total
-                end
-
-                local function bestLive(candidates)
-                    local best, bestCount
-                    for _, name in ipairs(candidates) do
-                        local amount = liveStock(name)
-                        if amount > 0 and (not bestCount or amount > bestCount) then
-                            best, bestCount = name, amount
-                        end
-                    end
-                    return best, bestCount or 0
-                end
-
-                ------------------------------------------------------------
-                -- OPTIONAL SHOP PURCHASES
-                ------------------------------------------------------------
-                if purchaseChoice == true then
-                    local shopRemote = Workspace:FindFirstChild("ItemBoughtFromShop")
-                    local boughtAnything = false
-
-                    local function buyProduct(productName, watchNames, minimumGold)
-                        if not shopRemote or not shopRemote:IsA("RemoteEvent") then return false end
-                        local beforeGold = tonumber(getGoldValue()) or 0
-                        if beforeGold < (minimumGold or 0) then return false end
-
-                        local before = 0
-                        for _, n in ipairs(watchNames) do before += liveStock(n) end
-
-                        local ok = pcall(function()
-                            shopRemote:FireServer(productName)
-                        end)
-                        if not ok then return false end
-
-                        task.wait(0.50)
-
-                        local after = 0
-                        for _, n in ipairs(watchNames) do after += liveStock(n) end
-                        local afterGold = tonumber(getGoldValue()) or beforeGold
-                        return after > before or afterGold < beforeGold
-                    end
-
-                    local targetNow
-                    if isCar then
-                        targetNow = level == "advanced" and 118 or (level == "intermediate" and 76 or 40)
-                    else
-                        targetNow = level == "advanced" and 142 or (level == "intermediate" and 88 or 48)
-                    end
-
-                    -- Materials: predictable 50-block package per preset.
-                    local productName = level == "advanced" and "Titanium Block"
-                        or (level == "intermediate" and "Metal Block" or "Wood Block")
-                    local internalName = level == "advanced" and "TitaniumBlock"
-                        or (level == "intermediate" and "MetalBlock" or "WoodBlock")
-                    local packPrice = level == "advanced" and 400
-                        or (level == "intermediate" and 325 or 250)
-
-                    local materialPacks = math.ceil(math.max(targetNow - liveStructuralStock(), 0) / 50)
-                    for _ = 1, materialPacks do
-                        if not buyProduct(productName, {internalName}, packPrice) then break end
-                        boughtAnything = true
-                    end
-
-                    if isCar then
-                        local function liveWheelTotal()
-                            local total = 0
-                            for _, name in ipairs(wheelCandidates) do
-                                total += math.max(0, math.floor(liveStock(name)))
-                            end
-                            return total
-                        end
-
-                        local wanted = level == "advanced" and 6 or 4
-                        local missingWheels = math.max(wanted - liveWheelTotal(), 0)
-                        local carPacks = math.max(
-                            math.ceil(missingWheels / 4),
-                            liveStock("CarSeat") <= 0 and 1 or 0
-                        )
-
-                        for _ = 1, carPacks do
-                            if not buyProduct(
-                                "New Car Pack",
-                                {"CarSeat", "FrontWheel", "BackWheel", "Wheel", "SmallWheel", "CarWheel"},
-                                750
-                            ) then
-                                break
-                            end
-                            boughtAnything = true
-                        end
-                    else
-                        local propulsionTotal = 0
-                        for _, name in ipairs(planePropulsionCandidates) do
-                            propulsionTotal += math.max(0, math.floor(liveStock(name)))
-                        end
-
-                        local wanted = level == "advanced" and 3 or (level == "intermediate" and 2 or 1)
-                        if liveStock("PilotSeat") <= 0 or propulsionTotal < wanted then
-                            if buyProduct(
-                                "Plane Blocks",
-                                {"PilotSeat", "JetTurbine", "Jet", "UltraThruster", "Thruster", "Rocket"},
-                                4000
-                            ) then
-                                boughtAnything = true
-                            end
-                        end
-                    end
-
-                    if boughtAnything then
-                        toast("Compra automática completada. Continuando construcción...")
-                    else
-                        toast("No pude completar una compra automática; continuaré con los recursos disponibles.")
-                    end
-                    task.wait(0.15)
-                end
-
-                ------------------------------------------------------------
-                -- BUILD ZONE + NEAREST POSITION
-                ------------------------------------------------------------
-                local zone
-                for _, v in ipairs(Workspace:GetChildren()) do
-                    local teamValue = v:FindFirstChild("TeamColor")
-                    if teamValue then
-                        local okTeam, value = pcall(function() return teamValue.Value end)
-                        if okTeam and value == LP.TeamColor then
-                            zone = v
-                            break
-                        end
-                    end
-                end
-                if not zone then zone = getTeamSpawn() end
-
-                local zonePart = zone and (zone:IsA("BasePart") and zone or findFirstPart(zone))
-                if not zonePart then
-                    error(ENV.__HX_TR("No pude detectar tu zona de construcción."))
-                end
-
-                local totalAvailable = liveStructuralStock()
-                local buildLevel = level
-                local advancedTarget = isCar and 160 or 200
-                local intermediateTarget = isCar and 100 or 120
-
-                if level == "advanced" and totalAvailable < advancedTarget then
-                    buildLevel = totalAvailable >= intermediateTarget and "intermediate" or "basic"
-                    toast("No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.")
-                elseif level == "intermediate" and totalAvailable < intermediateTarget then
-                    buildLevel = "basic"
-                    toast("No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.")
-                end
-
-                if totalAvailable < 18 then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local localRoot = zonePart.CFrame:PointToObjectSpace(root.Position)
-                local margin
-                if isCar then
-                    margin = buildLevel == "advanced" and 11 or (buildLevel == "intermediate" and 9 or 7)
-                else
-                    margin = buildLevel == "advanced" and 16 or (buildLevel == "intermediate" and 13 or 10)
-                end
-                local halfX = math.max((zonePart.Size.X * 0.5) - margin, 0)
-                local halfZ = math.max((zonePart.Size.Z * 0.5) - margin, 0)
-                local clampedX = math.clamp(localRoot.X, -halfX, halfX)
-                local clampedZ = math.clamp(localRoot.Z, -halfZ, halfZ)
-                local topLocal = Vector3.new(clampedX, (zonePart.Size.Y * 0.5) + 1.5, clampedZ)
-                local basePosition = zonePart.CFrame:PointToWorldSpace(topLocal)
-
-                local look = root.CFrame.LookVector
-                local flatLook = Vector3.new(look.X, 0, look.Z)
-                if flatLook.Magnitude < 0.01 then flatLook = Vector3.new(0, 0, -1) end
-                flatLook = flatLook.Unit
-                local origin = CFrame.lookAt(basePosition, basePosition + flatLook)
-
-                ------------------------------------------------------------
-                -- INVENTORY + MATERIAL SELECTION
-                ------------------------------------------------------------
-                local remaining = {}
-                for _, name in ipairs(structureNames) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = math.floor(amount) end
-                end
-
-                local componentNames = isCar
-                    and {"CarSeat", "Wheel", "SmallWheel", "CarWheel", "FrontWheel", "BackWheel"}
-                    or {"PilotSeat", "Jet", "UltraThruster", "Thruster", "Rocket"}
-
-                for _, name in ipairs(componentNames) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = math.floor(amount) end
-                end
-
-                local function countOf(name)
-                    return remaining[name] or 0
-                end
-
-                local function reserve(name, amount)
-                    amount = amount or 1
-                    if countOf(name) < amount then return false end
-                    remaining[name] = countOf(name) - amount
-                    return true
-                end
-
-                local materialPriority
-                if buildLevel == "basic" then
-                    materialPriority = {
-                        "WoodBlock", "SmoothWoodBlock", "StoneBlock", "PlasticBlock",
-                        "RustedBlock", "MetalBlock", "IronBlock", "SteelBlock",
-                        "ConcreteBlock", "TitaniumBlock", "ObsidianBlock"
-                    }
-                elseif buildLevel == "intermediate" then
-                    materialPriority = {
-                        "MetalBlock", "IronBlock", "SteelBlock", "StoneBlock",
-                        "ConcreteBlock", "BrickBlock", "MarbleBlock", "WoodBlock",
-                        "SmoothWoodBlock", "TitaniumBlock", "ObsidianBlock"
-                    }
-                else
-                    materialPriority = {
-                        "TitaniumBlock", "ObsidianBlock", "MetalBlock", "SteelBlock",
-                        "IronBlock", "ConcreteBlock", "MarbleBlock", "BrickBlock",
-                        "StoneBlock", "WoodBlock", "SmoothWoodBlock"
-                    }
-                end
-
-                local function bestMaterial()
-                    local best, bestCount
-                    for _, name in ipairs(materialPriority) do
-                        local amount = countOf(name)
-                        if amount > 0 and (not bestCount or amount > bestCount) then
-                            best, bestCount = name, amount
-                        end
-                    end
-                    return best
-                end
-
-                local primaryMaterial = bestMaterial()
-                if not primaryMaterial then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local points = {}
-                local function add(x, y, z, role, rotation)
-                    points[#points + 1] = {
-                        x = x, y = y, z = z,
-                        role = role or "hull",
-                        rotation = rotation
-                    }
-                end
-
-                ------------------------------------------------------------
-                -- VEHICLE GEOMETRY (v42 advanced)
-                -- Cars: frame rails, body panels, hood slope, cabin, bumpers.
-                -- Planes: tapered fuselage, wing roots, empennage, cockpit.
-                ------------------------------------------------------------
-                if isCar then
-                    if buildLevel == "basic" then
-                        -- Compact street car: ladder frame + body shell.
-                        for z = -4, 3 do
-                            for x = -1, 1 do add(x, 0, z, "hull") end
-                        end
-                        -- Frame rails under outer edges.
-                        for z = -3, 2 do
-                            add(-2, 0, z, "armor")
-                            add(2, 0, z, "armor")
-                        end
-                        -- Floor pan raised one step except wheel clearance zones.
-                        for z = -3, 2 do
-                            for x = -1, 1 do add(x, 1, z, "hull") end
-                        end
-                        -- Front bumper + hood slope.
-                        for x = -1, 1 do
-                            add(x, 1, -4, "armor")
-                            add(x, 2, -3, "armor")
-                            add(x, 1, -3, "hull")
-                        end
-                        -- Side body / doors (cockpit open at center).
-                        for z = -2, 1 do
-                            add(-1, 2, z, "armor")
-                            add(1, 2, z, "armor")
-                        end
-                        -- Rear bumper.
-                        for x = -1, 1 do
-                            add(x, 1, 3, "armor")
-                            add(x, 2, 2, "armor")
-                        end
-                        -- Mini windshield.
-                        for x = -1, 1 do add(x, 3, -1, "glass") end
-                        -- Small rear deck.
-                        for x = -1, 1 do add(x, 2, 1, "hull") end
-
-                    elseif buildLevel == "intermediate" then
-                        -- Sedan: wider chassis, proper cabin, partial roof.
-                        for z = -5, 4 do
-                            for x = -2, 2 do add(x, 0, z, "hull") end
-                        end
-                        for z = -4, 3 do
-                            add(-3, 0, z, "armor")
-                            add(3, 0, z, "armor")
-                        end
-                        -- Floor + tunnel.
-                        for z = -4, 3 do
-                            for x = -2, 2 do
-                                if not (x == 0 and z >= -1 and z <= 1) then
-                                    add(x, 1, z, "hull")
-                                end
-                            end
-                        end
-                        -- Hood.
-                        for z = -4, -2 do
-                            for x = -2, 2 do add(x, 1, z, "hull") end
-                        end
-                        for x = -1, 1 do add(x, 2, -3, "armor") end
-                        -- Front bumper.
-                        for x = -2, 2 do add(x, 1, -5, "armor") end
-                        -- Side panels.
-                        for z = -3, 3 do
-                            add(-2, 2, z, "armor")
-                            add(2, 2, z, "armor")
-                        end
-                        -- Cabin pillars + windshield.
-                        add(-2, 3, -1, "armor")
-                        add(2, 3, -1, "armor")
-                        for x = -1, 1 do add(x, 3, -1, "glass") end
-                        -- Rear bulkhead + partial roof.
-                        for x = -1, 1 do
-                            add(x, 2, 2, "armor")
-                            add(x, 3, 1, "armor")
-                            add(x, 3, 2, "armor")
-                        end
-                        -- Trunk / rear bumper.
-                        for x = -2, 2 do
-                            add(x, 1, 4, "armor")
-                            add(x, 2, 3, "armor")
-                        end
-
-                    else
-                        -- Advanced SUV / long body with full cabin and roof.
-                        for z = -6, 5 do
-                            for x = -2, 2 do add(x, 0, z, "hull") end
-                        end
-                        for z = -5, 4 do
-                            add(-3, 0, z, "armor")
-                            add(3, 0, z, "armor")
-                        end
-                        -- Raised floor leaving cockpit open.
-                        for z = -5, 4 do
-                            for x = -2, 2 do
-                                local open = (math.abs(x) <= 1 and z >= -1 and z <= 1)
-                                if not open then add(x, 1, z, "hull") end
-                            end
-                        end
-                        -- Long hood.
-                        for z = -5, -2 do
-                            for x = -2, 2 do add(x, 1, z, "hull") end
-                        end
-                        for x = -1, 1 do
-                            add(x, 2, -4, "armor")
-                            add(x, 2, -3, "armor")
-                        end
-                        -- Bumpers.
-                        for x = -2, 2 do
-                            add(x, 1, -6, "armor")
-                            add(x, 1, 5, "armor")
-                        end
-                        -- Body sides full height.
-                        for z = -4, 4 do
-                            add(-2, 2, z, "armor")
-                            add(2, 2, z, "armor")
-                            add(-2, 3, z, "armor")
-                            add(2, 3, z, "armor")
-                        end
-                        -- Windshield.
-                        for x = -1, 1 do add(x, 3, -1, "glass") end
-                        add(-2, 3, -2, "armor")
-                        add(2, 3, -2, "armor")
-                        -- Full roof over cabin.
-                        for z = 0, 3 do
-                            for x = -1, 1 do add(x, 4, z, "armor") end
-                        end
-                        -- Rear window frame.
-                        for x = -1, 1 do add(x, 3, 3, "glass") end
-                        -- Roof rails / pillars.
-                        add(-2, 4, 0, "armor")
-                        add(2, 4, 0, "armor")
-                        add(-2, 4, 3, "armor")
-                        add(2, 4, 3, "armor")
-                    end
-                else
-                    if buildLevel == "basic" then
-                        -- Light monoplane: slender fuselage + main wing + simple empennage.
-                        for z = -6, 5 do add(0, 0, z, "hull") end
-                        for z = -4, 3 do
-                            add(0, 1, z, "hull")
-                            add(-1, 0, z, "hull")
-                            add(1, 0, z, "hull")
-                        end
-                        -- Nose cone.
-                        add(0, 1, -5, "armor")
-                        add(0, 2, -4, "glass")
-                        -- Main wing with root thickening.
-                        for x = -5, 5 do add(x, 0, 0, "hull") end
-                        for x = -4, 4 do add(x, 0, 1, "hull") end
-                        for x = -2, 2 do add(x, 1, 0, "armor") end
-                        -- Horizontal stabilizer + fin.
-                        for x = -2, 2 do add(x, 1, 4, "armor") end
-                        for x = -1, 1 do add(x, 1, 5, "armor") end
-                        add(0, 2, 4, "armor")
-                        add(0, 3, 4, "armor")
-                        add(0, 2, 5, "armor")
-
-                    elseif buildLevel == "intermediate" then
-                        -- Twin-wide fuselage, broader wings, full tail.
-                        for z = -7, 6 do
-                            for x = -1, 1 do add(x, 0, z, "hull") end
-                        end
-                        for z = -5, 4 do
-                            add(0, 1, z, "hull")
-                            add(-1, 1, z, "armor")
-                            add(1, 1, z, "armor")
-                        end
-                        -- Nose + cockpit glass.
-                        for x = -1, 1 do
-                            add(x, 1, -6, "armor")
-                            add(x, 2, -4, "glass")
-                            add(x, 2, -3, "glass")
-                        end
-                        -- High-aspect main wing.
-                        for x = -7, 7 do add(x, 0, 0, "hull") end
-                        for x = -6, 6 do add(x, 0, 1, "hull") end
-                        for x = -4, 4 do add(x, 0, 2, "hull") end
-                        for x = -3, 3 do add(x, 1, 0, "armor") end
-                        -- Empennage.
-                        for x = -3, 3 do add(x, 1, 5, "armor") end
-                        for x = -2, 2 do add(x, 1, 6, "armor") end
-                        for y = 2, 4 do add(0, y, 5, "armor") end
-                        add(0, 2, 6, "armor")
-                        -- Wing tip plates.
-                        add(-7, 1, 0, "armor")
-                        add(7, 1, 0, "armor")
-
-                    else
-                        -- Advanced airliner-style: thick fuselage, layered wings, full tail.
-                        for z = -8, 7 do
-                            for x = -1, 1 do add(x, 0, z, "hull") end
-                        end
-                        for z = -6, 5 do
-                            add(-1, 1, z, "armor")
-                            add(0, 1, z, "hull")
-                            add(1, 1, z, "armor")
-                        end
-                        for z = -4, 3 do
-                            add(-1, 2, z, "armor")
-                            add(1, 2, z, "armor")
-                        end
-                        -- Nose cone stack.
-                        for x = -1, 1 do
-                            add(x, 1, -7, "armor")
-                            add(x, 2, -6, "armor")
-                        end
-                        add(0, 3, -5, "armor")
-                        -- Cockpit greenhouse.
-                        for x = -1, 1 do
-                            add(x, 2, -3, "glass")
-                            add(x, 2, -2, "glass")
-                            add(x, 3, -2, "glass")
-                        end
-                        -- Large multi-layer wings.
-                        for x = -9, 9 do add(x, 0, 0, "hull") end
-                        for x = -8, 8 do add(x, 0, 1, "hull") end
-                        for x = -6, 6 do add(x, 0, 2, "hull") end
-                        for x = -4, 4 do add(x, 1, 1, "armor") end
-                        for x = -2, 2 do add(x, 1, 0, "armor") end
-                        -- Wing fences / tips.
-                        add(-9, 1, 0, "armor")
-                        add(9, 1, 0, "armor")
-                        add(-8, 1, 1, "armor")
-                        add(8, 1, 1, "armor")
-                        -- Full empennage.
-                        for x = -4, 4 do add(x, 1, 6, "armor") end
-                        for x = -3, 3 do add(x, 1, 7, "armor") end
-                        for y = 2, 5 do add(0, y, 6, "armor") end
-                        add(0, 2, 7, "armor")
-                        add(0, 3, 7, "armor")
-                        -- Dorsal spine.
-                        for z = -1, 4 do add(0, 2, z, "hull") end
-                    end
-                end
-                ------------------------------------------------------------
-                -- PLACEMENT
-                ------------------------------------------------------------
-                local placed = 0
-                local delayPerBlock = ENV.__HX_DEVICE == "mobile" and 0.080 or 0.055
-
-                local function materialForRole(role)
-                    if role == "glass" then
-                        if countOf("GlassBlock") > 0 then return "GlassBlock" end
-                        if countOf(primaryMaterial) > 0 then return primaryMaterial end
-                    end
-                    if role == "armor" then
-                        local armorPriority = buildLevel == "advanced"
-                            and {"ObsidianBlock", "TitaniumBlock", "MetalBlock", "SteelBlock", "IronBlock", "ConcreteBlock", "StoneBlock", "WoodBlock"}
-                            or {"MetalBlock", "SteelBlock", "IronBlock", "ConcreteBlock", "StoneBlock", "WoodBlock", "SmoothWoodBlock"}
-                        for _, name in ipairs(armorPriority) do
-                            if countOf(name) > 0 then return name end
-                        end
-                    end
-                    if countOf(primaryMaterial) > 0 then return primaryMaterial end
-                    return bestMaterial()
-                end
-
-                local function placeNamed(blockName, worldCF)
-                    if not blockName or countOf(blockName) <= 0 then return false end
-                    local idObject = data:FindFirstChild(blockName)
-                    if not idObject then return false end
-                    local available = tonumber(idObject.Value) or 0
-                    if available <= 0 then return false end
-
-                    local okPlace = pcall(function()
-                        rf:InvokeServer(
-                            blockName,
-                            available,
-                            zonePart,
-                            zonePart.CFrame:ToObjectSpace(worldCF),
-                            true,
-                            worldCF,
-                            false
-                        )
-                    end)
-                    if not okPlace then return false end
-
-                    reserve(blockName, 1)
-                    placed += 1
-                    return true
-                end
-
-                for i, item in ipairs(points) do
-                    if not alive then error("Cerrado") end
-                    local material = materialForRole(item.role)
-                    if not material then break end
-
-                    local worldCF = origin * CFrame.new(item.x * 2, item.y * 2, item.z * 2)
-                    if item.rotation then worldCF *= item.rotation end
-                    placeNamed(material, worldCF)
-
-                    if i % 12 == 0 then
-                        task.wait(delayPerBlock * 2)
-                    else
-                        task.wait(delayPerBlock)
-                    end
-                end
-
-                ------------------------------------------------------------
-                -- VEHICLE COMPONENTS
-                ------------------------------------------------------------
-                local function firstOwned(candidates)
-                    local best, bestCount
-                    for _, name in ipairs(candidates) do
-                        local amount = countOf(name)
-                        if amount > 0 and (not bestCount or amount > bestCount) then
-                            best, bestCount = name, amount
-                        end
-                    end
-                    return best, bestCount or 0
-                end
-
-                if isCar then
-                    local neededWheels = buildLevel == "advanced" and 6 or 4
-                    local wheelCount = 0
-                    for _, name in ipairs(wheelCandidates) do
-                        wheelCount += math.max(0, countOf(name))
-                    end
-                    wheelCount = math.min(neededWheels, wheelCount)
-
-                    local function pickWheel(forFront)
-                        local preferred = forFront
-                            and {"FrontWheel", "Wheel", "SmallWheel", "CarWheel", "BackWheel"}
-                            or {"BackWheel", "Wheel", "SmallWheel", "CarWheel", "FrontWheel"}
-                        for _, name in ipairs(preferred) do
-                            if countOf(name) > 0 then return name end
-                        end
-                        return nil
-                    end
-
-                    -- Wheels touch the chassis directly and are added before CarSeat.
-                    if wheelCount >= 4 then
-                        local wheelZs
-                        if wheelCount >= 6 then
-                            wheelZs = {-3, 0, 3}
-                        elseif buildLevel == "basic" then
-                            wheelZs = {-2, 2}
-                        else
-                            wheelZs = {-2.5, 2.5}
-                        end
-
-                        local wheelX = buildLevel == "basic" and 2 or 3
-                        local made = 0
-                        for axleIndex, z in ipairs(wheelZs) do
-                            for _, x in ipairs({-wheelX, wheelX}) do
-                                if made >= wheelCount then break end
-
-                                local wheelName = pickWheel(axleIndex == 1)
-                                if not wheelName then break end
-
-                                made += 1
-                                local wheelCF = origin
-                                    * CFrame.new(x * 2, 1.8, z * 2)
-                                    * CFrame.Angles(0, 0, math.rad(90))
-                                placeNamed(wheelName, wheelCF)
-                                task.wait(0.16)
-                            end
-                        end
-                    end
-
-                    local hadCarSeat = countOf("CarSeat") > 0
-                    if hadCarSeat then
-                        -- Clear central cockpit; seat is placed last to bind wheels.
-                        local seatCF = origin * CFrame.new(0, 5.5, 0)
-                        placeNamed("CarSeat", seatCF)
-                        task.wait(0.75)
-                    end
-
-                    if wheelCount >= 4 and hadCarSeat then
-                        toast("Sistema de conducción del carro añadido.")
-                    else
-                        toast("No tienes suficientes ruedas o asiento de manejo; el carro puede crearse sin conducción completa.")
-                    end
-                else
-                    local propulsionName, propulsionStock = firstOwned(planePropulsionCandidates)
-                    local wantedPropulsion = buildLevel == "advanced" and 3 or (buildLevel == "intermediate" and 2 or 1)
-                    local propulsionCount = math.min(wantedPropulsion, propulsionStock)
-                    local tailZ = buildLevel == "basic" and 5 or (buildLevel == "intermediate" and 6 or 7)
-
-                    if propulsionName and propulsionCount > 0 then
-                        for n = 1, propulsionCount do
-                            local xOffset = 0
-                            if propulsionCount == 2 then
-                                xOffset = n == 1 and -1.5 or 1.5
-                            elseif propulsionCount >= 3 then
-                                local slots = {-2.5, 0, 2.5}
-                                xOffset = slots[n] or 0
-                            end
-
-                            -- Mounted directly on the rear fuselage/tail structure.
-                            local propCF = origin
-                                * CFrame.new(xOffset * 2, 4.2, tailZ * 2)
-                                * CFrame.Angles(0, math.rad(180), 0)
-                            placeNamed(propulsionName, propCF)
-                            task.wait(0.28)
-                        end
-                        task.wait(0.30)
-                    end
-
-                    local hadPilotSeat = countOf("PilotSeat") > 0
-                    if hadPilotSeat then
-                        local pilotCF = origin * CFrame.new(0, 5.5, -1.5 * 2)
-                        placeNamed("PilotSeat", pilotCF)
-                        task.wait(0.80)
-                    end
-
-                    if propulsionCount > 0 and hadPilotSeat then
-                        toast("Sistema de vuelo del avión añadido.")
-                    else
-                        toast("No tienes asiento de piloto o propulsión; el avión puede crearse sin vuelo completo.")
-                    end
-                end
-
-                worldCache.boatRoot = nil
-                worldCache.nearestSeat = nil
-                worldCache.boatRootAt = 0
-                worldCache.seatAt = 0
-
-                if placed <= 0 then
-                    error("BuildingTool rechazó las colocaciones")
-                end
-            end)
-
-            activeStates.autoBuildBoatBusy = false
-            activeStates._endTimedStatus(statusToken)
-
-            if okBuild then
-                toast(isCar and "Carro creado correctamente." or "Avión creado correctamente.")
-            else
-                toast(
-                    ENV.__HX_TR(isCar and "No se pudo completar el carro: " or "No se pudo completar el avión: ")
-                    .. tostring(errBuild)
-                )
-            end
-        end
-
-        if isCar then
-            modalButton("Básico", "Auto compacto con chasis de largueros, capó, paragolpes, laterales y parabrisas.", function()
-                buildPreset("basic")
-            end)
-            modalButton("Intermedio", "Sedán reforzado: chasis ancho, capó largo, cabina con pilares, techo parcial y maletero.", function()
-                buildPreset("intermediate")
-            end)
-            modalButton("Avanzado", "SUV/largo reforzado: cabina completa con techo, pilares, luneta trasera y paragolpes duales.", function()
-                buildPreset("advanced")
-            end)
-        else
-            modalButton("Básico", "Monoplano ligero: fuselaje ahusado, ala con raíz reforzada, estabilizador y deriva.", function()
-                buildPreset("basic")
-            end)
-            modalButton("Intermedio", "Avión intermedio: fuselaje dual, ala de gran envergadura, cabina acristalada y empenaje completo.", function()
-                buildPreset("intermediate")
-            end)
-            modalButton("Avanzado", "Aeronave avanzada: fuselaje grueso multi-capa, alas estratificadas, invernadero de cabina y cola completa.", function()
-                buildPreset("advanced")
-            end)
-        end
-    end)
-end
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Carro",
-    "Crea automáticamente un carro funcional en tres niveles usando tus materiales disponibles.",
-    function() activeStates._openAutoVehicle("car") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Avión",
-    "Crea automáticamente un avión en tres niveles usando tus materiales y componentes disponibles.",
-    function() activeStates._openAutoVehicle("plane") end,
-    "CONSTRUIR"
-)
-
---====================================================
--- EXTRA AUTO BUILD TYPES
--- Helicopter / Submarine / Motorcycle / Tank / Rocket /
--- Farm Boat / Base
---====================================================
-activeStates._openExtraAutoBuild = function(kind)
-    local titles = {
-        helicopter = "Selecciona un helicóptero",
-        submarine = "Selecciona un submarino",
-        motorcycle = "Selecciona una moto",
-        tank = "Selecciona un tanque",
-        rocket = "Selecciona un cohete",
-        farmboat = "Selecciona un barco de farm",
-        base = "Selecciona una base",
-    }
-
-    openModal(titles[kind] or "CREACIÓN AUTOMÁTICA", function()
-        local function buildPreset(level, purchaseChoice)
-            if activeStates.autoBuildBoatBusy then
-                toast("Ya se está creando un vehículo.")
-                return
-            end
-            if activeStates.autoFarm or activeStates._finishBusy then
-                toast("Desactiva Auto Farm antes de crear un vehículo.")
-                return
-            end
-
-            local data = LP:FindFirstChild("Data")
-            if not data then
-                toast("No encontré los datos de bloques del jugador.")
-                return
-            end
-
-            local structureNames = {
-                "WoodBlock", "SmoothWoodBlock", "StoneBlock", "RustedBlock",
-                "MetalBlock", "IronBlock", "SteelBlock", "ConcreteBlock",
-                "BrickBlock", "MarbleBlock", "CoalBlock", "TitaniumBlock",
-                "ObsidianBlock", "PlasticBlock", "GlassBlock", "SandBlock"
-            }
-            local wheelCandidates = {
-                "FrontWheel", "BackWheel", "Wheel", "SmallWheel", "CarWheel"
-            }
-            local propulsionCandidates = {
-                "JetTurbine", "Jet", "UltraThruster", "Thruster", "Rocket"
-            }
-            local boatMotorCandidates = {
-                "UltraBoatMotor", "WinterBoatMotor", "BoatMotor"
-            }
-
-            local function stock(name)
-                local obj = data:FindFirstChild(name)
-                return obj and math.max(0, math.floor(tonumber(obj.Value) or 0)) or 0
-            end
-
-            local function totalOf(names)
-                local total = 0
-                for _, name in ipairs(names) do total += stock(name) end
-                return total
-            end
-
-            local function structuralStock()
-                return totalOf(structureNames)
-            end
-
-            local targets = {
-                helicopter = {basic = 70, intermediate = 115, advanced = 175},
-                submarine = {basic = 80, intermediate = 130, advanced = 190},
-                motorcycle = {basic = 32, intermediate = 50, advanced = 75},
-                tank = {basic = 95, intermediate = 150, advanced = 220},
-                rocket = {basic = 50, intermediate = 85, advanced = 130},
-                farmboat = {basic = 48, intermediate = 75, advanced = 110},
-                base = {basic = 70, intermediate = 140, advanced = 260},
-            }
-
-            local target = (targets[kind] and targets[kind][level]) or 55
-            local missingStructure = math.max(target - structuralStock(), 0)
-            local materialPackPrice = level == "advanced" and 400 or (level == "intermediate" and 325 or 250)
-            local materialPacksNeeded = math.ceil(missingStructure / 50)
-
-            local componentCost = 0
-            local componentMissing = false
-
-            if kind == "motorcycle" then
-                local missingWheels = math.max(2 - totalOf(wheelCandidates), 0)
-                componentMissing = missingWheels > 0 or stock("CarSeat") <= 0
-                componentCost = componentMissing and 750 or 0
-
-            elseif kind == "tank" then
-                local wanted = level == "advanced" and 8 or (level == "intermediate" and 6 or 4)
-                local missingWheels = math.max(wanted - totalOf(wheelCandidates), 0)
-                local packs = math.max(math.ceil(missingWheels / 4), stock("CarSeat") <= 0 and 1 or 0)
-                componentMissing = packs > 0
-                componentCost = packs * 750
-
-            elseif kind == "helicopter" or kind == "rocket" then
-                local wanted = kind == "helicopter"
-                    and (level == "advanced" and 3 or (level == "intermediate" and 2 or 1))
-                    or (level == "advanced" and 3 or (level == "intermediate" and 2 or 1))
-                componentMissing = stock("PilotSeat") <= 0 or totalOf(propulsionCandidates) < wanted
-                componentCost = componentMissing and 4000 or 0
-
-            elseif kind == "submarine" or kind == "farmboat" then
-                local wanted = level == "advanced" and 2 or 1
-                componentMissing = stock("CarSeat") <= 0 or totalOf(boatMotorCandidates) < wanted
-                componentCost = componentMissing and 450 or 0
-            end
-
-            local requiredGold = (materialPacksNeeded * materialPackPrice) + componentCost
-            local gold = tonumber(getGoldValue()) or 0
-
-            if purchaseChoice == nil and (missingStructure > 0 or componentMissing) then
-                if gold >= requiredGold then
-                    openModal("Recursos insuficientes", function()
-                        local info
-                        if ENV.__HX_LANG == "en" then
-                            info = string.format(
-                                "Missing blocks: %d · Gold: %d / %d%s",
-                                missingStructure,
-                                gold,
-                                requiredGold,
-                                componentMissing and " · Components missing" or ""
-                            )
-                        else
-                            info = string.format(
-                                "Bloques faltantes: %d · Oro: %d / %d%s",
-                                missingStructure,
-                                gold,
-                                requiredGold,
-                                componentMissing and " · Faltan componentes" or ""
-                            )
-                        end
-
-                        modalButton(
-                            "SÍ, COMPRAR Y CONTINUAR",
-                            info .. "\n" .. ENV.__HX_TR("HX Boat comprará únicamente con el oro del juego y continuará automáticamente."),
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, true)
-                            end
-                        )
-
-                        modalButton(
-                            "NO, CONTINUAR SIN COMPRAR",
-                            "Continuar con los materiales actuales; el vehículo puede reducirse.",
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, false)
-                            end
-                        )
-                    end)
-                else
-                    openModal("Farmear para completar", function()
-                        local info
-                        if ENV.__HX_LANG == "en" then
-                            info = string.format(
-                                "Current Gold: %d · Needed: %d · Missing Gold: %d",
-                                gold,
-                                requiredGold,
-                                math.max(requiredGold - gold, 0)
-                            )
-                        else
-                            info = string.format(
-                                "Oro actual: %d · Necesario: %d · Oro faltante: %d",
-                                gold,
-                                requiredGold,
-                                math.max(requiredGold - gold, 0)
-                            )
-                        end
-
-                        modalButton(
-                            "FARMEAR Y COMPRAR",
-                            info .. "\n" .. ENV.__HX_TR("Te faltan recursos y tu oro actual no alcanza para comprarlos. HX Boat puede farmear hasta conseguir el oro necesario, comprar automáticamente lo faltante y continuar."),
-                            function()
-                                closeModal()
-                                activeStates._farmGoldForBuild(requiredGold, function()
-                                    buildPreset(level, true)
-                                end)
-                            end
-                        )
-
-                        modalButton(
-                            "CONTINUAR SIN FARMEAR",
-                            "Continuar con los materiales actuales; el vehículo puede reducirse.",
-                            function()
-                                closeModal()
-                                task.spawn(buildPreset, level, false)
-                            end
-                        )
-                    end)
-                end
-                return
-            end
-
-            activeStates.autoBuildBoatBusy = true
-            local statusToken = activeStates._beginTimedStatus("Construyendo...", "Preparando construcción")
-            closeModal()
-            toast("Creando vehículo automáticamente...")
-            task.wait(0.18)
-
-            local okBuild, errBuild = pcall(function()
-                local char = getChar()
-                local hum = getHum()
-                local root = getRoot()
-                if not char or not hum or not root then error("Personaje no disponible") end
-
-                local tool = char:FindFirstChild("BuildingTool")
-                if not tool then
-                    local backpack = LP:FindFirstChildOfClass("Backpack")
-                    local backpackTool = backpack and backpack:FindFirstChild("BuildingTool")
-                    if backpackTool then
-                        hum:EquipTool(backpackTool)
-                        task.wait(0.18)
-                        tool = char:FindFirstChild("BuildingTool") or backpackTool
-                    end
-                end
-                if not tool then
-                    local playerBuild = Workspace:FindFirstChild(LP.Name)
-                    tool = playerBuild and playerBuild:FindFirstChild("BuildingTool")
-                end
-
-                local rf = tool and tool:FindFirstChild("RF", true)
-                if not rf or not rf:IsA("RemoteFunction") then
-                    error(ENV.__HX_TR("No encontré BuildingTool. Abre el modo de construcción e inténtalo otra vez."))
-                end
-
-                data = LP:FindFirstChild("Data")
-                if not data then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local function liveStock(name)
-                    local obj = data:FindFirstChild(name)
-                    return obj and math.max(0, math.floor(tonumber(obj.Value) or 0)) or 0
-                end
-
-                local function liveTotal(names)
-                    local total = 0
-                    for _, name in ipairs(names) do total += liveStock(name) end
-                    return total
-                end
-
-                local function liveStructural()
-                    return liveTotal(structureNames)
-                end
-
-                --------------------------------------------------------
-                -- PURCHASE FILTER
-                --------------------------------------------------------
-                if purchaseChoice == true then
-                    local shopRemote = Workspace:FindFirstChild("ItemBoughtFromShop")
-                    local boughtAnything = false
-
-                    local function buyProduct(productName, watchNames, price)
-                        if not shopRemote or not shopRemote:IsA("RemoteEvent") then return false end
-                        local beforeGold = tonumber(getGoldValue()) or 0
-                        if beforeGold < price then return false end
-
-                        local before = 0
-                        for _, name in ipairs(watchNames) do before += liveStock(name) end
-
-                        local ok = pcall(function()
-                            shopRemote:FireServer(productName)
-                        end)
-                        if not ok then return false end
-
-                        task.wait(0.50)
-
-                        local after = 0
-                        for _, name in ipairs(watchNames) do after += liveStock(name) end
-                        local afterGold = tonumber(getGoldValue()) or beforeGold
-                        return after > before or afterGold < beforeGold
-                    end
-
-                    local productName = level == "advanced" and "Titanium Block"
-                        or (level == "intermediate" and "Metal Block" or "Wood Block")
-                    local internalName = level == "advanced" and "TitaniumBlock"
-                        or (level == "intermediate" and "MetalBlock" or "WoodBlock")
-                    local packPrice = level == "advanced" and 400
-                        or (level == "intermediate" and 325 or 250)
-
-                    local packs = math.ceil(math.max(target - liveStructural(), 0) / 50)
-                    for _ = 1, packs do
-                        if not buyProduct(productName, {internalName}, packPrice) then break end
-                        boughtAnything = true
-                    end
-
-                    if kind == "motorcycle" then
-                        if liveStock("CarSeat") <= 0 or liveTotal(wheelCandidates) < 2 then
-                            if buyProduct(
-                                "New Car Pack",
-                                {"CarSeat", "FrontWheel", "BackWheel", "Wheel", "SmallWheel", "CarWheel"},
-                                750
-                            ) then boughtAnything = true end
-                        end
-
-                    elseif kind == "tank" then
-                        local wanted = level == "advanced" and 8 or (level == "intermediate" and 6 or 4)
-                        local missing = math.max(wanted - liveTotal(wheelCandidates), 0)
-                        local carPacks = math.max(math.ceil(missing / 4), liveStock("CarSeat") <= 0 and 1 or 0)
-
-                        for _ = 1, carPacks do
-                            if not buyProduct(
-                                "New Car Pack",
-                                {"CarSeat", "FrontWheel", "BackWheel", "Wheel", "SmallWheel", "CarWheel"},
-                                750
-                            ) then break end
-                            boughtAnything = true
-                        end
-
-                    elseif kind == "helicopter" or kind == "rocket" then
-                        local wanted = level == "advanced" and 3 or (level == "intermediate" and 2 or 1)
-                        if liveStock("PilotSeat") <= 0 or liveTotal(propulsionCandidates) < wanted then
-                            if buyProduct(
-                                "Plane Blocks",
-                                {"PilotSeat", "JetTurbine", "Jet", "UltraThruster", "Thruster", "Rocket"},
-                                4000
-                            ) then boughtAnything = true end
-                        end
-
-                    elseif kind == "submarine" or kind == "farmboat" then
-                        local wanted = level == "advanced" and 2 or 1
-                        if liveStock("CarSeat") <= 0 or liveTotal(boatMotorCandidates) < wanted then
-                            if buyProduct("Boat Motor", {"BoatMotor", "CarSeat"}, 450) then
-                                boughtAnything = true
-                            end
-                        end
-                    end
-
-                    if boughtAnything then
-                        toast("Compra automática completada. Continuando construcción...")
-                    end
-                    task.wait(0.12)
-                end
-
-                --------------------------------------------------------
-                -- BUILD ZONE + NEAREST ORIGIN
-                --------------------------------------------------------
-                local zone
-                for _, v in ipairs(Workspace:GetChildren()) do
-                    local teamValue = v:FindFirstChild("TeamColor")
-                    if teamValue then
-                        local okTeam, value = pcall(function() return teamValue.Value end)
-                        if okTeam and value == LP.TeamColor then
-                            zone = v
-                            break
-                        end
-                    end
-                end
-                if not zone then zone = getTeamSpawn() end
-
-                local zonePart = zone and (zone:IsA("BasePart") and zone or findFirstPart(zone))
-                if not zonePart then error(ENV.__HX_TR("No pude detectar tu zona de construcción.")) end
-
-                local currentStock = liveStructural()
-                local levelTargets = targets[kind] or targets.helicopter
-                local buildLevel = level
-                if level == "advanced" and currentStock < levelTargets.advanced then
-                    buildLevel = currentStock >= levelTargets.intermediate and "intermediate" or "basic"
-                    toast("No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.")
-                elseif level == "intermediate" and currentStock < levelTargets.intermediate then
-                    buildLevel = "basic"
-                    toast("No hay suficientes materiales para el tamaño seleccionado; crearé una versión reducida.")
-                end
-
-                if currentStock < math.min(levelTargets.basic, 18) then
-                    error(ENV.__HX_TR("No encontré los datos de bloques del jugador."))
-                end
-
-                local marginMap = {
-                    helicopter = {basic = 11, intermediate = 14, advanced = 17},
-                    submarine = {basic = 10, intermediate = 13, advanced = 16},
-                    motorcycle = {basic = 6, intermediate = 7, advanced = 8},
-                    tank = {basic = 9, intermediate = 12, advanced = 14},
-                    rocket = {basic = 7, intermediate = 8, advanced = 10},
-                    farmboat = {basic = 7, intermediate = 9, advanced = 11},
-                    base = {basic = 9, intermediate = 13, advanced = 17},
-                }
-                local margin = (marginMap[kind] and marginMap[kind][buildLevel]) or 10
-
-                local localRoot = zonePart.CFrame:PointToObjectSpace(root.Position)
-                local halfX = math.max((zonePart.Size.X * 0.5) - margin, 0)
-                local halfZ = math.max((zonePart.Size.Z * 0.5) - margin, 0)
-                local clampedX = math.clamp(localRoot.X, -halfX, halfX)
-                local clampedZ = math.clamp(localRoot.Z, -halfZ, halfZ)
-                local basePosition = zonePart.CFrame:PointToWorldSpace(
-                    Vector3.new(clampedX, (zonePart.Size.Y * 0.5) + 1.5, clampedZ)
-                )
-
-                local look = root.CFrame.LookVector
-                local flatLook = Vector3.new(look.X, 0, look.Z)
-                if flatLook.Magnitude < 0.01 then flatLook = Vector3.new(0, 0, -1) end
-                flatLook = flatLook.Unit
-                local origin = CFrame.lookAt(basePosition, basePosition + flatLook)
-
-                --------------------------------------------------------
-                -- INVENTORY
-                --------------------------------------------------------
-                local remaining = {}
-                for _, name in ipairs(structureNames) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = amount end
-                end
-                for _, name in ipairs(wheelCandidates) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = amount end
-                end
-                for _, name in ipairs(propulsionCandidates) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = amount end
-                end
-                for _, name in ipairs(boatMotorCandidates) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = amount end
-                end
-                for _, name in ipairs({"CarSeat", "PilotSeat"}) do
-                    local amount = liveStock(name)
-                    if amount > 0 then remaining[name] = amount end
-                end
-
-                local function countOf(name)
-                    return remaining[name] or 0
-                end
-
-                local function reserve(name)
-                    if countOf(name) <= 0 then return false end
-                    remaining[name] = countOf(name) - 1
-                    return true
-                end
-
-                local materialPriority = buildLevel == "advanced"
-                    and {"TitaniumBlock", "ObsidianBlock", "MetalBlock", "SteelBlock", "IronBlock", "ConcreteBlock", "StoneBlock", "WoodBlock"}
-                    or (buildLevel == "intermediate"
-                        and {"MetalBlock", "IronBlock", "SteelBlock", "StoneBlock", "ConcreteBlock", "WoodBlock", "SmoothWoodBlock"}
-                        or {"WoodBlock", "SmoothWoodBlock", "StoneBlock", "PlasticBlock", "MetalBlock", "IronBlock"})
-
-                local function bestMaterial()
-                    local best, bestCount
-                    for _, name in ipairs(materialPriority) do
-                        local amount = countOf(name)
-                        if amount > 0 and (not bestCount or amount > bestCount) then
-                            best, bestCount = name, amount
-                        end
-                    end
-                    return best
-                end
-
-                local primaryMaterial = bestMaterial()
-                if not primaryMaterial then error("Sin materiales") end
-
-                local points = {}
-                local function add(x, y, z, role)
-                    points[#points + 1] = {x = x, y = y, z = z, role = role or "hull"}
-                end
-
-                --------------------------------------------------------
-                -- GEOMETRY (v42 advanced)
-                -- Denser, multi-layer structures with clearer silhouettes.
-                --------------------------------------------------------
-                if kind == "helicopter" then
-                    local len = buildLevel == "advanced" and 6 or (buildLevel == "intermediate" and 5 or 4)
-                    local width = buildLevel == "advanced" and 2 or 1
-
-                    -- Cabin floor + belly.
-                    for z = -len, 1 do
-                        for x = -width, width do add(x, 0, z, "hull") end
-                    end
-                    for z = -len + 1, 0 do
-                        for x = -width, width do add(x, 1, z, "hull") end
-                    end
-                    -- Cabin walls with open sides near seat.
-                    for z = -2, 0 do
-                        add(-width, 2, z, "armor")
-                        add(width, 2, z, "armor")
-                    end
-                    -- Nose / bubble.
-                    add(0, 1, -len, "armor")
-                    add(0, 2, -len + 1, "glass")
-                    if width >= 2 then
-                        add(-1, 2, -len + 1, "glass")
-                        add(1, 2, -len + 1, "glass")
-                    end
-                    -- Tail boom.
-                    for z = 2, len + 4 do
-                        add(0, 1, z, "hull")
-                        if buildLevel ~= "basic" then
-                            add(0, 2, z, "armor")
-                        end
-                    end
-                    -- Tail fin + horizontal stabilizer.
-                    add(0, 3, len + 4, "armor")
-                    add(0, 4, len + 4, "armor")
-                    for x = -2, 2 do add(x, 2, len + 3, "armor") end
-                    if buildLevel == "advanced" then
-                        add(0, 5, len + 4, "armor")
-                        for x = -3, 3 do add(x, 3, len + 3, "armor") end
-                    end
-                    -- Main rotor disc (visual).
-                    local rotor = buildLevel == "advanced" and 7 or (buildLevel == "intermediate" and 6 or 5)
-                    for x = -rotor, rotor do add(x, 4, -1, "armor") end
-                    for z = -rotor, rotor do add(0, 4, z, "armor") end
-                    add(0, 3, -1, "armor")
-                    add(0, 5, -1, "armor")
-                    -- Landing skids.
-                    for z = -2, 1 do
-                        add(-width - 1, -1, z, "armor")
-                        add(width + 1, -1, z, "armor")
-                        add(-width - 1, 0, z, "hull")
-                        add(width + 1, 0, z, "hull")
-                    end
-                    -- Skid cross braces.
-                    add(-width - 1, -1, -3, "armor")
-                    add(width + 1, -1, -3, "armor")
-                    add(-width - 1, -1, 2, "armor")
-                    add(width + 1, -1, 2, "armor")
-
-                elseif kind == "submarine" then
-                    local len = buildLevel == "advanced" and 7 or (buildLevel == "intermediate" and 6 or 5)
-                    local width = buildLevel == "advanced" and 2 or 1
-
-                    -- Pressure hull (elliptical-ish via taper).
-                    for z = -len, len do
-                        local t = math.abs(z) / math.max(len, 1)
-                        local currentWidth = t > 0.85 and 0 or (t > 0.65 and math.max(width - 1, 0) or width)
-                        for x = -currentWidth, currentWidth do
-                            add(x, 0, z, "hull")
-                        end
-                    end
-                    -- Upper hull shell.
-                    for z = -len + 1, len - 1 do
-                        local t = math.abs(z) / math.max(len, 1)
-                        local currentWidth = t > 0.75 and 0 or width
-                        for x = -currentWidth, currentWidth do
-                            add(x, 1, z, "hull")
-                        end
-                    end
-                    -- Side armor belts.
-                    for z = -len + 2, len - 2 do
-                        add(-width, 1, z, "armor")
-                        add(width, 1, z, "armor")
-                        if buildLevel ~= "basic" then
-                            add(-width, 2, z, "armor")
-                            add(width, 2, z, "armor")
-                        end
-                    end
-                    -- Conning tower / sail.
-                    for z = -1, 2 do add(0, 2, z, "armor") end
-                    for z = 0, 1 do add(0, 3, z, "armor") end
-                    add(0, 4, 0, "glass")
-                    if buildLevel == "advanced" then
-                        for z = -2, 3 do
-                            add(-1, 2, z, "armor")
-                            add(1, 2, z, "armor")
-                        end
-                        add(0, 3, -1, "armor")
-                        add(0, 3, 2, "armor")
-                    end
-                    -- Bow sonar dome.
-                    add(0, 1, -len, "armor")
-                    add(0, 0, -len, "armor")
-                    -- Stern planes / rudder mounts.
-                    add(-width - 1, 1, len - 1, "armor")
-                    add(width + 1, 1, len - 1, "armor")
-                    add(0, 2, len - 1, "armor")
-                    if buildLevel ~= "basic" then
-                        add(-width - 1, 0, len - 2, "armor")
-                        add(width + 1, 0, len - 2, "armor")
-                    end
-
-                elseif kind == "motorcycle" then
-                    local len = buildLevel == "advanced" and 5 or 4
-                    -- Main spine / frame.
-                    for z = -len, len do add(0, 0, z, "hull") end
-                    for z = -len + 1, len - 1 do add(0, 1, z, "hull") end
-                    -- Engine block area.
-                    for z = -1, 1 do
-                        add(-1, 0, z, "armor")
-                        add(1, 0, z, "armor")
-                        add(0, 0, z, "armor")
-                    end
-                    -- Front fork / head tube.
-                    add(0, 1, -len, "armor")
-                    add(0, 2, -len, "armor")
-                    add(0, 2, -len + 1, "armor")
-                    add(-1, 1, -len + 1, "armor")
-                    add(1, 1, -len + 1, "armor")
-                    -- Fuel tank silhouette.
-                    add(0, 2, -1, "armor")
-                    add(0, 2, 0, "armor")
-                    if buildLevel ~= "basic" then
-                        add(-1, 2, 0, "armor")
-                        add(1, 2, 0, "armor")
-                        add(0, 3, 0, "armor")
-                    end
-                    -- Seat platform (raised, open center for CarSeat).
-                    add(-1, 1, 1, "armor")
-                    add(1, 1, 1, "armor")
-                    add(-1, 1, 2, "armor")
-                    add(1, 1, 2, "armor")
-                    -- Rear swingarm / fender.
-                    add(0, 1, len, "armor")
-                    add(0, 1, len - 1, "armor")
-                    if buildLevel == "advanced" then
-                        add(-1, 0, len - 1, "hull")
-                        add(1, 0, len - 1, "hull")
-                        add(0, 2, len - 1, "armor")
-                    end
-
-                elseif kind == "tank" then
-                    local len = buildLevel == "advanced" and 6 or (buildLevel == "intermediate" and 5 or 4)
-                    local width = buildLevel == "advanced" and 3 or 2
-
-                    -- Main hull floor.
-                    for z = -len, len do
-                        for x = -width, width do add(x, 0, z, "hull") end
-                    end
-                    -- Superstructure / fighting compartment.
-                    for z = -len + 1, len - 1 do
-                        for x = -width + 1, width - 1 do add(x, 1, z, "hull") end
-                    end
-                    -- Side armor skirts (track sponsons).
-                    for z = -len + 1, len - 1 do
-                        add(-width, 1, z, "armor")
-                        add(width, 1, z, "armor")
-                        if buildLevel ~= "basic" then
-                            add(-width, 2, z, "armor")
-                            add(width, 2, z, "armor")
-                        end
-                    end
-                    -- Front glacis.
-                    for x = -width, width do
-                        add(x, 1, -len, "armor")
-                        add(x, 2, -len + 1, "armor")
-                    end
-                    -- Rear hull plate.
-                    for x = -width, width do
-                        add(x, 1, len, "armor")
-                    end
-                    -- Turret ring + turret.
-                    for x = -1, 1 do
-                        for z = -1, 1 do add(x, 2, z, "armor") end
-                    end
-                    for x = -1, 1 do
-                        for z = -1, 1 do add(x, 3, z, "armor") end
-                    end
-                    add(0, 4, 0, "armor")
-                    -- Gun barrel forward.
-                    local barrelLen = buildLevel == "advanced" and 6 or (buildLevel == "intermediate" and 5 or 4)
-                    for z = -barrelLen, -2 do add(0, 3, z, "armor") end
-                    if buildLevel == "advanced" then
-                        add(0, 3, -barrelLen - 1, "armor")
-                        add(0, 4, -2, "armor")
-                        -- Cupola.
-                        add(0, 5, 0, "armor")
-                        add(-1, 4, 0, "armor")
-                        add(1, 4, 0, "armor")
-                    end
-
-                elseif kind == "rocket" then
-                    local height = buildLevel == "advanced" and 15 or (buildLevel == "intermediate" and 12 or 9)
-                    local width = buildLevel == "advanced" and 2 or 1
-
-                    -- Stacked stages.
-                    for y = 0, height do
-                        local stageWidth = width
-                        if y > height - 3 then stageWidth = 0
-                        elseif y > height - 5 then stageWidth = math.max(width - 1, 0)
-                        end
-                        for x = -stageWidth, stageWidth do
-                            local role = (y % 4 == 0) and "armor" or "hull"
-                            add(x, y, 0, role)
-                            if stageWidth >= 1 and buildLevel ~= "basic" then
-                                add(x, y, -1, "hull")
-                                add(x, y, 1, "hull")
-                            end
-                        end
-                    end
-                    -- Nose cone tip.
-                    add(0, height, 0, "armor")
-                    add(0, height + 1, 0, "armor")
-                    -- Grid fins / stabilizers at base.
-                    for _, x in ipairs({-width - 1, width + 1}) do
-                        add(x, 0, 0, "armor")
-                        add(x, 1, 0, "armor")
-                        add(x, 2, 0, "armor")
-                    end
-                    for _, z in ipairs({-width - 1, width + 1}) do
-                        add(0, 0, z, "armor")
-                        add(0, 1, z, "armor")
-                        add(0, 2, z, "armor")
-                    end
-                    if buildLevel == "advanced" then
-                        for _, x in ipairs({-width - 1, width + 1}) do
-                            add(x, 0, -1, "armor")
-                            add(x, 0, 1, "armor")
-                        end
-                        -- Interstage rings.
-                        for x = -width, width do
-                            add(x, math.floor(height * 0.33), 0, "armor")
-                            add(x, math.floor(height * 0.66), 0, "armor")
-                        end
-                    end
-
-                elseif kind == "farmboat" then
-                    local len = buildLevel == "advanced" and 6 or (buildLevel == "intermediate" and 5 or 4)
-                    local width = buildLevel == "advanced" and 2 or 1
-
-                    -- Low flat hull optimized for stage runs.
-                    for z = -len, len do
-                        local currentWidth = z == -len and 0 or width
-                        for x = -currentWidth, currentWidth do
-                            add(x, 0, z, "hull")
-                        end
-                    end
-                    -- Keel for tracking.
-                    for z = -len + 1, len - 1 do add(0, -1, z, "hull") end
-                    -- Raised sides / splash guards.
-                    for z = -len + 1, len do
-                        add(-width, 1, z, "armor")
-                        add(width, 1, z, "armor")
-                    end
-                    -- Pointed bow armor.
-                    add(0, 1, -len, "armor")
-                    for x = -width, width do add(x, 1, -len + 1, "armor") end
-                    -- Deck strips leaving center open for seat.
-                    for z = -len + 2, len - 1 do
-                        if not (z >= -1 and z <= 1) then
-                            add(0, 1, z, "hull")
-                        end
-                        if width >= 2 then
-                            add(-1, 1, z, "hull")
-                            add(1, 1, z, "hull")
-                        end
-                    end
-                    -- Stern motor shelf.
-                    for x = -width, width do
-                        add(x, 1, len, "armor")
-                        add(x, 2, len, "armor")
-                    end
-                    if buildLevel == "advanced" then
-                        -- Extra side armor and front wedge.
-                        for z = -2, 3 do
-                            add(-width, 2, z, "armor")
-                            add(width, 2, z, "armor")
-                        end
-                        for x = -width, width do add(x, 2, -len + 2, "armor") end
-                        add(0, 2, -len + 1, "armor")
-                    elseif buildLevel == "intermediate" then
-                        for z = -1, 2 do
-                            add(-width, 2, z, "armor")
-                            add(width, 2, z, "armor")
-                        end
-                    end
-
-                else
-                    -- Base / platform
-                    local radius = buildLevel == "advanced" and 8 or (buildLevel == "intermediate" and 6 or 4)
-
-                    -- Solid floor.
-                    for x = -radius, radius do
-                        for z = -radius, radius do
-                            add(x, 0, z, "hull")
-                        end
-                    end
-                    -- Raised edge ring.
-                    if buildLevel ~= "basic" then
-                        for x = -radius, radius do
-                            add(x, 1, -radius, "armor")
-                            add(x, 1, radius, "armor")
-                        end
-                        for z = -radius + 1, radius - 1 do
-                            add(-radius, 1, z, "armor")
-                            add(radius, 1, z, "armor")
-                        end
-                    end
-                    -- Corner pillars / posts.
-                    if buildLevel == "advanced" then
-                        for _, x in ipairs({-radius, radius}) do
-                            for _, z in ipairs({-radius, radius}) do
-                                add(x, 2, z, "armor")
-                                add(x, 3, z, "armor")
-                                add(x, 4, z, "armor")
-                            end
-                        end
-                        -- Inner reinforcement cross.
-                        for x = -radius + 2, radius - 2 do
-                            add(x, 1, 0, "hull")
-                            add(0, 1, x, "hull")
-                        end
-                        -- Access ramps (front/back notches left open conceptually).
-                        for x = -2, 2 do
-                            add(x, 0, -radius - 1, "hull")
-                            add(x, 0, radius + 1, "hull")
-                        end
-                    elseif buildLevel == "intermediate" then
-                        for _, x in ipairs({-radius, radius}) do
-                            for _, z in ipairs({-radius, radius}) do
-                                add(x, 2, z, "armor")
-                                add(x, 3, z, "armor")
-                            end
-                        end
-                    end
-                end
-                --------------------------------------------------------
-                -- PLACEMENT
-                --------------------------------------------------------
-                local placed = 0
-                local delayPerBlock = ENV.__HX_DEVICE == "mobile" and 0.080 or 0.055
-
-                local function materialForRole(role)
-                    if role == "glass" and countOf("GlassBlock") > 0 then return "GlassBlock" end
-                    if role == "armor" then
-                        for _, name in ipairs({
-                            "ObsidianBlock", "TitaniumBlock", "MetalBlock", "SteelBlock",
-                            "IronBlock", "ConcreteBlock", "StoneBlock", "WoodBlock"
-                        }) do
-                            if countOf(name) > 0 then return name end
-                        end
-                    end
-                    if countOf(primaryMaterial) > 0 then return primaryMaterial end
-                    return bestMaterial()
-                end
-
-                local function placeNamed(name, cf)
-                    if not name or countOf(name) <= 0 then return false end
-                    local idObject = data:FindFirstChild(name)
-                    if not idObject then return false end
-                    local available = tonumber(idObject.Value) or 0
-                    if available <= 0 then return false end
-
-                    local okPlace = pcall(function()
-                        rf:InvokeServer(
-                            name,
-                            available,
-                            zonePart,
-                            zonePart.CFrame:ToObjectSpace(cf),
-                            true,
-                            cf,
-                            false
-                        )
-                    end)
-
-                    if not okPlace then return false end
-                    reserve(name)
-                    placed += 1
-                    return true
-                end
-
-                for i, item in ipairs(points) do
-                    if not alive then error("Cerrado") end
-                    local material = materialForRole(item.role)
-                    if not material then break end
-
-                    placeNamed(
-                        material,
-                        origin * CFrame.new(item.x * 2, item.y * 2, item.z * 2)
-                    )
-
-                    if i % 12 == 0 then
-                        task.wait(delayPerBlock * 2)
-                    else
-                        task.wait(delayPerBlock)
-                    end
-                end
-
-                --------------------------------------------------------
-                -- COMPONENTS
-                --------------------------------------------------------
-                local function firstOwned(candidates)
-                    for _, name in ipairs(candidates) do
-                        if countOf(name) > 0 and data:FindFirstChild(name) then return name end
-                    end
-                    return nil
-                end
-
-                if kind == "motorcycle" or kind == "tank" then
-                    local wanted = kind == "motorcycle"
-                        and 2
-                        or (buildLevel == "advanced" and 8 or (buildLevel == "intermediate" and 6 or 4))
-                    local made = 0
-                    local vehicleWidth = kind == "motorcycle" and 1.5 or (buildLevel == "advanced" and 4 or 3)
-                    local axleZs = kind == "motorcycle"
-                        and {-2.8, 2.8}
-                        or (wanted >= 8 and {-4, -1.5, 1.5, 4} or (wanted >= 6 and {-3, 0, 3} or {-2.5, 2.5}))
-
-                    for axleIndex, z in ipairs(axleZs) do
-                        for _, x in ipairs(kind == "motorcycle" and {0} or {-vehicleWidth, vehicleWidth}) do
-                            if made >= wanted then break end
-                            local candidates = axleIndex == 1
-                                and {"FrontWheel", "Wheel", "SmallWheel", "CarWheel", "BackWheel"}
-                                or {"BackWheel", "Wheel", "SmallWheel", "CarWheel", "FrontWheel"}
-                            local wheel = firstOwned(candidates)
-                            if wheel then
-                                local wheelCF = origin
-                                    * CFrame.new(x * 2, 1.7, z * 2)
-                                    * CFrame.Angles(0, 0, math.rad(90))
-                                placeNamed(wheel, wheelCF)
-                                made += 1
-                                task.wait(0.16)
-                            end
-                        end
-                    end
-
-                    if countOf("CarSeat") > 0 then
-                        local y = kind == "motorcycle" and 4.5 or 5.5
-                        placeNamed("CarSeat", origin * CFrame.new(0, y, 0))
-                        task.wait(0.75)
-                    end
-
-                elseif kind == "submarine" or kind == "farmboat" then
-                    local motor = firstOwned(boatMotorCandidates)
-                    local wanted = buildLevel == "advanced" and 2 or 1
-                    local stern = kind == "submarine"
-                        and (buildLevel == "advanced" and 6 or (buildLevel == "intermediate" and 5 or 4))
-                        or (buildLevel == "advanced" and 5 or (buildLevel == "intermediate" and 4 or 3))
-
-                    if motor then
-                        for n = 1, math.min(wanted, countOf(motor)) do
-                            local x = wanted == 2 and (n == 1 and -1.5 or 1.5) or 0
-                            placeNamed(motor, origin * CFrame.new(x * 2, 4.5, stern * 2))
-                            task.wait(0.30)
-                        end
-                        task.wait(0.35)
-                    end
-
-                    if countOf("CarSeat") > 0 then
-                        placeNamed("CarSeat", origin * CFrame.new(0, 5.5, 0))
-                        task.wait(0.80)
-                    end
-
-                elseif kind == "helicopter" or kind == "rocket" then
-                    local propulsion = firstOwned(propulsionCandidates)
-                    local wanted = buildLevel == "advanced" and 3 or (buildLevel == "intermediate" and 2 or 1)
-
-                    if propulsion then
-                        if kind == "rocket" then
-                            local slots = wanted >= 3 and {-2, 0, 2} or (wanted == 2 and {-1.5, 1.5} or {0})
-                            for n = 1, math.min(wanted, countOf(propulsion)) do
-                                local x = slots[n] or 0
-                                local cf = origin
-                                    * CFrame.new(x * 2, 1.5, 0)
-                                    * CFrame.Angles(math.rad(-90), 0, 0)
-                                placeNamed(propulsion, cf)
-                                task.wait(0.28)
-                            end
-                        else
-                            local slots = wanted >= 3 and {-2, 0, 2} or (wanted == 2 and {-1.5, 1.5} or {0})
-                            for n = 1, math.min(wanted, countOf(propulsion)) do
-                                local x = slots[n] or 0
-                                local cf = origin
-                                    * CFrame.new(x * 2, 3.8, 2)
-                                    * CFrame.Angles(0, math.rad(180), 0)
-                                placeNamed(propulsion, cf)
-                                task.wait(0.28)
-                            end
-                        end
-                        task.wait(0.30)
-                    end
-
-                    if countOf("PilotSeat") > 0 then
-                        local seatCF = kind == "rocket"
-                            and (origin * CFrame.new(0, 6, 0))
-                            or (origin * CFrame.new(0, 5.5, -2))
-                        placeNamed("PilotSeat", seatCF)
-                        task.wait(0.80)
-                    end
-                end
-
-                worldCache.boatRoot = nil
-                worldCache.nearestSeat = nil
-                worldCache.boatRootAt = 0
-                worldCache.seatAt = 0
-
-                if placed <= 0 then error("BuildingTool rechazó las colocaciones") end
-            end)
-
-            activeStates.autoBuildBoatBusy = false
-            activeStates._endTimedStatus(statusToken)
-
-            if okBuild then
-                toast("Construcción creada correctamente.")
-            else
-                toast(ENV.__HX_TR("No se pudo completar la construcción: ") .. tostring(errBuild))
-            end
-        end
-
-        modalButton("Básico", "Versión básica, pequeña y económica.", function()
-            buildPreset("basic")
-        end)
-        modalButton("Intermedio", "Versión intermedia con más estructura y protección.", function()
-            buildPreset("intermediate")
-        end)
-        modalButton("Avanzado", "Versión avanzada con mayor tamaño, refuerzo y componentes.", function()
-            buildPreset("advanced")
-        end)
-    end)
-end
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Helicóptero",
-    "Crea un helicóptero con fuselaje, patines, cola, rotor visual y control de vuelo.",
-    function() activeStates._openExtraAutoBuild("helicopter") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Submarino",
-    "Crea un submarino reforzado con casco cerrado, cabina y propulsión trasera.",
-    function() activeStates._openExtraAutoBuild("submarine") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Moto",
-    "Crea una moto compacta con chasis, dos ruedas y asiento de manejo.",
-    function() activeStates._openExtraAutoBuild("motorcycle") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Tanque",
-    "Crea un tanque reforzado con chasis ancho, ruedas laterales y torreta visual.",
-    function() activeStates._openExtraAutoBuild("tank") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Cohete",
-    "Crea un cohete vertical con fuselaje, punta, aletas y propulsión inferior.",
-    function() activeStates._openExtraAutoBuild("rocket") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Barco de Farm",
-    "Crea un barco compacto pensado para recorrer stages con poco peso y buena protección.",
-    function() activeStates._openExtraAutoBuild("farmboat") end,
-    "CONSTRUIR"
-)
-
-actionButton(
-    pages.AutoBuild,
-    "Auto Crear Base/Plataforma",
-    "Crea una plataforma estable para construir o usar como base.",
-    function() activeStates._openExtraAutoBuild("base") end,
-    "CONSTRUIR"
-)
-
--- BOAT
-makeSection(pages.Boat, "BARCO", "Control de vuelo y velocidad del asiento/barco que estés usando.")
-
-toggleRow(pages.Boat, "Boat Fly", "WASD para moverte, Espacio para subir y Ctrl para bajar.", "boatFly", false, function(on)
-    if not on then destroyFlyObjects() end
-end)
-
-toggleRow(pages.Boat, "Boat Speed", "Aplica un boost de velocidad mientras conduces un asiento del barco.", "ENV.__HX_boatSpeed", false)
-
-sliderRow(pages.Boat, "Potencia del barco", "Velocidad usada por Boat Fly, Boat Speed y Auto Pilot.", 40, 450, 120, 10, function(v)
-    ENV.__HX_boatSpeed = v
-end)
-
-toggleRow(pages.Boat, "Auto Pilot", "Guía el barco automáticamente hacia el tesoro.", "autoPilot", false)
-toggleRow(pages.Boat, "Boat Stabilizer", "Mantiene el barco vertical y reduce giros descontrolados.", "boatStabilizer", false)
-toggleRow(pages.Boat, "Boat Anti Flip", "Endereza el barco automáticamente si se vuelca.", "boatAntiFlip", false)
-toggleRow(pages.Boat, "Boat Noclip", "Permite que el barco atraviese obstáculos.", "boatNoclip", false, setBoatNoclip)
-toggleRow(pages.Boat, "Auto Reparar Barco", "Repone piezas faltantes y recoloca piezas sueltas cuando sea posible.", "autoRepairBoat", false, function(on)
-    activeStates._repairToken = (tonumber(activeStates._repairToken) or 0) + 1
-    local token = activeStates._repairToken
-
-    if not on then
-        activeStates._repairSnapshot = nil
-        activeStates._repairRoot = nil
-        activeStates._repairBusy = false
-        return
-    end
-
-    local repairStatusToken = activeStates._beginTimedStatus("Preparando reparación...", "")
-
-    local parts, boatRoot = getBoatParts()
-    if not boatRoot or #parts <= 1 then
-        activeStates._endTimedStatus(repairStatusToken)
-        activeStates.autoRepairBoat = false
-        toast("No encontré un barco para reparar.")
-        return
-    end
-
-    local data = LP:FindFirstChild("Data")
-    if not data then
-        activeStates._endTimedStatus(repairStatusToken)
-        activeStates.autoRepairBoat = false
-        toast("No encontré piezas reparables en este barco.")
-        return
-    end
-
-    local snapshot = {}
-    for _, part in ipairs(parts) do
-        if part:IsA("BasePart") and part ~= boatRoot then
-            local item = data:FindFirstChild(part.Name)
-            if item and (item:IsA("IntValue") or item:IsA("NumberValue")) then
-                snapshot[#snapshot + 1] = {
-                    part = part,
-                    name = part.Name,
-                    relative = boatRoot.CFrame:ToObjectSpace(part.CFrame),
-                    lastAttempt = 0,
-                }
-            end
-        end
-    end
-
-    if #snapshot == 0 then
-        activeStates._endTimedStatus(repairStatusToken)
-        activeStates.autoRepairBoat = false
-        toast("No encontré piezas reparables en este barco.")
-        return
-    end
-
-    activeStates._repairSnapshot = snapshot
-    activeStates._repairRoot = boatRoot
-    activeStates._endTimedStatus(repairStatusToken)
-    toast("Auto reparación activada.")
-
-    task.spawn(function()
-        while alive and activeStates.autoRepairBoat and activeStates._repairToken == token do
-            if not activeStates.autoBuildBoatBusy
-                and not activeStates.autoFarm
-                and not activeStates._finishBusy
-                and not activeStates._repairBusy then
-
-                activeStates._repairBusy = true
-
-                local currentRoot = getBoatRoot() or activeStates._repairRoot
-                local char = getChar()
-                local hum = getHum()
-                local repairData = LP:FindFirstChild("Data")
-
-                if currentRoot and currentRoot.Parent and char and hum and repairData then
-                    local tool = char:FindFirstChild("BuildingTool")
-                    if not tool then
-                        local backpack = LP:FindFirstChildOfClass("Backpack")
-                        tool = backpack and backpack:FindFirstChild("BuildingTool")
-                    end
-                    if not tool then
-                        local playerBuild = Workspace:FindFirstChild(LP.Name)
-                        tool = playerBuild and playerBuild:FindFirstChild("BuildingTool")
-                    end
-
-                    local rf = tool and tool:FindFirstChild("RF", true)
-                    local zone = getTeamSpawn()
-                    local zonePart = zone and (zone:IsA("BasePart") and zone or findFirstPart(zone))
-                    local repairsThisPass = 0
-                    local noStock = false
-                    local now = os.clock()
-
-                    for _, entry in ipairs(activeStates._repairSnapshot or {}) do
-                        if repairsThisPass >= 3 then break end
-
-                        local expected = currentRoot.CFrame * entry.relative
-                        local part = entry.part
-
-                        if part and part.Parent then
-                            -- Recover pieces that became detached but still exist.
-                            local assembly = part.AssemblyRootPart or part
-                            if assembly ~= currentRoot and (part.Position - expected.Position).Magnitude > 3.5 then
-                                pcall(function()
-                                    part.AssemblyLinearVelocity = Vector3.zero
-                                    part.AssemblyAngularVelocity = Vector3.zero
-                                    part.CFrame = expected
-                                end)
-                                repairsThisPass += 1
-                            end
-                        elseif now - (entry.lastAttempt or 0) >= 2.0 then
-                            entry.lastAttempt = now
-                            local stockObj = repairData:FindFirstChild(entry.name)
-                            local available = stockObj and tonumber(stockObj.Value) or 0
-
-                            if available > 0 and rf and rf:IsA("RemoteFunction") and zonePart then
-                                local okPlace = pcall(function()
-                                    rf:InvokeServer(
-                                        entry.name,
-                                        stockObj.Value,
-                                        zonePart,
-                                        zonePart.CFrame:ToObjectSpace(expected),
-                                        true,
-                                        expected,
-                                        false
-                                    )
-                                end)
-
-                                if okPlace then
-                                    task.wait(0.08)
-
-                                    -- Re-link the snapshot entry to the newly placed part.
-                                    local params = OverlapParams.new()
-                                    params.FilterType = Enum.RaycastFilterType.Exclude
-                                    params.FilterDescendantsInstances = {char}
-                                    params.MaxParts = 40
-
-                                    local okNear, nearby = pcall(function()
-                                        return Workspace:GetPartBoundsInRadius(expected.Position, 2.5, params)
-                                    end)
-
-                                    if okNear and nearby then
-                                        local nearest, distance
-                                        for _, candidate in ipairs(nearby) do
-                                            if candidate:IsA("BasePart") and candidate.Name == entry.name then
-                                                local d = (candidate.Position - expected.Position).Magnitude
-                                                if not distance or d < distance then
-                                                    nearest, distance = candidate, d
-                                                end
-                                            end
-                                        end
-                                        if nearest then entry.part = nearest end
-                                    end
-
-                                    repairsThisPass += 1
-                                end
-                            else
-                                noStock = true
-                            end
-                        end
-                    end
-
-                    if noStock then
-                        local lastNotice = tonumber(activeStates._repairNoStockAt) or 0
-                        if now - lastNotice >= 15 then
-                            activeStates._repairNoStockAt = now
-                            toast("Faltan piezas de repuesto para continuar reparando.")
-                        end
-                    end
-                end
-
-                activeStates._repairBusy = false
-            end
-
-            for _ = 1, 5 do
-                if not alive or not activeStates.autoRepairBoat or activeStates._repairToken ~= token then break end
-                task.wait(0.2)
-            end
-        end
-
-        activeStates._repairBusy = false
-    end)
-end)
-
-toggleRow(pages.Boat, "Protect Boat", "Ayuda a reducir golpes y daños durante el recorrido.", "protectBoat", false, setBoatProtection)
-toggleRow(pages.Boat, "Infinite Fuel", "Mantiene el combustible y la energía del barco.", "infiniteFuel", false)
-
-actionButton(pages.Boat, "Propeller / Thruster Control", "Activa la propulsión disponible del barco.", function()
-    local n = activateThrusters()
-    toast(n > 0 and ("Propulsores activados: " .. n) or "No detecté controles de propulsor compatibles")
-end, "ACTIVAR")
-
-toggleRow(pages.Boat, "Auto Activate Thrusters", "Mantiene la propulsión del barco activada automáticamente.", "autoThrusters", false)
-
-toggleRow(pages.Boat, "Auto Sit", "Busca un asiento cercano del barco y vuelve a sentarte automáticamente.", "autoSit", false)
-toggleRow(pages.Boat, "Seat Lock", "Recuerda tu último asiento e intenta volver a sentarte si un obstáculo te expulsa.", "seatLock", false)
-toggleRow(pages.Boat, "Anti Seat", "Evita permanecer sentado cuando no quieras usar asientos.", "antiSeat", false)
-
-actionButton(pages.Boat, "Load Build / Auto Load Slot", "Carga rápidamente una construcción guardada.", function()
-    local function startLoadSearch()
-        openModal("Load Build / Slots", function()
-            modalButton("Cargando...", ENV.__HX_TR("Máximo 10 segundos"), function() end)
-
-            activeStates._runSearch10(
-                ENV.__HX_LANG == "en" and "LOAD / SLOT BUTTONS" or "BOTONES LOAD / SLOT",
-                function()
-                    local buttons = findGameButtons({"load", "slot", "cargar"})
-                    return #buttons > 0 and buttons or nil
-                end,
-                function(buttons)
-                    if not Modal.Visible then return end
-                    clearModal()
-                    for i, item in ipairs(buttons) do
-                        modalButton(
-                            string.format("%02d · %s", i, item.label ~= "" and item.label or item.button.Name),
-                            "Cargar esta opción",
-                            function()
-                                activateGuiButton(item.button)
-                                closeModal()
-                            end
-                        )
-                    end
-                end,
-                startLoadSearch,
-                true,
-                nil,
-                nil
-            )
-        end)
-    end
-
-    startLoadSearch()
-end, "ABRIR SLOTS")
-
-actionButton(pages.Boat, "Auto Save Build", "Guarda rápidamente tu construcción actual.", function()
-    local function startSaveSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "SAVE BUTTON" or "BOTÓN DE GUARDADO",
-            function()
-                local buttons = findGameButtons({"save", "guardar"})
-                return #buttons > 0 and buttons[1] or nil
-            end,
-            function(item)
-                local ok = activateGuiButton(item.button)
-                toast(ok and "Save activado" or "No pude activar Save")
-            end,
-            startSaveSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-
-    startSaveSearch()
-end, "GUARDAR")
-
-actionButton(pages.Boat, "Instant Launch", "Carga y lanza el barco rápidamente.", function()
-    local function startLaunchSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "LOAD BUTTON" or "BOTÓN DE CARGA",
-            function()
-                local loads = findGameButtons({"load", "cargar"})
-                return #loads > 0 and loads[1] or nil
-            end,
-            function(item)
-                activateGuiButton(item.button)
-                task.wait(0.8)
-                toast(launchBoat() and "Launch ejecutado" or "No pude ejecutar el lanzamiento")
-            end,
-            startLaunchSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-
-    startLaunchSearch()
-end, "LANZAR")
-
--- MOVEMENT
-makeSection(pages.Movement, "MOVIMIENTO", "Controles del personaje y protección básica.")
-
-toggleRow(pages.Movement, "Noclip", "Desactiva colisiones de las partes del personaje mientras esté activo.", "noclip", false, setNoclip)
-
-toggleRow(pages.Movement, "Anti Water / Anti Damage", "Reduce el daño de agua y otros peligros y ayuda a volver a una zona segura.", "antiHazard", true, setAntiHazard)
-task.spawn(setAntiHazard, true)
-toggleRow(pages.Movement, "Anti Void", "Si caes por debajo del límite del mapa, vuelve a la última posición segura o a tu zona de equipo.", "antiVoid", false)
-toggleRow(pages.Movement, "No Fall / Anti Fall", "Limita la velocidad de caída para reducir caídas bruscas y mantener una recuperación segura.", "noFall", false)
-toggleRow(pages.Movement, "Infinite Jump", "Permite volver a saltar en el aire usando Espacio.", "infiniteJump", false)
-toggleRow(pages.Movement, "Player Fly", "Vuelo del personaje separado del Boat Fly: WASD, Espacio y Ctrl.", "playerFly", false, function(on)
-    if not on then clearPlayerFlyObjects() end
-end)
-
-sliderRow(pages.Movement, "Player Fly Speed", "Velocidad usada únicamente por Player Fly.", 30, 300, 90, 10, function(v)
-    ENV.__HX_playerFlySpeed = v
-end)
-
-sliderRow(pages.Movement, "Gravity", "Ajusta la gravedad del juego.", 0, 300, math.floor(ENV.__HX_initialGravity + 0.5), 5, function(v)
-    Workspace.Gravity = v
-end)
-
-sliderRow(pages.Movement, "Character Speed", "Ajusta la velocidad al caminar.", 16, 150, 16, 1, function(v)
-    walkSpeed = v
-    local hum = getHum()
-    if hum then pcall(function() hum.WalkSpeed = v end) end
-end)
-sliderRow(pages.Movement, "Character Jump", "Ajusta la potencia de salto.", 50, 250, 50, 5, function(v)
-    jumpPower = v
-    local hum = getHum()
-    if hum then
-        pcall(function() hum.JumpPower = v end)
-        pcall(function() hum.JumpHeight = math.max(7.2, v / 7) end)
-    end
-end)
-
--- TELEPORT
-makeSection(pages.Teleport, "TELEPORT", "Stages, cofre, posiciones guardadas y jugadores.")
-
-actionButton(pages.Teleport, "Teleport al cofre", "Localiza el Golden Chest / Treasure del mapa y te lleva a él.", function()
-    local function startChestSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "FINAL CHEST" or "COFRE FINAL",
-            function() return findChestPart(true) end,
-            function(chest)
-                tpToPart(chest, Vector3.new(0, 2, 0))
-                touchPart(chest)
-            end,
-            startChestSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-    startChestSearch()
-end, "IR AL COFRE")
-
-actionButton(pages.Teleport, "Teleport Last Stage", "Te lleva a la última zona antes del tesoro.", function()
-    local function startStageSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "LAST STAGE" or "ÚLTIMO STAGE",
-            function()
-                worldCache.stagesAt = 0
-                local stages = getStageTargets()
-                return (#stages > 0 and stages[#stages]) or nil
-            end,
-            function(last)
-                tpToPart(last.part, Vector3.new(0, 2, 0))
-            end,
-            startStageSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-    startStageSearch()
-end, "ÚLTIMO STAGE")
-
-actionButton(pages.Teleport, "Return To Team", "Te lleva de vuelta a la zona de tu equipo.", function()
-    local function startTeamSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "TEAM AREA" or "ZONA DE TU EQUIPO",
-            function()
-                worldCache.teamSpawnAt = 0
-                return getTeamSpawn()
-            end,
-            function(zone)
-                tpToPart(zone, Vector3.new(0, 2, 0))
-            end,
-            startTeamSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-    startTeamSearch()
-end, "VOLVER")
-
-actionButton(pages.Teleport, "Teleport To Boat", "Te lleva de vuelta a tu barco.", function()
-    local function startBoatSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "YOUR BOAT" or "TU BARCO",
-            function()
-                worldCache.boatRootAt = 0
-                worldCache.nearestSeat = nil
-                worldCache.seatAt = 0
-                return getBoatRoot()
-            end,
-            function(boat)
-                tpToCFrame(boat.CFrame * CFrame.new(0, 2, 0))
-            end,
-            startBoatSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-    startBoatSearch()
-end, "IR AL BARCO")
-
-actionButton(pages.Teleport, "Teleport To Seat", "Te lleva al asiento de tu barco e intenta sentarte.", function()
-    local function startSeatSearch()
-        activeStates._runSearch10(
-            ENV.__HX_LANG == "en" and "BOAT SEAT" or "ASIENTO DEL BARCO",
-            function()
-                worldCache.nearestSeat = nil
-                worldCache.seatAt = 0
-                return getSeat() or (lastSeat and lastSeat.Parent and lastSeat) or getNearestSeat(500)
-            end,
-            function(seat)
-                local hum = getHum()
-                if not hum then return end
-                tpToCFrame(seat.CFrame * CFrame.new(0, 2, 0))
-                task.wait(0.15)
-                pcall(function() seat:Sit(hum) end)
-                lastSeat = seat
-            end,
-            startSeatSearch,
-            false,
-            nil,
-            nil
-        )
-    end
-    startSeatSearch()
-end, "SENTARSE")
-
-toggleRow(pages.Teleport, "Click TP", "Con el toggle activo, haz clic en el mundo para teletransportarte al punto seleccionado.", "clickTP", false)
-toggleRow(pages.Teleport, "Tween TP", "Convierte los teleports del hub en desplazamientos progresivos en vez de instantáneos.", "tweenTP", false)
-sliderRow(pages.Teleport, "Tween TP Speed", "Velocidad del desplazamiento progresivo.", 50, 500, 180, 10, function(v)
-    ENV.__HX_tweenTPSpeed = v
-    ENV.__BABFT_TWEEN_SPEED = v
-end)
-
-actionButton(pages.Teleport, "Guardar posición", "Guarda tu posición actual para volver a ella más tarde.", function()
-    local root = getRoot()
-    if not root then return toast("Personaje no disponible") end
-    local name = (ENV.__HX_LANG == "en" and "Position " or "Posición ") .. tostring(#savedPositions + 1)
-    savedPositions[#savedPositions + 1] = {name = name, cframe = serializeCFrame(root.CFrame)}
-    savePositionsToDisk()
-    toast(name .. " guardada")
-end, "GUARDAR")
-
-actionButton(pages.Teleport, "Posiciones guardadas", "Abre la lista para teletransportarte o eliminar posiciones.", function()
-    openModal("Posiciones guardadas", function()
-        if #savedPositions == 0 then
-            modalButton("No hay posiciones", "Usa “Guardar posición” primero.", function() end)
-            return
-        end
-        for i, item in ipairs(savedPositions) do
-            modalButton(item.name or ("Posición " .. i), "Click: teletransportar", function()
-                local cf = deserializeCFrame(item.cframe)
-                if cf then tpToCFrame(cf) end
-                closeModal()
-            end)
-        end
-        modalButton("Eliminar todas", "Borra todas las posiciones guardadas.", function()
-            table.clear(savedPositions)
-            savePositionsToDisk()
-            closeModal()
-            toast("Posiciones eliminadas")
-        end, true)
-    end)
-end, "ABRIR")
-
-actionButton(pages.Teleport, "Teleport a jugadores", "Busca jugadores y usa acciones rápidas sobre ellos.", function()
-    local function openPlayerActions(plr)
-        openModal(plr.DisplayName .. "  @" .. plr.Name, function()
-            modalButton("Teleport", "Ir junto a este jugador", function()
-                local char = plr.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
-                if root then tpToCFrame(root.CFrame * CFrame.new(3, 0, 0)) end
-                closeModal()
-            end)
-            modalButton("Spectate Player", "Poner la cámara sobre este jugador", function()
-                local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    Camera = Workspace.CurrentCamera or Camera
-                    if Camera then Camera.CameraSubject = hum end
-                end
-                closeModal()
-            end)
-            modalButton("Follow Player", "Seguir automáticamente a este jugador", function()
-                followTarget = plr
-                activeStates.followPlayer = true
-                closeModal()
-                toast("Follow activado: " .. plr.DisplayName)
-            end)
-            modalButton("Bring Boat To Player", "Mueve tu barco cerca de este jugador.", function()
-                local targetRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-                local boat = getBoatRoot()
-                if targetRoot and boat then
-                    boat.AssemblyLinearVelocity = Vector3.zero
-                    boat.AssemblyAngularVelocity = Vector3.zero
-                    boat.CFrame = targetRoot.CFrame * CFrame.new(8, 2, 0)
-                    toast("Boat movido")
-                else
-                    toast("No pude detectar jugador/barco")
-                end
-                closeModal()
-            end)
-            modalButton("Detener Follow / Spectate", "Vuelve la cámara a tu personaje y detiene el seguimiento.", function()
-                followTarget = nil
-                activeStates.followPlayer = false
-                local hum = getHum()
-                Camera = Workspace.CurrentCamera or Camera
-                if hum and Camera then Camera.CameraSubject = hum end
-                closeModal()
-            end, true)
-        end)
-    end
-
-    openModal("Jugadores", function()
-        local rows = {}
-        modalSearchBox("Buscar jugador...", function(query)
-            query = lower(query)
-            for plr, button in pairs(rows) do
-                local hay = lower(plr.DisplayName .. " " .. plr.Name)
-                button.Visible = query == "" or string.find(hay, query, 1, true) ~= nil
-            end
-        end)
-        local count = 0
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LP then
-                count += 1
-                local b = modalButton(plr.DisplayName, "@" .. plr.Name, function() openPlayerActions(plr) end)
-                rows[plr] = b
-            end
-        end
-        if count == 0 then modalButton("No hay otros jugadores", "Servidor vacío.", function() end) end
-    end)
-end, "JUGADORES")
-
--- VISUALS
-makeSection(pages.Visuals, "VISUALES", "Resalta jugadores y bloques cercanos.")
-
-toggleRow(pages.Visuals, "ESP de jugadores", "Resalta a los demás jugadores y muestra sus nombres.", "playerESP", false, function(on)
-    if on then refreshPlayerESP() else clearPlayerESP() end
-end)
-
-toggleRow(pages.Visuals, "ESP de bloques", "Resalta los bloques cercanos.", "blockESP", false, function(on)
-    if on then refreshBlockESP() else clearBlockESP() end
-end)
-
-makeSection(pages.Visuals, "RENDIMIENTO", "Opciones para mejorar el rendimiento visual.")
-toggleRow(pages.Visuals, "FPS Booster", "Reduce efectos gráficos para mejorar los FPS.", "fpsBooster", false, function() applyPerformanceState() end)
-toggleRow(pages.Visuals, "Hide Other Boats", "Oculta los barcos de otros jugadores.", "hideOtherBoats", false, function(on) if on then applyHideOtherBoats() else restoreHiddenBoats() end end)
-toggleRow(pages.Visuals, "Hide Other Players", "Oculta a los demás jugadores.", "hideOtherPlayers", false, function(on) if on then applyHideOtherPlayers() else restoreHiddenPlayers() end end)
-toggleRow(pages.Visuals, "Remove Water Effects", "Reduce los efectos visuales del agua.", "removeWaterEffects", false, function() applyPerformanceState() end)
-toggleRow(pages.Visuals, "Remove Particles", "Reduce partículas y efectos visuales.", "removeParticles", false, function() applyPerformanceState() end)
-toggleRow(pages.Visuals, "Disable Shadows", "Desactiva las sombras para mejorar el rendimiento.", "disableShadows", false, function() applyPerformanceState() end)
-toggleRow(pages.Visuals, "Low Graphics", "Reduce la calidad gráfica para aumentar los FPS.", "lowGraphics", false, function() applyPerformanceState() end)
-
--- SERVER
-makeSection(pages.Server, "SERVIDOR", "Reconexión y cambio de servidor.")
-
-toggleRow(pages.Server, "Auto Rejoin", "Vuelve a entrar automáticamente si pierdes la conexión.", "autoRejoin", false)
-toggleRow(pages.Server, "Anti AFK", "Evita que te expulsen por inactividad.", "antiAFK", false)
-
-actionButton(pages.Server, "Rejoin", "Vuelve a entrar al servidor actual.", rejoin, "REJOIN")
-actionButton(pages.Server, "Server Hop", "Busca otro servidor público con espacio disponible.", function()
-    local function startServerHopSearch()
-        activeStates._runAsyncSearch10(
-            ENV.__HX_LANG == "en" and "AVAILABLE SERVER" or "SERVIDOR DISPONIBLE",
-            serverHop,
-            function(server)
-                if server and server.id then
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LP)
-                end
-            end,
-            startServerHopSearch,
-            nil,
-            nil
-        )
-    end
-    startServerHopSearch()
-end, "SERVER HOP")
-
-actionButton(pages.Server, "Low Player Server", "Busca entre los servidores públicos disponibles y entra al de menor población encontrado.", function()
-    local function startLowServerSearch()
-        activeStates._runAsyncSearch10(
-            ENV.__HX_LANG == "en" and "LOW PLAYER SERVER" or "SERVIDOR CON POCOS JUGADORES",
-            lowPlayerServer,
-            function(server)
-                if server and server.id then
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LP)
-                end
-            end,
-            startLowServerSearch,
-            nil,
-            nil
-        )
-    end
-    startLowServerSearch()
-end, "BUSCAR")
-
-selectPage("Farm")
-
---====================================================
--- Runtime loops (optimized)
---====================================================
-ENV.__HX_lastNoclipUpdate = 0
-ENV.__HX_lastMovementUpdate = 0
-ENV.__HX_lastSafetySample = 0
-
-track(RunService.Stepped:Connect(function()
-    if not alive or not activeStates.noclip then return end
-    local now = os.clock()
-    if now - ENV.__HX_lastNoclipUpdate < 0.12 then return end
-    ENV.__HX_lastNoclipUpdate = now
-
-    local char = getChar()
-    if char then
-        for _, d in ipairs(char:GetDescendants()) do
-            if d:IsA("BasePart") then
-                if characterCollisionCache[d] == nil then characterCollisionCache[d] = d.CanCollide end
-                d.CanCollide = false
-            end
-        end
-    end
-end))
-
-track(RunService.Heartbeat:Connect(function()
-    if not alive then return end
-    local now = os.clock()
-    local hum = getHum()
-    local root = getRoot()
-
-    -- Character stats do not need to be rewritten 60 times per second.
-    if hum and now - ENV.__HX_lastMovementUpdate >= 0.20 then
-        ENV.__HX_lastMovementUpdate = now
-        pcall(function() if hum.WalkSpeed ~= walkSpeed then hum.WalkSpeed = walkSpeed end end)
-        pcall(function() if hum.JumpPower ~= jumpPower then hum.JumpPower = jumpPower end end)
-        local desiredJumpHeight = math.max(7.2, jumpPower / 7)
-        pcall(function() if math.abs(hum.JumpHeight - desiredJumpHeight) > 0.05 then hum.JumpHeight = desiredJumpHeight end end)
-    end
-
-    if hum and root then
-        -- Safety features are cheap but do not need Heartbeat frequency.
-        -- ~8 Hz is responsive enough and removes dozens of checks per second.
-        if now - ENV.__HX_lastSafetySample >= 0.12 then
-            ENV.__HX_lastSafetySample = now
-
-            if not activeStates._farmTeleporting and hum.Health > 0 and hum.FloorMaterial ~= Enum.Material.Air and root.Position.Y > Workspace.FallenPartsDestroyHeight + 35 then
-                ENV.__HX_safeCFrame = root.CFrame
-            end
-
-            if activeStates.antiHazard and not activeStates._farmTeleporting then
-                local damaged = ENV.__HX_lastHealth and hum.Health < ENV.__HX_lastHealth
-                if damaged and ENV.__HX_safeCFrame then
-                    root.CFrame = ENV.__HX_safeCFrame * CFrame.new(0, 3, 0)
-                    root.AssemblyLinearVelocity = Vector3.zero
-                    pcall(function() hum.Health = hum.MaxHealth end)
-                end
-            end
-
-            if activeStates.antiVoid and not activeStates._farmTeleporting and root.Position.Y <= Workspace.FallenPartsDestroyHeight + 28 then
-                local rescue = ENV.__HX_safeCFrame
-                if not rescue then
-                    local teamSpawn = getTeamSpawn()
-                    rescue = teamSpawn and (teamSpawn.CFrame * CFrame.new(0, 5, 0)) or CFrame.new(0, 50, 0)
-                else
-                    rescue = rescue * CFrame.new(0, 4, 0)
-                end
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.CFrame = rescue
-            end
-
-            if activeStates.noFall and root.AssemblyLinearVelocity.Y < -55 then
-                local v = root.AssemblyLinearVelocity
-                root.AssemblyLinearVelocity = Vector3.new(v.X, -24, v.Z)
-            end
-            ENV.__HX_lastHealth = hum.Health
-        end
-    else
-        ENV.__HX_lastHealth = nil
-    end
-
-    if activeStates.playerFly and root then
-        ensurePlayerFlyObjects(root)
-        local dir = getMoveVector()
-        if dir.Magnitude > 0.05 then
-            playerFlyObjects.velocity.Velocity = dir * (ENV.__HX_playerFlySpeed or 90)
-            playerFlyObjects.gyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-            Camera = Workspace.CurrentCamera or Camera
-            if Camera then
-                local look = Camera.CFrame.LookVector
-                local horizontal = Vector3.new(look.X, 0, look.Z)
-                if horizontal.Magnitude > 0.01 then
-                    playerFlyObjects.gyro.CFrame = CFrame.lookAt(root.Position, root.Position + horizontal.Unit)
-                end
-            end
-        else
-            -- No input: soft hold so mobile users are not frozen in place
-            playerFlyObjects.velocity.Velocity = Vector3.new(0, 0, 0)
-            playerFlyObjects.gyro.MaxTorque = Vector3.new(4e4, 4e4, 4e4)
-        end
-    elseif next(playerFlyObjects) then
-        clearPlayerFlyObjects()
-    end
-
-    if activeStates.followPlayer and followTarget and followTarget.Parent and root then
-        local targetRoot = followTarget.Character and followTarget.Character:FindFirstChild("HumanoidRootPart")
-        if targetRoot then
-            local desired = targetRoot.CFrame * CFrame.new(3, 0, 3)
-            root.CFrame = root.CFrame:Lerp(desired, 0.22)
-            root.AssemblyLinearVelocity = Vector3.zero
-        end
-    elseif activeStates.followPlayer and (not followTarget or not followTarget.Parent) then
-        activeStates.followPlayer = false
-        followTarget = nil
-    end
-
-    local seatFeatureActive = activeStates.antiSeat or activeStates.seatLock or activeStates.autoSit
-        or activeStates.boatFly or activeStates.ENV.__HX_boatSpeed or activeStates.boatAntiFlip
-        or activeStates.autoPilot or activeStates.boatStabilizer
-
-    if hum and seatFeatureActive then
-        local seatNow = hum.SeatPart
-        if seatNow then lastSeat = seatNow end
-        if activeStates.antiSeat and seatNow then
-            hum.Sit = false
-            hum.Jump = true
-        elseif not seatNow and now - ENV.__HX_lastSeatAttempt > 0.8 then
-            if activeStates.seatLock and lastSeat and lastSeat.Parent then
-                ENV.__HX_lastSeatAttempt = now
-                pcall(function() lastSeat:Sit(hum) end)
-            elseif activeStates.autoSit then
-                local candidate = lastSeat and lastSeat.Parent and lastSeat or getNearestSeat(220)
-                if candidate then
-                    ENV.__HX_lastSeatAttempt = now
-                    lastSeat = candidate
-                    pcall(function() candidate:Sit(hum) end)
-                end
-            end
-        end
-    end
-
-    local boatRealtime = activeStates.boatFly or activeStates.ENV.__HX_boatSpeed or activeStates.boatAntiFlip
-        or activeStates.autoPilot or activeStates.boatStabilizer
-    local seat = boatRealtime and getSeat() or nil
-
-    if activeStates.boatFly and seat then
-        ensureBoatFlyObjects(seat)
-        local dir = getMoveVector()
-        if dir.Magnitude > 0.05 then
-            flyObjects.velocity.Velocity = dir * (ENV.__HX_boatSpeed or 120)
-            flyObjects.gyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-            Camera = Workspace.CurrentCamera or Camera
-            if Camera then
-                local look = Camera.CFrame.LookVector
-                local horizontal = Vector3.new(look.X, 0, look.Z)
-                if horizontal.Magnitude > 0.01 then
-                    flyObjects.gyro.CFrame = CFrame.lookAt(seat.Position, seat.Position + horizontal.Unit)
-                end
-            end
-        else
-            -- No input: release hard lock so mobile does not freeze the boat
-            flyObjects.velocity.Velocity = Vector3.new(0, 0, 0)
-            flyObjects.gyro.MaxTorque = Vector3.new(5e4, 5e4, 5e4)
-        end
-    elseif activeStates.boatFly and not seat then
-        destroyFlyObjects()
-    elseif not activeStates.boatFly and next(flyObjects) then
-        destroyFlyObjects()
-    end
-
-    if activeStates.ENV.__HX_boatSpeed and seat and not activeStates.boatFly then
-        local throttle = 0
-        if seat:IsA("VehicleSeat") then throttle = seat.ThrottleFloat end
-        if pressed.W then throttle = 1 elseif pressed.S then throttle = -1 end
-        if throttle ~= 0 then
-            local look = seat.CFrame.LookVector
-            local flat = Vector3.new(look.X, 0, look.Z)
-            if flat.Magnitude > 0.01 then seat.AssemblyLinearVelocity = flat.Unit * ENV.__HX_boatSpeed * throttle end
-        end
-    end
-
-    -- Critical optimization: never search the Workspace for a boat when no
-    -- realtime boat feature is enabled.
-    local boatRoot = boatRealtime and getBoatRoot() or nil
-    if boatRoot and not activeStates.boatFly then
-        if activeStates.boatAntiFlip and boatRoot.CFrame.UpVector.Y < 0.35 then
-            local look = boatRoot.CFrame.LookVector
-            local flat = Vector3.new(look.X, 0, look.Z)
-            if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
-            boatRoot.AssemblyAngularVelocity = Vector3.zero
-            boatRoot.CFrame = CFrame.lookAt(boatRoot.Position, boatRoot.Position + flat.Unit)
-        end
-
-        if activeStates.autoPilot then
-            local chest = findChestPart()
-            local pos = chest and chest.Position
-            if pos then
-                local delta = pos - boatRoot.Position
-                local flat = Vector3.new(delta.X, 0, delta.Z)
-                if flat.Magnitude > 10 then
-                    boatRoot.AssemblyLinearVelocity = flat.Unit * ENV.__HX_boatSpeed + Vector3.new(0, math.clamp(delta.Y * 0.6, -25, 25), 0)
-                    local gyro = ensureBoatGyro(boatRoot)
-                    gyro.CFrame = CFrame.lookAt(boatRoot.Position, boatRoot.Position + flat.Unit)
-                else
-                    boatRoot.AssemblyLinearVelocity = Vector3.zero
-                end
-            end
-        elseif activeStates.boatStabilizer then
-            local look = boatRoot.CFrame.LookVector
-            local flat = Vector3.new(look.X, 0, look.Z)
-            if flat.Magnitude < 0.01 then flat = Vector3.new(0, 0, -1) end
-            local gyro = ensureBoatGyro(boatRoot)
-            gyro.CFrame = CFrame.lookAt(boatRoot.Position, boatRoot.Position + flat.Unit)
-        elseif next(boatUtilityObjects) then
-            clearBoatUtilityObjects()
-        end
-    elseif not boatRealtime and next(boatUtilityObjects) then
-        clearBoatUtilityObjects()
-    end
-end))
-
--- Lightweight maintenance loop. Expensive map scans are cached inside the
--- feature functions and this loop is intentionally slower than the old build.
-task.spawn(function()
-    while alive do
-        if activeStates.autoCollect then pcall(doAutoCollect) end
-        if activeStates.playerESP then pcall(refreshPlayerESP) end
-        if activeStates.boatNoclip then pcall(setBoatNoclip, true) end
-        if activeStates.protectBoat then pcall(setBoatProtection, true) end
-        if activeStates.infiniteFuel then pcall(refillFuel) end
-        if activeStates.hideOtherPlayers then pcall(applyHideOtherPlayers) end
-
-        local gold = getGoldValue()
-        if gold ~= nil then
-            if ENV.__HX_sessionGoldStart == nil then ENV.__HX_sessionGoldStart = gold end
-            if ENV.__HX_lastKnownGold ~= nil and gold > ENV.__HX_lastKnownGold then ENV.__HX_sessionGoldEarned += gold - ENV.__HX_lastKnownGold end
-            ENV.__HX_lastKnownGold = gold
-        end
-        local elapsed = getFarmElapsed()
-        local perMinute = elapsed > 0 and (ENV.__HX_sessionGoldEarned / elapsed) * 60 or 0
-        local perHour = perMinute * 60
-        local mins = math.floor(elapsed / 60)
-        local secs = math.floor(elapsed % 60)
-        farmStatsDesc.Text = string.format(
-            ENV.__HX_LANG == "en"
-                and "Gold earned: +%s   ·   Runs: %d\nFarm: %02d:%02d   ·   Gold/min: %.1f   ·   Est. Gold/h: %.0f"
-                or "Oro ganado: +%s   ·   Recorridos: %d\nFarmeo: %02d:%02d   ·   Oro/min: %.1f   ·   Est. Oro/h: %.0f",
-            tostring(ENV.__HX_sessionGoldEarned), runsCompleted, mins, secs, perMinute, perHour
-        )
-        task.wait(2.0)
-    end
-end)
-
-task.spawn(function()
-    while alive do
-        if activeStates.blockESP then pcall(refreshBlockESP) end
-        if activeStates.autoThrusters then pcall(activateThrusters) end
-        if activeStates.hideOtherBoats then pcall(applyHideOtherBoats) end
-        if activeStates.autoQuest then
-            if selectedQuestTarget and selectedQuestTarget.Parent then
-                pcall(interactQuestPrompt, selectedQuestTarget)
-            elseif not activeStates._autoQuestSearchBusy then
-                task.spawn(activeStates._startAutoQuestSearch)
-            end
-        end
-        task.wait(6.0)
-    end
-end)
-
--- Process newly-created hazards/effects incrementally instead of rescanning the
--- entire Workspace every few seconds.
-track(Workspace.DescendantAdded:Connect(function(d)
-    if not alive then return end
-
-    if activeStates.antiHazard and d:IsA("BasePart") and containsAny(d.Name, {"water", "lava", "acid", "toxic", "damage", "kill", "hazard"}) then
-        if hazardTouchCache[d] == nil then hazardTouchCache[d] = d.CanTouch end
-        pcall(function() d.CanTouch = false end)
-    end
-
-    local disableParticles = activeStates.removeParticles or activeStates.fpsBooster
-    if disableParticles and (d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") or d:IsA("Smoke") or d:IsA("Fire") or d:IsA("Sparkles")) then
-        if particleCache[d] == nil then particleCache[d] = d.Enabled end
-        pcall(function() d.Enabled = false end)
-    end
-
-    local disableShadows = activeStates.disableShadows or activeStates.fpsBooster or activeStates.lowGraphics
-    if disableShadows and d:IsA("BasePart") then
-        if shadowCache[d] == nil then shadowCache[d] = d.CastShadow end
-        pcall(function() d.CastShadow = false end)
-    end
-
-    if activeStates.autoCollect and #autoCollectTargets < 180 then
-        if (d:IsA("BasePart") and containsAny(d.Name, {"gold", "collect", "pickup", "treasure", "chest"})) or d:IsA("ProximityPrompt") then
-            autoCollectTargets[#autoCollectTargets + 1] = d
-        end
-    end
-end))
-
-track(LP.Idled:Connect(function()
-    if not alive or not activeStates.antiAFK then return end
-    pcall(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new(0, 0))
-    end)
-end))
-
-track(Players.PlayerAdded:Connect(function(plr)
-    track(plr.CharacterAdded:Connect(function()
-        task.wait(0.5)
-        if activeStates.playerESP then refreshPlayerESP() end
-    end))
-end))
-
-track(Players.PlayerRemoving:Connect(function(plr)
-    if followTarget == plr then
-        followTarget = nil
-        activeStates.followPlayer = false
-        local hum = getHum()
-        Camera = Workspace.CurrentCamera or Camera
-        if hum and Camera then pcall(function() Camera.CameraSubject = hum end) end
-    end
-    local o = espPlayerObjects[plr]
-    if o then
-        if o.highlight then pcall(function() o.highlight:Destroy() end) end
-        if o.billboard then pcall(function() o.billboard:Destroy() end) end
-        espPlayerObjects[plr] = nil
-    end
-end))
-
-track(LP.CharacterAdded:Connect(function()
-    table.clear(characterCollisionCache)
-    ENV.__HX_safeCFrame = nil
-    ENV.__HX_lastHealth = nil
-    lastSeat = nil
-    worldCache.nearestSeat = nil
-    worldCache.boatRoot = nil
-    worldCache.seatAt = 0
-    worldCache.boatRootAt = 0
-    clearPlayerFlyObjects()
-    task.wait(1)
-end))
-
-pcall(function()
-    track(GuiService.ErrorMessageChanged:Connect(function(msg)
-        if alive and activeStates.autoRejoin and msg and msg ~= "" then
-            task.wait(1.5)
-            rejoin()
-        end
-    end))
-end)
-
---====================================================
--- Minimize / close / cleanup
---====================================================
-local function cleanup()
-    if not alive then return end
-    alive = false
-    for k in pairs(activeStates) do activeStates[k] = false end
-
-    setNoclip(false)
-    setAntiHazard(false)
-    setBoatNoclip(false)
-    setBoatProtection(false)
-    destroyFlyObjects()
-    clearPlayerFlyObjects()
-    clearBoatUtilityObjects()
-    clearPlayerESP()
-    clearBlockESP()
-    restoreHiddenPlayers()
-    restoreHiddenBoats()
-    applyPerformanceState()
-    Workspace.Gravity = ENV.__HX_initialGravity
-    ENV.__BABFT_TWEEN_SPEED = nil
-    followTarget = nil
-
-    local hum = getHum()
-    if hum then
-        pcall(function() hum.WalkSpeed = 16 end)
-        pcall(function() hum.JumpPower = 50 end)
-        pcall(function() hum.JumpHeight = 7.2 end)
-        Camera = Workspace.CurrentCamera or Camera
-        if Camera then pcall(function() Camera.CameraSubject = hum end) end
-    end
-
-    disconnectAll()
-
-    for _, fn in ipairs(cleanupTasks) do pcall(fn) end
-    table.clear(cleanupTasks)
-
-    if Gui then pcall(function() Gui:Destroy() end) end
-    if ENV.__BABFT_NIGHTFALL_CLEANUP == cleanup then ENV.__BABFT_NIGHTFALL_CLEANUP = nil end
-end
-
-ENV.__BABFT_NIGHTFALL_CLEANUP = cleanup
-
-track(Minimize.Activated:Connect(function()
-    if Main:GetAttribute("Minimizing") or Main:GetAttribute("Restoring") then return end
-    Main:SetAttribute("Minimizing", true)
-    if activeStates._cancelActiveSearch then activeStates._cancelActiveSearch() end
-    if ENV.__HX_NotFoundShade and ENV.__HX_NotFoundShade.Parent then
-        ENV.__HX_NotFoundShade:Destroy()
-        ENV.__HX_NotFoundShade = nil
-    end
-    closeModal()
-
-    -- Stable minimize: no Position/Size/Rotation changes.
-    -- The panel fades as one CanvasGroup, preserving its dragged location.
-    TweenService:Create(
-        Main,
-        TweenInfo.new(0.17, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-        {GroupTransparency = 1}
-    ):Play()
-    TweenService:Create(
-        PanelShell,
-        TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-        {BackgroundTransparency = 0.45}
-    ):Play()
-
-    task.delay(0.165, function()
-        if alive then
-            Main.Visible = false
-            Main.GroupTransparency = 0
-            PanelShell.BackgroundTransparency = 0
-            Main:SetAttribute("Minimizing", false)
-
-            Bubble.Size = UDim2.fromOffset(46, 46)
-            Bubble.ImageTransparency = 0.18
-            Bubble.BackgroundTransparency = 0.14
-            Bubble.Visible = true
-
-            TweenService:Create(
-                Bubble,
-                TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                {
-                    Size = UDim2.fromOffset(60, 60),
-                    ImageTransparency = 0,
-                    BackgroundTransparency = 0.04
-                }
-            ):Play()
-        end
-    end)
-end))
-
-Main:SetAttribute("Closing", false)
-Main:SetAttribute("Minimizing", false)
-Main:SetAttribute("Restoring", false)
-
-track(Close.Activated:Connect(function()
-    if Main:GetAttribute("Closing") or not alive then return end
-    Main:SetAttribute("Closing", true)
-    if activeStates._cancelActiveSearch then activeStates._cancelActiveSearch() end
-    closeModal()
-
-    TweenService:Create(
-        Main,
-        TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-        {GroupTransparency = 1}
-    ):Play()
-    TweenService:Create(
-        PanelShell,
-        TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-        {BackgroundTransparency = 0.60}
-    ):Play()
-
-    task.delay(0.20, cleanup)
-end))
-
--- Stable entrance: fade the entire UI without moving or resizing the panel.
-Main.GroupTransparency = 1
-PanelShell.BackgroundTransparency = 0.55
-
-TweenService:Create(
-    Main,
-    TweenInfo.new(0.26, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    {GroupTransparency = 0}
-):Play()
-TweenService:Create(
-    PanelShell,
-    TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    {BackgroundTransparency = 0}
-):Play()
-
-toast("Anti Water / Anti Damage está ACTIVADO por defecto. HX Boat usa el modo optimizado.")
+-- H3XA X MM2 GLASSMORPHISM UI APPLIED
