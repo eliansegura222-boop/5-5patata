@@ -4528,7 +4528,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 			end
 
 			-- Categorías reales para MM2: el nombre del juego ya no se usa como categoría.
-			local categoryNames = {"ESPs", "Sheriff", "Murderer", "Combat", "Movement", "Utility", "Extras", "VIP"}
+			local categoryNames = {"ESPs", "Sheriff", "Murderer", "Combat", "Movement", "Utility", "Extras"}
 			local _lang = ((getgenv and getgenv()) or _G).H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
 			local categoryAliases = {
 				["ESPs"] = _lang == "ES" and "VISUALES" or "VISUALS",
@@ -4537,8 +4537,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Combat"] = _lang == "ES" and "COMBATE" or "COMBAT",
 				["Movement"] = _lang == "ES" and "MOVIMIENTO" or "MOVEMENT",
 				["Utility"] = _lang == "ES" and "UTILIDAD" or "UTILITY",
-				["Extras"] = _lang == "ES" and "EXTRAS" or "EXTRAS",
-				["VIP"] = "VIP"
+				["Extras"] = _lang == "ES" and "EXTRAS" or "EXTRAS"
 			}
 			local function isCategoryHeader(item)
 				return item and item["Type"] == "Text" and item["Args"] and categoryAliases[item["Args"][1]] ~= nil
@@ -4567,8 +4566,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Combat"] = "rbxassetid://10734977012",        -- lucide-target
 				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
 				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
-				["Extras"] = "rbxassetid://10734966248",         -- lucide-star
-				["VIP"] = "rbxassetid://10734966248"               -- lucide-star (image icon, not emoji)
+				["Extras"] = "rbxassetid://10734966248"         -- lucide-star
 			}
 
 			-- Sidebar glass cards
@@ -4661,24 +4659,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				end
 			end
 
-			local selectedCategory = getgenv().H3XA_MM2_SELECTED_CATEGORY
-			local vipSub = getgenv().H3XA_MM2_VIP_SUBTAB or "Funciones"
-			if selectedCategory == "VIP" and vipSub ~= "Funciones" and vipSub ~= "Configs" and vipSub ~= "Players" then
-				vipSub = "Funciones"
-				getgenv().H3XA_MM2_VIP_SUBTAB = vipSub
-			end
-
-			local visibleItems = categories[selectedCategory] or {}
-			if selectedCategory == "VIP" and vipSub == "Funciones" then
-				local filtered = {}
-				for _, item in ipairs(visibleItems) do
-					if item.VIPTab == "Funciones" then table.insert(filtered, item) end
-				end
-				visibleItems = filtered
-			elseif selectedCategory == "VIP" then
-				visibleItems = {}
-			end
-
+			local visibleItems = categories[getgenv().H3XA_MM2_SELECTED_CATEGORY] or {}
 			local listlayout = Instance.new("UIListLayout")
 			listlayout.Parent = AREA
 			listlayout.Padding = UDim.new(0, 10)
@@ -4692,113 +4673,6 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 			areaPad.PaddingLeft = UDim.new(0, 2)
 			areaPad.PaddingRight = UDim.new(0, 2)
 			areaPad.Parent = AREA
-
-			-- VIP: subcategorías Funciones / Configs / Players dentro de la categoría VIP.
-			local function vipButton(parent, textValue, active, callback)
-				local b = Instance.new("TextButton")
-				b.Size = UDim2.new(1/3, -7, 1, 0)
-				b.BackgroundColor3 = Color3.fromRGB(255,255,255)
-				b.BackgroundTransparency = active and 0.08 or 1
-				b.BorderSizePixel = 0
-				b.AutoButtonColor = false
-				b.Text = H3XA_MM2_T(textValue)
-				b.Font = active and Enum.Font.GothamBold or Enum.Font.GothamMedium
-				b.TextSize = 11
-				b.TextColor3 = active and Color3.fromRGB(0,0,0) or Color3.fromRGB(235,235,240)
-				b.Parent = parent
-				local c = Instance.new("UICorner", b); c.CornerRadius = UDim.new(0,10)
-				local st = Instance.new("UIStroke", b); st.Color = Color3.fromRGB(255,255,255); st.Thickness = active and 1.5 or 1; st.Transparency = active and 0 or 0.55
-				b.MouseEnter:Connect(function()
-					if not active then ts:Create(b,TweenInfo.new(0.2),{BackgroundTransparency=0.93}):Play() end
-				end)
-				b.MouseLeave:Connect(function()
-					if not active then ts:Create(b,TweenInfo.new(0.2),{BackgroundTransparency=1}):Play() end
-				end)
-				b.MouseButton1Click:Connect(callback)
-				return b
-			end
-
-			if selectedCategory == "VIP" then
-				local vipNav = Instance.new("Frame")
-				vipNav.Name = "VIPSubTabs"
-				vipNav.Size = UDim2.new(1,0,0,38)
-				vipNav.BackgroundTransparency = 1
-				vipNav.LayoutOrder = -100
-				vipNav.Parent = AREA
-			local navLayout = Instance.new("UIListLayout", vipNav)
-				navLayout.FillDirection = Enum.FillDirection.Horizontal
-				navLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-				navLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-				navLayout.Padding = UDim.new(0,7)
-
-				vipButton(vipNav,"Funciones",vipSub=="Funciones",function()
-					getgenv().H3XA_MM2_VIP_SUBTAB="Funciones"; FUNCTIONSmodule.loader(module,true)
-				end)
-				vipButton(vipNav,"Configs",vipSub=="Configs",function()
-					getgenv().H3XA_MM2_VIP_SUBTAB="Configs"; FUNCTIONSmodule.loader(module,true)
-				end)
-				vipButton(vipNav,"Players",vipSub=="Players",function()
-					getgenv().H3XA_MM2_VIP_SUBTAB="Players"; FUNCTIONSmodule.loader(module,true)
-				end)
-
-				if vipSub == "Configs" then
-					local box = Instance.new("Frame")
-					box.Name = "VIPConfigs"; box.Size = UDim2.new(1,0,0,0); box.AutomaticSize=Enum.AutomaticSize.Y; box.BackgroundTransparency=1; box.LayoutOrder=0; box.Parent=AREA
-					local bl = Instance.new("UIListLayout",box); bl.Padding=UDim.new(0,8); bl.SortOrder=Enum.SortOrder.LayoutOrder
-					local title = Instance.new("TextLabel",box); title.BackgroundTransparency=1; title.Size=UDim2.new(1,0,0,22); title.Text="VIP CONFIGS"; title.Font=Enum.Font.GothamBold; title.TextSize=12; title.TextColor3=Color3.fromRGB(220,220,225); title.TextXAlignment=Enum.TextXAlignment.Left
-					local input = Instance.new("TextBox",box); input.Size=UDim2.new(1,0,0,40); input.BackgroundColor3=Color3.fromRGB(18,18,22); input.BackgroundTransparency=0.05; input.TextColor3=Color3.fromRGB(255,255,255); input.PlaceholderText="Nombre de config..."; input.PlaceholderColor3=Color3.fromRGB(120,120,125); input.Text=""; input.Font=Enum.Font.Gotham; input.TextSize=12; input.ClearTextOnFocus=false; input.TextXAlignment=Enum.TextXAlignment.Left; local ic=Instance.new("UICorner",input); ic.CornerRadius=UDim.new(0,10); local ist=Instance.new("UIStroke",input); ist.Color=Color3.fromRGB(255,255,255); ist.Transparency=0.55
-					local actions=Instance.new("Frame",box); actions.Size=UDim2.new(1,0,0,40); actions.BackgroundTransparency=1
-					local al=Instance.new("UIListLayout",actions); al.FillDirection=Enum.FillDirection.Horizontal; al.Padding=UDim.new(0,7)
-					local function cfgBtn(parent,txt,cb) local b=Instance.new("TextButton",parent); b.Size=UDim2.new(1/2,-4,1,0); b.BackgroundColor3=Color3.fromRGB(255,255,255); b.BackgroundTransparency=0.92; b.Text=txt; b.Font=Enum.Font.GothamBold; b.TextSize=11; b.TextColor3=Color3.fromRGB(255,255,255); b.AutoButtonColor=false; local c=Instance.new("UICorner",b); c.CornerRadius=UDim.new(0,10); local st=Instance.new("UIStroke",b); st.Color=Color3.fromRGB(255,255,255); st.Transparency=0.35; b.MouseButton1Click:Connect(cb); return b end
-					local list=Instance.new("Frame",box); list.Size=UDim2.new(1,0,0,0); list.AutomaticSize=Enum.AutomaticSize.Y; list.BackgroundTransparency=1
-					local ll=Instance.new("UIListLayout",list); ll.Padding=UDim.new(0,6)
-					local HttpService = game:GetService("HttpService")
-					local Players = game:GetService("Players")
-					local function canFiles() return typeof(isfile)=="function" and typeof(readfile)=="function" and typeof(writefile)=="function" and typeof(listfiles)=="function" end
-					local dir="H3XA_MM2/VIPConfigs"
-					local function ensureDir() if typeof(isfolder)=="function" and typeof(makefolder)=="function" then if not isfolder("H3XA_MM2") then pcall(makefolder,"H3XA_MM2") end; if not isfolder(dir) then pcall(makefolder,dir) end end end
-					local function cleanName(n) n=tostring(n or ""):gsub("[^%w_%- ]",""):gsub("%s+","_"):sub(1,40); return n end
-					local function refreshConfigs()
-						for _,c in ipairs(list:GetChildren()) do if not c:IsA("UIListLayout") then c:Destroy() end end
-						ensureDir()
-						local names={}
-						if canFiles() then local ok,fs=pcall(listfiles,dir); if ok and type(fs)=="table" then for _,f in ipairs(fs) do local n=tostring(f):match("([^/\\]+)%.json$"); if n then table.insert(names,n) end end end end
-						table.sort(names)
-						if #names==0 then local empty=Instance.new("TextLabel",list); empty.Size=UDim2.new(1,0,0,30); empty.BackgroundTransparency=1; empty.Text=canFiles() and "No hay configs guardadas." or "Este executor no permite guardar configs."; empty.Font=Enum.Font.Gotham; empty.TextSize=11; empty.TextColor3=Color3.fromRGB(135,135,140); empty.TextXAlignment=Enum.TextXAlignment.Left; return end
-						for _,n in ipairs(names) do
-							local row=Instance.new("Frame",list); row.Size=UDim2.new(1,0,0,38); row.BackgroundColor3=Color3.fromRGB(18,18,22); row.BackgroundTransparency=0.08; local rc=Instance.new("UICorner",row); rc.CornerRadius=UDim.new(0,10); local rs=Instance.new("UIStroke",row); rs.Color=Color3.fromRGB(255,255,255); rs.Transparency=0.65
-							local lbl=Instance.new("TextLabel",row); lbl.BackgroundTransparency=1; lbl.Position=UDim2.fromOffset(10,0); lbl.Size=UDim2.new(1,-150,1,0); lbl.Text=n; lbl.Font=Enum.Font.GothamMedium; lbl.TextSize=11; lbl.TextColor3=Color3.fromRGB(235,235,240); lbl.TextXAlignment=Enum.TextXAlignment.Left
-							local load=Instance.new("TextButton",row); load.AnchorPoint=Vector2.new(1,0.5); load.Position=UDim2.new(1,-76,0.5,0); load.Size=UDim2.fromOffset(62,26); load.Text="CARGAR"; load.Font=Enum.Font.GothamBold; load.TextSize=9; load.TextColor3=Color3.fromRGB(0,0,0); load.BackgroundColor3=Color3.fromRGB(255,255,255); load.AutoButtonColor=false; local lc=Instance.new("UICorner",load); lc.CornerRadius=UDim.new(0,7)
-							local del=Instance.new("TextButton",row); del.AnchorPoint=Vector2.new(1,0.5); del.Position=UDim2.new(1,-8,0.5,0); del.Size=UDim2.fromOffset(56,26); del.Text="BORRAR"; del.Font=Enum.Font.GothamBold; del.TextSize=9; del.TextColor3=Color3.fromRGB(255,255,255); del.BackgroundColor3=Color3.fromRGB(18,18,22); del.AutoButtonColor=false; local dc=Instance.new("UICorner",del); dc.CornerRadius=UDim.new(0,7); local ds=Instance.new("UIStroke",del); ds.Color=Color3.fromRGB(255,255,255); ds.Transparency=0.45
-							load.MouseButton1Click:Connect(function() if not canFiles() then return end; local ok,raw=pcall(readfile,dir.."/"..n..".json"); if ok then local ok2,data=pcall(function() return HttpService:JSONDecode(raw) end); if ok2 and getgenv().H3XA_VIP and getgenv().H3XA_VIP.LoadConfig then local good,why=getgenv().H3XA_VIP:LoadConfig(data); if good then H3XA_MM2_NOTIFY("Config cargada: "..n); FUNCTIONSmodule.loader(module,true) else H3XA_MM2_NOTIFY(why or "Config inválida") end end end end)
-							del.MouseButton1Click:Connect(function() if typeof(delfile)=="function" then pcall(delfile,dir.."/"..n..".json"); refreshConfigs(); H3XA_MM2_NOTIFY("Config eliminada: "..n) end end)
-						end
-					end
-					cfgBtn(actions,"GUARDAR",function() local n=cleanName(input.Text); if n=="" then H3XA_MM2_NOTIFY("Escribe un nombre para la config."); return end; if not canFiles() then H3XA_MM2_NOTIFY("Este executor no permite guardar configs."); return end; ensureDir(); local ok,raw=pcall(function() return HttpService:JSONEncode(getgenv().H3XA_VIP:GetConfig()) end); if ok then local wrote=pcall(writefile,dir.."/"..n..".json",raw); H3XA_MM2_NOTIFY(wrote and "Config guardada: "..n or "No se pudo guardar."); refreshConfigs() else H3XA_MM2_NOTIFY("No se pudo codificar la config.") end end)
-					cfgBtn(actions,"ACTUALIZAR",refreshConfigs)
-					refreshConfigs()
-				elseif vipSub == "Players" then
-					local box=Instance.new("Frame"); box.Name="VIPPlayers"; box.Size=UDim2.new(1,0,0,0); box.AutomaticSize=Enum.AutomaticSize.Y; box.BackgroundTransparency=1; box.LayoutOrder=0; box.Parent=AREA
-					local bl=Instance.new("UIListLayout",box); bl.Padding=UDim.new(0,7)
-					local header=Instance.new("TextLabel",box); header.Size=UDim2.new(1,0,0,22); header.BackgroundTransparency=1; header.Text="PLAYERS"; header.Font=Enum.Font.GothamBold; header.TextSize=12; header.TextColor3=Color3.fromRGB(220,220,225); header.TextXAlignment=Enum.TextXAlignment.Left
-					local selected=Instance.new("TextLabel",box); selected.Size=UDim2.new(1,0,0,24); selected.BackgroundTransparency=1; selected.TextColor3=Color3.fromRGB(150,150,155); selected.Font=Enum.Font.Gotham; selected.TextSize=11; selected.TextXAlignment=Enum.TextXAlignment.Left
-					local list=Instance.new("Frame",box); list.Size=UDim2.new(1,0,0,0); list.AutomaticSize=Enum.AutomaticSize.Y; list.BackgroundTransparency=1; local ll=Instance.new("UIListLayout",list); ll.Padding=UDim.new(0,6)
-					local function roleFor(p) local vip=getgenv().H3XA_VIP; if vip and vip.Mono and vip.Mono.espRole then local ok,r=pcall(vip.Mono.espRole,p); if ok and r then return tostring(r) end end; if p.Character and p.Character:FindFirstChild("Knife") then return "Murderer" end; if p.Character and p.Character:FindFirstChild("Gun") then return "Sheriff" end; return "Player" end
-					local function refreshPlayers()
-						for _,c in ipairs(list:GetChildren()) do if not c:IsA("UIListLayout") then c:Destroy() end end
-						local vip=getgenv().H3XA_VIP; local target=vip and vip.targetPlayer; selected.Text=target and ("Objetivo: "..target.Name) or "Objetivo: ninguno"
-						for _,plr in ipairs(Players:GetPlayers()) do
-							local row=Instance.new("TextButton",list); row.Size=UDim2.new(1,0,0,42); row.BackgroundColor3=Color3.fromRGB(18,18,22); row.BackgroundTransparency=0.08; row.Text=""; row.AutoButtonColor=false; local rc=Instance.new("UICorner",row); rc.CornerRadius=UDim.new(0,10); local rs=Instance.new("UIStroke",row); rs.Color=plr==target and Color3.fromRGB(255,255,255) or Color3.fromRGB(90,90,95); rs.Transparency=plr==target and 0 or 0.65
-							local nm=Instance.new("TextLabel",row); nm.BackgroundTransparency=1; nm.Position=UDim2.fromOffset(11,0); nm.Size=UDim2.new(0.55,0,1,0); nm.Text=plr.DisplayName.."  @"..plr.Name; nm.Font=Enum.Font.GothamMedium; nm.TextSize=11; nm.TextColor3=Color3.fromRGB(240,240,245); nm.TextXAlignment=Enum.TextXAlignment.Left
-							local rl=Instance.new("TextLabel",row); rl.AnchorPoint=Vector2.new(1,0.5); rl.Position=UDim2.new(1,-11,0.5,0); rl.Size=UDim2.fromOffset(90,22); rl.BackgroundTransparency=1; rl.Text=roleFor(plr); rl.Font=Enum.Font.GothamBold; rl.TextSize=10; rl.TextColor3=Color3.fromRGB(180,180,185); rl.TextXAlignment=Enum.TextXAlignment.Right
-							row.MouseButton1Click:Connect(function() if vip then vip.targetPlayer=plr; refreshPlayers(); H3XA_MM2_NOTIFY("Objetivo: "..plr.Name) end end)
-						end
-					end
-					refreshPlayers()
-					Players.PlayerAdded:Connect(function() task.defer(refreshPlayers) end)
-					Players.PlayerRemoving:Connect(function(p) if getgenv().H3XA_VIP and getgenv().H3XA_VIP.targetPlayer==p then getgenv().H3XA_VIP.targetPlayer=nil end; task.defer(refreshPlayers) end)
-				end
-			end
 
 			-- Agrupar items bajo headers Text en tarjetas grandes
 			local sections = {}
@@ -5238,11 +5112,6 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						rs.Thickness = 1.15
 						rs.Transparency = 0
 
-						local stateKey = item["Args"][1] .. module.Name
-						if item.VIPFlag and getgenv().H3XA_VIP and getgenv().H3XA_VIP.flags then
-							toggleStates[stateKey] = getgenv().H3XA_VIP.flags[item.VIPFlag] == true
-						end
-
 						local tLabel = Instance.new("TextLabel")
 						tLabel.BackgroundTransparency = 1
 						tLabel.Position = UDim2.fromOffset(12, 0)
@@ -5458,19 +5327,6 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 						local maxV = item["Args"][3]
 						local stepV = item["Args"][4] or 1
 						local stateKey = item["Args"][1] .. module.Name
-						if item.VIPValue and getgenv().H3XA_VIP then
-							local vip = getgenv().H3XA_VIP
-							local current = nil
-							if item.VIPValue == "aimFov" and vip.GetConfig then
-								local ok, data = pcall(function() return vip:GetConfig() end)
-								if ok and data and data.values then current = tonumber(data.values.aimFov) end
-							elseif item.VIPValue == "snapHeight" and vip.Mono then
-								current = tonumber(vip.Mono.SNAP_HEIGHT)
-							elseif item.VIPValue == "flySpeed" and vip.flags then
-								current = tonumber(vip.flags.flySpeed)
-							end
-							if current then rangeValueStates[stateKey] = current end
-						end
 						if not rangeValueStates[stateKey] then
 							rangeValueStates[stateKey] = minV
 						end
@@ -9455,55 +9311,647 @@ table.insert(module, {
 		end}
 	})
 
-	-- ===== VIP: funciones de Mono MM2 =====
-	local VIP = getgenv().H3XA_VIP
-	local function vipToggle(name, label, desc)
-		table.insert(module, {Type="Toggle", VIPTab="Funciones", VIPFlag=name, Args={label, function(Self,state)
-			if VIP then VIP:SetFlag(name,state) end
-		end}})
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Teleport to Waypoint", function()
+			local c = localplayer.Character
+			if RE.Waypoint and c and c:FindFirstChild("HumanoidRootPart") then
+				c.HumanoidRootPart.CFrame = RE.Waypoint
+				fu.notification("Teleported to waypoint.")
+			else
+				fu.notification("No waypoint saved.")
+			end
+		end}
+	})
+
+
+	-- ============================================================
+	-- VIP CATEGORY  (Mono MM2 features integrated into H3XA UI)
+	-- Visual label only - no emoji. Does not alter Hexa main UI.
+	-- ============================================================
+	table.insert(module, {
+		Type = "Text",
+		Args = {"VIP"}
+	})
+
+	-- VIP shared state (Mono-style flags)
+	local VIP = {
+		autoKill = false,
+		silentAim = false,
+		showFov = false,
+		fovRadius = 120,
+		knifeWalls = false,
+		instantKnife = false,
+		flingAll = false,
+		autoCoins = false,
+		antiFling = false,
+		antiTrap = false,
+		murdererNotify = false,
+		boxEsp = false,
+		box3dEsp = false,
+		tracers = false,
+		skeletonEsp = false,
+		coinEsp = false,
+		fly = false,
+		flySpeed = 60,
+		SNAP_HEIGHT = 5,
+	}
+
+	local Players = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+	local UserInputService = game:GetService("UserInputService")
+	local TweenService = game:GetService("TweenService")
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local Workspace = game:GetService("Workspace")
+	local Camera = Workspace.CurrentCamera
+	local LocalPlayer = Players.LocalPlayer
+	local VIP_conns = {}
+	local function vipBind(sig, fn)
+		local c = sig:Connect(fn)
+		table.insert(VIP_conns, c)
+		return c
 	end
-	local function vipRange(name, label, minV, maxV, step, getter)
-		table.insert(module, {Type="Range", VIPTab="Funciones", VIPValue=getter or name, Args={label,minV,maxV,step,function(Self,val)
-			if VIP then VIP:SetValue(getter or name,val) end
-		end}})
+	local function vipNotify(msg, t)
+		if fu and fu.notification then
+			fu.notification(tostring(msg))
+		else
+			pcall(function()
+				game:GetService("StarterGui"):SetCore("SendNotification", {
+					Title = "VIP", Text = tostring(msg), Duration = t or 3
+				})
+			end)
+		end
 	end
-	local function vipText(label)
-		table.insert(module, {Type="Text", VIPTab="Funciones", Args={label}})
+
+	local function getHRP(char)
+		return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
 	end
-	vipText("Murderer + Sheriff")
-	vipToggle("autoKill","Auto Kill","Mono")
-	vipRange("snap","Snap Height",5,9,1,"snapHeight")
-	vipToggle("silentAim","Silent Aim","Mono")
-	vipRange("aimFov","FOV",40,400,10,"aimFov")
-	vipToggle("showFov","Show FOV Circle","Mono")
-	vipText("Sheriff")
-	vipToggle("autoGun","Auto Grab Gun","Mono")
-	vipText("Murderer")
-	vipToggle("knifeWalls","Knife Through Walls","Mono")
-	vipToggle("instantKnife","Instant Knife Throw","Mono")
-	vipText("Movement")
-	vipToggle("fly","Fly","Mono")
-	vipRange("flySpeed","Fly Speed",20,250,10,"flySpeed")
-	vipToggle("noclip","Noclip","Mono")
-	vipToggle("infJump","Infinite Jump","Mono")
-	vipText("Visuals")
-	vipToggle("espBox","Box ESP","Mono")
-	vipToggle("espBox3D","3D Box ESP","Mono")
-	vipToggle("espTracers","Tracers","Mono")
-	vipToggle("espSkeleton","Skeleton ESP","Mono")
-	vipToggle("coinEsp","Coin ESP","Mono")
-	vipText("Teleport / Coins")
-	table.insert(module,{Type="Button",VIPTab="Funciones",Args={"Fling All Players",function() if VIP then local ok,msg=pcall(function() return VIP:Action("flingAll") end); if not ok then H3XA_MM2_NOTIFY("Fling All: error") end end end}})
-	vipToggle("autoCoins","Auto Collect Coins","Mono")
-	table.insert(module,{Type="Button",VIPTab="Funciones",Args={"Teleport To Nearest Coin",function() if VIP then local ok,msg=VIP:Action("teleportNearestCoin"); if msg then H3XA_MM2_NOTIFY(msg) end end end}})
-	vipText("Safety")
-	vipToggle("antiFling","Anti Fling","Mono")
-	vipToggle("antiTrap","Anti Trap","Mono")
-	vipToggle("murdererNotify","Murderer Notify","Mono")
-	vipToggle("antiAfk","Anti AFK","Mono")
-	vipText("VIP")
-	table.insert(module,{Type="Text",VIPTab="Configs",Args={"Configs"}})
-	table.insert(module,{Type="Text",VIPTab="Players",Args={"Players"}})
+
+	local function roleOf(plr)
+		if not plr then return "Innocent" end
+		local ok, data = pcall(function()
+			local crc = ReplicatedStorage:FindFirstChild("CRC") or ReplicatedStorage:FindFirstChild("RoundData")
+			if crc and crc.PlayerData and crc.PlayerData[plr.Name] then
+				return crc.PlayerData[plr.Name].Role or "Innocent"
+			end
+			return plr:GetAttribute("Role") or "Innocent"
+		end)
+		return ok and data or "Innocent"
+	end
+
+	local function isGunRole(r)
+		return r == "Sheriff" or r == "Hero" or r == "Deputy"
+	end
+
+	local function findMurderer()
+		for _, p in ipairs(Players:GetPlayers()) do
+			if roleOf(p) == "Murderer" then return p end
+		end
+		return nil
+	end
+
+	local function alive(plr)
+		local ch = plr and plr.Character
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		return hum and hum.Health > 0
+	end
+
+	-- FOV circle (visual)
+	local fovGui = Instance.new("ScreenGui")
+	fovGui.Name = "H3XA_VIP_FOV"
+	fovGui.IgnoreGuiInset = true
+	fovGui.ResetOnSpawn = false
+	pcall(function()
+		if gethui then fovGui.Parent = gethui()
+		else fovGui.Parent = game:GetService("CoreGui") end
+	end)
+	local fovCircle = Instance.new("Frame")
+	fovCircle.Name = "FOV"
+	fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	fovCircle.BackgroundTransparency = 1
+	fovCircle.BorderSizePixel = 0
+	fovCircle.Visible = false
+	fovCircle.Parent = fovGui
+	local fovStroke = Instance.new("UIStroke")
+	fovStroke.Color = Color3.fromRGB(255, 255, 255)
+	fovStroke.Thickness = 1.5
+	fovStroke.Transparency = 0.35
+	fovStroke.Parent = fovCircle
+	local fovCorner = Instance.new("UICorner")
+	fovCorner.CornerRadius = UDim.new(1, 0)
+	fovCorner.Parent = fovCircle
+
+	vipBind(RunService.RenderStepped, function()
+		if not VIP.showFov or not (VIP.silentAim or VIP.autoKill) then
+			fovCircle.Visible = false
+			return
+		end
+		local vs = Camera.ViewportSize
+		local r = VIP.fovRadius
+		fovCircle.Size = UDim2.fromOffset(r * 2, r * 2)
+		fovCircle.Position = UDim2.fromOffset(vs.X / 2, vs.Y / 2)
+		fovCircle.Visible = true
+	end)
+
+	-- Silent Aim / closest in FOV
+	local function closestInFOV()
+		local best, bestD
+		local mouse = UserInputService:GetMouseLocation()
+		local center = Vector2.new(mouse.X, mouse.Y)
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer and alive(p) then
+				local hrp = getHRP(p.Character)
+				if hrp then
+					local sp, on = Camera:WorldToViewportPoint(hrp.Position)
+					if on then
+						local d = (Vector2.new(sp.X, sp.Y) - center).Magnitude
+						if d <= VIP.fovRadius and (not bestD or d < bestD) then
+							best, bestD = p, d
+						end
+					end
+				end
+			end
+		end
+		return best
+	end
+
+	-- Auto Kill (simplified Mono style)
+	local lastShot = 0
+	vipBind(RunService.Heartbeat, function()
+		if not VIP.autoKill then return end
+		local myRole = roleOf(LocalPlayer)
+		local hrp = getHRP(LocalPlayer.Character)
+		if not hrp then return end
+
+		if myRole == "Murderer" then
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= LocalPlayer and alive(p) then
+					local thrp = getHRP(p.Character)
+					if thrp then
+						-- Instant knife path: try to fire knife remote if present
+						pcall(function()
+							local rem = ReplicatedStorage:FindFirstChild("Remotes")
+							local gp = rem and rem:FindFirstChild("Gameplay")
+							if gp then
+								local knife = gp:FindFirstChild("KnifeThrown") or gp:FindFirstChild("ThrowKnife")
+								if knife then
+									knife:FireServer(thrp.Position)
+								end
+							end
+						end)
+					end
+				end
+			end
+		elseif isGunRole(myRole) then
+			if os.clock() - lastShot < 3.25 then return end
+			local m = findMurderer()
+			if m and alive(m) then
+				local thrp = getHRP(m.Character)
+				if thrp then
+					local home = hrp.CFrame
+					hrp.CFrame = thrp.CFrame * CFrame.new(0, VIP.SNAP_HEIGHT, 0)
+					task.wait(0.05)
+					pcall(function()
+						local rem = ReplicatedStorage:FindFirstChild("Remotes")
+						local gp = rem and rem:FindFirstChild("Gameplay")
+						if gp then
+							local shoot = gp:FindFirstChild("Shoot") or gp:FindFirstChild("GunShoot")
+							if shoot then shoot:FireServer(thrp.Position) end
+						end
+					end)
+					task.wait(0.05)
+					hrp.CFrame = home
+					lastShot = os.clock()
+				end
+			end
+		end
+	end)
+
+	-- Knife walls / instant knife helpers
+	local function tryThrowKnife(pos)
+		pcall(function()
+			local rem = ReplicatedStorage:FindFirstChild("Remotes")
+			local gp = rem and rem:FindFirstChild("Gameplay")
+			if not gp then return end
+			local knife = gp:FindFirstChild("KnifeThrown") or gp:FindFirstChild("ThrowKnife")
+			if knife then
+				knife:FireServer(pos)
+			end
+		end)
+	end
+
+	vipBind(UserInputService.InputBegan, function(inp, gp)
+		if gp then return end
+		if not (VIP.knifeWalls or VIP.instantKnife or VIP.silentAim) then return end
+		if inp.UserInputType ~= Enum.UserInputType.MouseButton1 and inp.KeyCode ~= Enum.KeyCode.Q then return end
+		local myRole = roleOf(LocalPlayer)
+		if myRole ~= "Murderer" then return end
+		local target = VIP.silentAim and closestInFOV() or nil
+		local pos
+		if target then
+			local thrp = getHRP(target.Character)
+			pos = thrp and thrp.Position
+		end
+		if not pos then
+			local mouse = UserInputService:GetMouseLocation()
+			local ray = Camera:ViewportPointToRay(mouse.X, mouse.Y)
+			pos = ray.Origin + ray.Direction * 500
+		end
+		if VIP.instantKnife or VIP.knifeWalls then
+			tryThrowKnife(pos)
+		end
+	end)
+
+	-- Fling All (Mono-style simplified)
+	local function flingPlayer(target)
+		local myHrp = getHRP(LocalPlayer.Character)
+		local thrp = getHRP(target.Character)
+		if not (myHrp and thrp) then return false end
+		local home = myHrp.CFrame
+		flinging = true
+		pcall(function()
+			myHrp.CFrame = thrp.CFrame
+			for i = 1, 12 do
+				thrp.AssemblyLinearVelocity = Vector3.new(0, 10000, 0) + thrp.AssemblyLinearVelocity
+				myHrp.AssemblyLinearVelocity = Vector3.new(0, 10000, 0)
+				RunService.Heartbeat:Wait()
+			end
+		end)
+		myHrp.CFrame = home
+		myHrp.AssemblyLinearVelocity = Vector3.zero
+		flinging = false
+		return true
+	end
+	local flinging = false
+
+	local function doFlingAll()
+		local myHrp = getHRP(LocalPlayer.Character)
+		if not myHrp then vipNotify("No character") return end
+		local home = myHrp.CFrame
+		task.spawn(function()
+			local n = 0
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= LocalPlayer and alive(p) then
+					if flingPlayer(p) then n = n + 1 end
+					task.wait(0.15)
+				end
+			end
+			local h = getHRP(LocalPlayer.Character)
+			if h then h.CFrame = home; h.AssemblyLinearVelocity = Vector3.zero end
+			vipNotify("Flung " .. n .. " player(s)")
+		end)
+	end
+
+	-- Auto Collect Coins
+	local coinCache = {}
+	local function refreshCoins()
+		coinCache = {}
+		for _, d in ipairs(Workspace:GetDescendants()) do
+			if d:IsA("BasePart") then
+				local n = d.Name:lower()
+				if n:find("coin") or n:find("nyan") or (d.Parent and (d.Parent.Name == "CoinContainer" or d.Parent.Name == "Coins")) then
+					table.insert(coinCache, d)
+				end
+			end
+		end
+	end
+	vipBind(RunService.Heartbeat, function()
+		if not VIP.autoCoins then return end
+		local hrp = getHRP(LocalPlayer.Character)
+		if not hrp then return end
+		if #coinCache == 0 then refreshCoins() end
+		local best, bd
+		for _, c in ipairs(coinCache) do
+			if c.Parent then
+				local d = (c.Position - hrp.Position).Magnitude
+				if not bd or d < bd then best, bd = c, d end
+			end
+		end
+		if best and bd and bd > 3 then
+			hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 2, 0))
+		elseif best and bd and bd <= 3 then
+			-- let game collect
+		else
+			refreshCoins()
+		end
+	end)
+
+	-- Anti Fling
+	local lastGoodCF = nil
+	vipBind(RunService.Heartbeat, function()
+		if not VIP.antiFling or flinging then return end
+		local hrp = getHRP(LocalPlayer.Character)
+		if not hrp then return end
+		local lv = hrp.AssemblyLinearVelocity
+		if lv.Magnitude > 200 then
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			if lastGoodCF then hrp.CFrame = lastGoodCF end
+		else
+			lastGoodCF = hrp.CFrame
+		end
+		-- disable collision on others
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer and p.Character then
+				for _, part in ipairs(p.Character:GetDescendants()) do
+					if part:IsA("BasePart") and part.CanCollide then
+						part.CanCollide = false
+					end
+				end
+			end
+		end
+	end)
+
+	-- Murderer Notify (50 studs)
+	local murdInRange = false
+	vipBind(RunService.Heartbeat, function()
+		if not VIP.murdererNotify then
+			murdInRange = false
+			return
+		end
+		local hrp = getHRP(LocalPlayer.Character)
+		local m = findMurderer()
+		local mh = (m and m ~= LocalPlayer and alive(m)) and getHRP(m.Character) or nil
+		if not (hrp and mh) then murdInRange = false return end
+		local d = (mh.Position - hrp.Position).Magnitude
+		if d > 50 then
+			murdInRange = false
+			return
+		end
+		if not murdInRange then
+			murdInRange = true
+			vipNotify("Murderer nearby: " .. (m.DisplayName or m.Name) .. "  ·  " .. math.floor(d) .. "m", 4)
+		end
+	end)
+
+	-- Simple Box / Tracers / Skeleton / Coin ESP (VIP)
+	local vipEspFolder = Instance.new("Folder")
+	vipEspFolder.Name = "H3XA_VIP_ESP"
+	pcall(function()
+		if gethui then vipEspFolder.Parent = gethui()
+		else vipEspFolder.Parent = game:GetService("CoreGui") end
+	end)
+	local drawn = {}
+	local function clearDrawn()
+		for _, o in pairs(drawn) do pcall(function() o:Destroy() end) end
+		table.clear(drawn)
+	end
+	vipBind(RunService.RenderStepped, function()
+		clearDrawn()
+		if not (VIP.boxEsp or VIP.tracers or VIP.skeletonEsp or VIP.coinEsp) then return end
+		local myHrp = getHRP(LocalPlayer.Character)
+		if VIP.coinEsp then
+			for _, d in ipairs(Workspace:GetDescendants()) do
+				if d:IsA("BasePart") then
+					local n = d.Name:lower()
+					if n:find("coin") or n:find("nyan") then
+						if not d:FindFirstChild("VIPCoinHL") then
+							local hl = Instance.new("Highlight")
+							hl.Name = "VIPCoinHL"
+							hl.Adornee = d
+							hl.FillColor = Color3.fromRGB(255, 215, 0)
+							hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+							hl.FillTransparency = 0.4
+							hl.Parent = d
+						end
+					end
+				end
+			end
+		end
+		if not myHrp then return end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer and alive(p) then
+				local ch = p.Character
+				local root = getHRP(ch)
+				local head = ch and ch:FindFirstChild("Head")
+				if root then
+					local rp, on = Camera:WorldToViewportPoint(root.Position)
+					if on then
+						if VIP.boxEsp then
+							local sz = 40
+							local box = Instance.new("Frame")
+							box.BackgroundTransparency = 1
+							box.BorderSizePixel = 0
+							box.Size = UDim2.fromOffset(sz, sz * 1.6)
+							box.Position = UDim2.fromOffset(rp.X - sz/2, rp.Y - sz)
+							box.Parent = vipEspFolder
+							local st = Instance.new("UIStroke")
+							st.Color = Color3.fromRGB(255, 255, 255)
+							st.Thickness = 1.2
+							st.Parent = box
+							table.insert(drawn, box)
+						end
+						if VIP.tracers then
+							local line = Instance.new("Frame")
+							line.AnchorPoint = Vector2.new(0.5, 0.5)
+							line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+							line.BorderSizePixel = 0
+							local bottom = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+							local target = Vector2.new(rp.X, rp.Y)
+							local dist = (bottom - target).Magnitude
+							local mid = (bottom + target) / 2
+							line.Position = UDim2.fromOffset(mid.X, mid.Y)
+							line.Size = UDim2.fromOffset(dist, 1.4)
+							line.Rotation = math.deg(math.atan2(target.Y - bottom.Y, target.X - bottom.X))
+							line.BackgroundTransparency = 0.2
+							line.Parent = vipEspFolder
+							table.insert(drawn, line)
+						end
+						if VIP.skeletonEsp and head then
+							local hp, hon = Camera:WorldToViewportPoint(head.Position)
+							if hon then
+								local spine = Instance.new("Frame")
+								spine.AnchorPoint = Vector2.new(0.5, 0.5)
+								spine.BackgroundColor3 = Color3.fromRGB(230, 230, 230)
+								spine.BorderSizePixel = 0
+								local a, b = Vector2.new(hp.X, hp.Y), Vector2.new(rp.X, rp.Y)
+								local d = (a - b).Magnitude
+								local m = (a + b) / 2
+								spine.Position = UDim2.fromOffset(m.X, m.Y)
+								spine.Size = UDim2.fromOffset(d, 1.5)
+								spine.Rotation = math.deg(math.atan2(b.Y - a.Y, b.X - a.X))
+								spine.Parent = vipEspFolder
+								table.insert(drawn, spine)
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+
+	-- Fly (VIP)
+	local flyBV, flyBG
+	local function stopVIPFly()
+		if flyBV then pcall(function() flyBV:Destroy() end) flyBV = nil end
+		if flyBG then pcall(function() flyBG:Destroy() end) flyBG = nil end
+		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.PlatformStand = false end
+	end
+	local function startVIPFly()
+		stopVIPFly()
+		local hrp = getHRP(LocalPlayer.Character)
+		local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if not hrp or not hum then return end
+		hum.PlatformStand = true
+		flyBV = Instance.new("BodyVelocity")
+		flyBV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+		flyBV.Velocity = Vector3.zero
+		flyBV.Parent = hrp
+		flyBG = Instance.new("BodyGyro")
+		flyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+		flyBG.P = 9e4
+		flyBG.Parent = hrp
+		vipBind(RunService.RenderStepped, function()
+			if not VIP.fly or not flyBV or not flyBV.Parent then return end
+			local cam = Camera.CFrame
+			local dir = Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
+			if dir.Magnitude > 0 then dir = dir.Unit * VIP.flySpeed end
+			flyBV.Velocity = dir
+			flyBG.CFrame = cam
+		end)
+	end
+
+	-- ===== VIP UI TOGGLES =====
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Auto Kill (Mono)", function(Self, state)
+			VIP.autoKill = state
+			vipNotify(state and "Auto Kill ON" or "Auto Kill OFF")
+		end}
+	})
+	table.insert(module, {
+		Type = "Range",
+		Args = {"Snap Height", 5, 9, 1, function(Self, val)
+			VIP.SNAP_HEIGHT = val
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Silent Aim (Mono)", function(Self, state)
+			VIP.silentAim = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Range",
+		Args = {"Silent Aim FOV", 40, 400, 10, function(Self, val)
+			VIP.fovRadius = val
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Show FOV Circle", function(Self, state)
+			VIP.showFov = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Knife Through Walls", function(Self, state)
+			VIP.knifeWalls = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Instant Knife Throw", function(Self, state)
+			VIP.instantKnife = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Fly (VIP)", function(Self, state)
+			VIP.fly = state
+			if state then startVIPFly() else stopVIPFly() end
+		end}
+	})
+	table.insert(module, {
+		Type = "Range",
+		Args = {"Fly Speed", 20, 250, 10, function(Self, val)
+			VIP.flySpeed = val
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Box ESP (VIP)", function(Self, state)
+			VIP.boxEsp = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Tracers (VIP)", function(Self, state)
+			VIP.tracers = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Skeleton ESP (VIP)", function(Self, state)
+			VIP.skeletonEsp = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Coin ESP (VIP)", function(Self, state)
+			VIP.coinEsp = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Fling All Players", function()
+			doFlingAll()
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Auto Collect Coins", function(Self, state)
+			VIP.autoCoins = state
+			if state then refreshCoins(); vipNotify("Auto collect ON") end
+		end}
+	})
+	table.insert(module, {
+		Type = "Button",
+		Args = {"TP Nearest Coin", function()
+			local hrp = getHRP(LocalPlayer.Character)
+			if not hrp then vipNotify("No character") return end
+			refreshCoins()
+			local best, bd
+			for _, c in ipairs(coinCache) do
+				if c.Parent then
+					local d = (c.Position - hrp.Position).Magnitude
+					if not bd or d < bd then best, bd = c, d end
+				end
+			end
+			if best then
+				hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 3, 0))
+				vipNotify("Teleported to coin")
+			else
+				vipNotify("No coins on map")
+			end
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Anti Fling", function(Self, state)
+			VIP.antiFling = state
+			vipNotify(state and "Anti Fling ON" or "Anti Fling OFF")
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Anti Trap", function(Self, state)
+			VIP.antiTrap = state
+		end}
+	})
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Murderer Notify", function(Self, state)
+			VIP.murdererNotify = state
+		end}
+	})
+
 
 	repeat task.wait() until getgenv().Modules
 	getgenv().Modules[3] = module
@@ -10261,2654 +10709,6 @@ local function XAPKH_routine() -- Routine: StarterGui.H3XA_MM2.FloatingButtonSet
 	script.Parent.MouseButton1Click:Connect(function()
 		getgenv().H3XA_MM2FUNCTIONS.closeFinetuneFB()
 	end)
-end
-
--- ===== H3XA VIP runtime (Mono MM2 logic, without Mono's separate UI) =====
-local H3XA_MM2_NOTIFY = function(msg,dur)
-    local fn = getgenv and getgenv().H3XA_MM2FUNCTIONS
-    if fn and fn.notification then return fn.notification(tostring(msg)) end
-    pcall(function() game:GetService("StarterGui"):SetCore("SendNotification",{Title="H3XA VIP",Text=tostring(msg),Duration=dur or 3}) end)
-end
-_G.H3XA_MM2_NOTIFY = H3XA_MM2_NOTIFY
-
-            pcall(function() if typeof(cleardrawcache) == "function" then cleardrawcache() end end)
-        end)
-    end
-end)
-local function trackGui(inst) table.insert(TRACKED, inst); protect(inst); return inst end
-
-local UI={}
-local Unloaded=false
-local Window = { _destroyed = false, gui = nil }
-function Window:Notify(cfg)
-    local msg = cfg and (cfg.Content or cfg.Title) or ""
-    local dur = cfg and cfg.Duration or 3
-    local fn = getgenv and getgenv().H3XA_MM2FUNCTIONS
-    if fn and fn.notification then
-        return fn.notification(tostring(msg))
-    end
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {Title = "H3XA VIP", Text = tostring(msg), Duration = dur})
-    end)
-end
-local function isDead() return Unloaded or (Window and Window._destroyed) end
-
-local function create(class,props,children)
-    local o=Instance.new(class)
-    for k,v in pairs(props or {}) do o[k]=v end
-    for _,c in ipairs(children or {}) do c.Parent=o end
-    return o
-end
-local flags={autoKill=false,autoFlingMurderer=false,autoFlingSheriff=false,knifeWalls=false,gunWalls=false,instantKnife=false,gunEsp=false,gunEspDist=false,autoGun=false,aimbot=false,silentAim=false,showFov=false,
-    fly=false,flySpeed=60,noclip=false,infJump=false,unlockCam=false,
-    espBox=false,espChams=false,footsteps=false,footMine=false,espFill=false,espNames=false,espRoleTags=false,espSkeleton=false,killFeed=false,coinEsp=false,espTracers=false,espAvatar=false,espMaxDist=0,espTracerFrom="Bottom",espBox3D=false,
-    fullbright=false,fpsBoost=false,autoCoins=false,murdererNotify=false,antiAfk=false,
-    flingPower=10000,flingSeconds=1,trapEsp=false,antiTrap=false,antiFling=false}
-local COLLECT_SPEED=16
-local aimFov=120
-local flinging=false
-local Mono={
-    tpAt=-10, TP_GRACE=2.5,
-    plrs={},
-    unclip=setmetatable({},{__mode="k"}),
-    mobUp=false, mobDown=false, mobAim=false,
-    camThru=nil,
-    COIN_MAX_DIST=250,
-    wantPS=false,
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    wantNoclip=false,
-    tagOwners={},
-    guiN=0, guiT=0, guiIns=0,
-}
-function Mono.teleporting() return os.clock()-Mono.tpAt<Mono.TP_GRACE end
-function Mono.markTeleport() Mono.tpAt=os.clock() end
-Mono.selfTpAt=-10
-function Mono.markSelfTP() Mono.selfTpAt=os.clock() end
-function Mono.selfTeleporting() return os.clock()-Mono.selfTpAt<0.35 end
-local instantFiredAt=-10
-local unstick
-local conns={}
-local function bind(sig,fn) local c=sig:Connect(fn);table.insert(conns,c);return c end
-local function notify(msg,t)
-    if not Window then return end
-    return Window:Notify({Title="Mono",Content=tostring(msg),Duration=t or 3})
-end
-function Mono.aimCenter()
-    local m=UserInputService:GetMouseLocation()
-    local x,y=m.X,m.Y
-    local ml=LocalPlayer:FindFirstChild("PlayerScripts")
-    ml=ml and ml:FindFirstChild("MouseLock")
-    if ml and ml:GetAttribute("Enabled")==true
-        and UserInputService.PreferredInput~=Enum.PreferredInput.Gamepad then
-        local vs=Camera.ViewportSize
-        x,y=vs.X*0.5,vs.Y*0.5
-    end
-    return Vector2.new(x,y)
-end
-function Mono.aimViewport() return Mono.aimCenter() end
-function Mono.mouseGui()
-    local c=Mono.aimCenter()
-    local ins=GuiService:GetGuiInset()
-    return Vector2.new(c.X-ins.X, c.Y-ins.Y)
-end
-
-local MM2_UNIVERSE=66654135
-local hopFallbackPlace
-local function fetchServers(placeId,maxPages,order)
-    local out,cursor={},nil
-    for _=1,(maxPages or 4) do
-        local url="https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder="..(order or "Asc").."&limit=100"
-        if cursor then url=url.."&cursor="..HttpService:UrlEncode(cursor) end
-        local ok,res=pcall(function() return game:HttpGet(url) end)
-        if not ok then break end
-        local ok2,d=pcall(function() return HttpService:JSONDecode(res) end)
-        if not (ok2 and d and d.data) then break end
-        for _,sv in ipairs(d.data) do out[#out+1]=sv end
-        cursor=d.nextPageCursor
-        if not cursor then break end
-    end
-    return out
-end
-bind(TeleportService.TeleportInitFailed,function(plr)
-    if plr==LocalPlayer then Mono.hopFailed=true end
-end)
-local function hopServers(placeId,excludeJob,fallbackTeleport)
-    task.spawn(function()
-        local function gather(all,minFree)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            local t={}
-            for _,sv in ipairs(all) do
-                if sv.id and sv.id~=excludeJob
-                    and ((sv.maxPlayers or 0)-(sv.playing or 0))>=minFree then t[#t+1]=sv end
-            end
-            return t
-        end
-        local all=fetchServers(placeId,2,"Desc")
-        local cand=gather(all,2)
-        if #cand==0 then
-            all=fetchServers(placeId,3,"Asc")
-            cand=gather(all,2)
-        end
-        if #cand==0 then cand=gather(all,1) end
-        if #cand==0 then
-            if fallbackTeleport then
-                notify("Letting Roblox pick a server...")
-                pcall(function() TeleportService:Teleport(placeId,LocalPlayer) end)
-            else
-                notify("No joinable servers came back, try again in a moment",5)
-            end
-            return
-        end
-        table.sort(cand,function(a,b) return (a.playing or 0)>(b.playing or 0) end)
-        local top=math.min(#cand,15)
-        for i=top,2,-1 do local j=math.random(1,i); cand[i],cand[j]=cand[j],cand[i] end
-        hopFallbackPlace=placeId
-        for i=1,math.min(#cand,4) do
-            Mono.hopFailed=false
-            local sv=cand[i]
-            pcall(function() TeleportService:TeleportToPlaceInstance(placeId,sv.id,LocalPlayer) end)
-            local t0=os.clock()
-            while os.clock()-t0<7 and not Mono.hopFailed do task.wait(0.2) end
-            if not Mono.hopFailed then return end
-            notify("That server filled up, trying another...",2)
-        end
-        hopFallbackPlace=nil
-        notify("Every server tried was full, try again in a moment",5)
-    end)
-end
-local function rejoin() notify("Rejoining..."); pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId,game.JobId,LocalPlayer) end) end
-local function serverHop() notify("Finding a server..."); hopServers(game.PlaceId,game.JobId,true) end
-if game.GameId~=MM2_UNIVERSE then
-    local gui=trackGui(create("ScreenGui",{Name=rnd(),ResetOnSpawn=false,IgnoreGuiInset=true,
-        DisplayOrder=1000,Parent=mountTarget}))
-    local shade=create("Frame",{Name=rnd(),Size=UDim2.fromScale(1,1),
-        BackgroundColor3=Color3.fromRGB(0,0,0),BackgroundTransparency=1,
-        BorderSizePixel=0,ZIndex=1,Parent=gui})
-    local PAD,CARD_W=24,352
-    local BODY_W=CARD_W-PAD*2
-    local BODY_TEXT="Mono only works in Murder Mystery 2.\nJoin an MM2 server and run the script again."
-    local LINE_H=1.15
-    local bodyH=36
-    do
-        local okS,sz=pcall(function()
-            return game:GetService("TextService"):GetTextSize(
-                BODY_TEXT,14,Enum.Font.BuilderSans,Vector2.new(BODY_W,1000))
-        end)
-        if okS and sz then bodyH=math.ceil(sz.Y*LINE_H)+2 end
-    end
-    local TITLE_Y,TITLE_H,GAP,BTN_H=PAD,22,14,34
-    local BODY_Y=TITLE_Y+TITLE_H+GAP
-    local CARD_H=BODY_Y+bodyH+22+BTN_H+PAD
-    local card=create("Frame",{Name=rnd(),AnchorPoint=Vector2.new(0.5,0.5),
-        Position=UDim2.fromScale(0.5,0.5),
-        Size=UDim2.fromOffset(math.floor(CARD_W*0.94),math.floor(CARD_H*0.94)),
-        BackgroundColor3=Color3.fromRGB(30,30,30),BackgroundTransparency=1,
-        BorderSizePixel=0,ZIndex=2,Parent=gui},
-        {create("UICorner",{CornerRadius=UDim.new(0,12)})})
-    local edge=create("UIStroke",{Color=Color3.fromRGB(52,52,52),Thickness=1,Transparency=1,
-        ApplyStrokeMode=Enum.ApplyStrokeMode.Border,Parent=card})
-    local title=create("TextLabel",{Name=rnd(),BackgroundTransparency=1,
-        Position=UDim2.fromOffset(PAD,TITLE_Y),Size=UDim2.fromOffset(BODY_W,TITLE_H),
-        Font=Enum.Font.BuilderSansBold,TextSize=18,TextColor3=Color3.fromRGB(255,255,255),
-        TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,
-        Text="Wrong game",ZIndex=3,Parent=card})
-    local body=create("TextLabel",{Name=rnd(),BackgroundTransparency=1,
-        Position=UDim2.fromOffset(PAD,BODY_Y),Size=UDim2.fromOffset(BODY_W,bodyH),
-        Font=Enum.Font.BuilderSans,TextSize=14,TextColor3=Color3.fromRGB(150,150,150),
-        LineHeight=LINE_H,
-        TextTransparency=1,TextXAlignment=Enum.TextXAlignment.Left,
-        TextYAlignment=Enum.TextYAlignment.Top,TextWrapped=true,
-        Text=BODY_TEXT,ZIndex=3,Parent=card})
-    local okBtn=create("TextButton",{Name=rnd(),AnchorPoint=Vector2.new(1,1),
-        Position=UDim2.new(1,-PAD,1,-PAD),Size=UDim2.fromOffset(96,BTN_H),
-        BackgroundColor3=Color3.fromRGB(205,205,205),BackgroundTransparency=1,
-        AutoButtonColor=false,Text="",ZIndex=3,Parent=card},
-        {create("UICorner",{CornerRadius=UDim.new(0,8)})})
-    local okLbl=create("TextLabel",{Name=rnd(),BackgroundTransparency=1,Size=UDim2.fromScale(1,1),
-        Font=Enum.Font.BuilderSansMedium,TextSize=14,TextColor3=Color3.fromRGB(26,26,26),
-        TextTransparency=1,Text="OK",ZIndex=4,Parent=okBtn})
-
-    local IN=TweenInfo.new(0.22,Enum.EasingStyle.Quad,Enum.EasingDirection.Out)
-    local function fade(to)
-        TweenService:Create(shade,to and IN or TweenInfo.new(0.18,Enum.EasingStyle.Quad,Enum.EasingDirection.In),
-            {BackgroundTransparency=to and 0.5 or 1}):Play()
-        local ti=to and IN or TweenInfo.new(0.18,Enum.EasingStyle.Quad,Enum.EasingDirection.In)
-        TweenService:Create(card,ti,{BackgroundTransparency=to and 0 or 1}):Play()
-        TweenService:Create(edge,ti,{Transparency=to and 0.25 or 1}):Play()
-        TweenService:Create(title,ti,{TextTransparency=to and 0 or 1}):Play()
-        TweenService:Create(body,ti,{TextTransparency=to and 0 or 1}):Play()
-        TweenService:Create(okBtn,ti,{BackgroundTransparency=to and 0 or 1}):Play()
-        TweenService:Create(okLbl,ti,{TextTransparency=to and 0 or 1}):Play()
-    end
-    fade(true)
-    TweenService:Create(card,TweenInfo.new(0.24,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),
-        {Size=UDim2.fromOffset(CARD_W,CARD_H)}):Play()
-
-    okBtn.MouseEnter:Connect(function()
-        TweenService:Create(okBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(235,235,235)}):Play()
-    end)
-    okBtn.MouseLeave:Connect(function()
-        TweenService:Create(okBtn,TweenInfo.new(0.12),{BackgroundColor3=Color3.fromRGB(205,205,205)}):Play()
-    end)
-
-    local closing=false
-    local function dismiss()
-        if closing then return end
-        closing=true
-        Unloaded=true
-        fade(false)
-        task.delay(0.2,function()
-            pcall(function() gui:Destroy() end)
-            pcall(function() if GENV then GENV.MONO_Unload=nil end end)
-        end)
-    end
-    okBtn.MouseButton1Click:Connect(dismiss)
-
-    pcall(function() if GENV then GENV.MONO_Unload=function()
-        Unloaded=true
-        pcall(function() gui:Destroy() end)
-        GENV.MONO_Unload=nil
-    end end end)
-    return
-end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-
-local EspGui=trackGui(create("ScreenGui",{Name=rnd(),ResetOnSpawn=false,IgnoreGuiInset=false,DisplayOrder=998,Parent=mountTarget}))
-do
-    local lineMT={}
-    local function apply(t)
-        local f=rawget(t,"_f")
-        if not (f and f.Parent) then return end
-        local a,b=rawget(t,"_From"),rawget(t,"_To")
-        if not (a and b) then return end
-        local d=b-a
-        f.Position=UDim2.fromOffset((a.X+b.X)*0.5,(a.Y+b.Y)*0.5)
-        f.Size=UDim2.fromOffset(math.max(d.Magnitude,1),math.max(rawget(t,"_Thickness") or 1,1))
-        f.Rotation=math.deg(math.atan2(d.Y,d.X))
-    end
-    local function remove(t)
-        local f=rawget(t,"_f")
-        if f then pcall(function() f:Destroy() end) end
-    end
-    lineMT.__index=function(t,k)
-        if k=="Remove" then return remove end
-        return rawget(t,"_"..k)
-    end
-    lineMT.__newindex=function(t,k,v)
-        rawset(t,"_"..k,v)
-        local f=rawget(t,"_f")
-        if not (f and f.Parent) then return end
-        if k=="Visible" then f.Visible=(v==true)
-        elseif k=="Color" then f.BackgroundColor3=v
-        elseif k=="Transparency" then f.BackgroundTransparency=1-(tonumber(v) or 1)
-        elseif k=="From" or k=="To" or k=="Thickness" then apply(t) end
-    end
-    Mono.hasDrawing=(typeof(Drawing)=="table") and (pcall(function()
-        local probe=Drawing.new("Line"); probe:Remove()
-    end))
-    if not Mono.hasDrawing then
-        Fallback.note("ESP lines","GUI frames",
-            "your executor has no Drawing library, so lines are built from rotated frames, which costs more on a weak device",
-            {"Box ESP","3D Box ESP","Skeleton ESP","Tracers","Show FOV Circle"})
-    end
-    Mono.drawn={}
-    function Mono.trackDraw(o) Mono.drawn[o]=true; return o end
-    function Mono.dropDraw(o)
-        if o==nil then return end
-        Mono.drawn[o]=nil
-        pcall(function() o:Remove() end)
-    end
-    function Mono.clearDrawn()
-        for o in pairs(Mono.drawn) do pcall(function() o:Remove() end) end
-        table.clear(Mono.drawn)
-    end
-    function Mono.newLine(thickness)
-        if Mono.hasDrawing then
-            local l=Drawing.new("Line"); l.Thickness=thickness; l.Transparency=1; l.Visible=false
-            return Mono.trackDraw(l)
-        end
-        local t=setmetatable({},lineMT)
-        rawset(t,"_f",create("Frame",{Name=rnd(),AnchorPoint=Vector2.new(0.5,0.5),BorderSizePixel=0,
-            BackgroundColor3=Color3.new(1,1,1),Visible=false,ZIndex=3,Parent=EspGui}))
-        rawset(t,"_Thickness",thickness)
-        rawset(t,"_Visible",false)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        return t
-    end
-end
-
-local CRC; pcall(function() CRC=require(RS:WaitForChild("Modules"):WaitForChild("CurrentRoundClient")) end)
-local function roundData(plr) return CRC and CRC.PlayerData and CRC.PlayerData[plr.Name] end
-local function getHRP(ch) return ch and ch:FindFirstChild("HumanoidRootPart") end
-local function badVec(v)
-    if typeof(v)~="Vector3" then return true end
-    if v.X~=v.X or v.Y~=v.Y or v.Z~=v.Z then return true end
-    local inf=math.huge
-    if v.X==inf or v.X==-inf then return true end
-    if v.Y==inf or v.Y==-inf then return true end
-    if v.Z==inf or v.Z==-inf then return true end
-    return false
-end
-local function badCF(cf)
-    if typeof(cf)~="CFrame" then return true end
-    local p=cf.Position
-    if badVec(p) then return true end
-    if math.abs(p.X)>1e6 or math.abs(p.Y)>1e6 or math.abs(p.Z)>1e6 then return true end
-    return false
-end
-local function charHasWeapon(ch,kind)
-    for _,t in ipairs(ch:GetChildren()) do
-        if t:IsA("Tool") then
-            if kind=="Gun" and (t.Name=="Gun" or t:FindFirstChild("Shoot")) then return true end
-            if kind=="Knife" and (t.Name=="Knife" or t:FindFirstChild("Events")) then return true end
-        end
-    end
-    return false
-end
-local CollectionService=game:GetService("CollectionService")
-function Mono.refreshTags()
-    for _,tag in ipairs({"Weapon_Gun","Weapon_Knife"}) do
-        local m=Mono.tagOwners[tag]
-        if m then table.clear(m) else m={}; Mono.tagOwners[tag]=m end
-        for _,t in ipairs(CollectionService:GetTagged(tag)) do
-            local par=t.Parent
-            if par then m[par]=true end
-        end
-    end
-end
-Mono.refreshTags()
-local function playerHasTagged(plr,tag)
-    local m=Mono.tagOwners[tag]; if not m then return false end
-    local ch=plr.Character
-    if ch and m[ch] then return true end
-    local bp=plr:FindFirstChildOfClass("Backpack")
-    if bp and m[bp] then return true end
-    return false
-end
-local function computeRole(plr)
-    local d=roundData(plr)
-    local r=d and d.Role
-    if r=="Murderer" then return "Murderer" end
-    if r=="Sheriff" or r=="Hero" then return r end
-    local ch=plr.Character
-    if playerHasTagged(plr,"Weapon_Gun") or (ch and charHasWeapon(ch,"Gun")) then return "Hero" end
-    if playerHasTagged(plr,"Weapon_Knife") or (ch and charHasWeapon(ch,"Knife")) then return "Murderer" end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    return r or "Innocent"
-end
-local function computeAlive(plr)
-    local d=roundData(plr); if d and d.Dead==true then return false end
-    local ch=plr.Character; local hum=ch and ch:FindFirstChildOfClass("Humanoid")
-    return ch and hum and hum.Health>0 and getHRP(ch)
-end
-local CACHE_TTL=0.05
-local roleCache,aliveCache,cacheStamp={},{},0
-local function sweepCaches()
-    local now=os.clock()
-    if now-cacheStamp>CACHE_TTL then
-        table.clear(roleCache); table.clear(aliveCache); cacheStamp=now
-        Mono.refreshTags()
-    end
-    if now-(Mono.rosterAt or 0)>2 then
-        Mono.rosterAt=now
-        Mono.refreshPlrs()
-    end
-end
-local function roleOf(plr)
-    sweepCaches()
-    local v=roleCache[plr]
-    if v==nil then v=computeRole(plr); roleCache[plr]=v end
-    return v
-end
-local function alive(plr)
-    sweepCaches()
-    local v=aliveCache[plr]
-    if v==nil then v=computeAlive(plr) or false; aliveCache[plr]=v end
-    return v
-end
-function Mono.hasBody(plr)
-    local ch=plr.Character
-    if not ch then return nil end
-    local hum=ch:FindFirstChildOfClass("Humanoid")
-    if not (hum and hum.Health>0) then return nil end
-    local hrp=ch:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    return ch,hum,hrp
-end
-local function myRole() return roleOf(LocalPlayer) end
-local function isGunRole(role) return role=="Sheriff" or role=="Hero" end
-local function isEnemyOf(myrole,role)
-    if myrole=="Murderer" then return true end
-    if isGunRole(myrole) then return role=="Murderer" end
-    return false
-end
-function Mono.refreshPlrs()
-    local ok,list=pcall(function() return Players:GetPlayers() end)
-    if ok and type(list)=="table" then Mono.plrs=list end
-end
-Mono.refreshPlrs()
-bind(Players.PlayerAdded,Mono.refreshPlrs)
-bind(Players.PlayerRemoving,function()
-    task.defer(Mono.refreshPlrs)
-end)
-local function findMurderer() for _,p in ipairs(Mono.plrs) do if roleOf(p)=="Murderer" then return p end end end
-local function findWeapon(n) local ch=LocalPlayer.Character; local bp=LocalPlayer:FindFirstChildOfClass("Backpack"); return (ch and ch:FindFirstChild(n)) or (bp and bp:FindFirstChild(n)) end
-local function equip(tool) local ch=LocalPlayer.Character; local hum=ch and ch:FindFirstChildOfClass("Humanoid"); if tool and hum and tool.Parent~=ch then pcall(function() hum:EquipTool(tool) end) end end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-
-function Mono.aimPointFor(p)
-    local ch=p and p.Character; local hrp=ch and getHRP(ch); if not hrp then return end
-    local part=ch:FindFirstChild("UpperTorso") or ch:FindFirstChild("Torso") or hrp
-    return part.Position
-end
-Mono.WALL_BACKOFF=0.6
-
-local KNIFE_PARTS={"HumanoidRootPart","UpperTorso","LowerTorso","Torso","Head"}
-local function knifeKill(ev,targetChar)
-    if not (ev and targetChar) then return end
-    local ht=ev:FindFirstChild("HandleTouched"); local ks=ev:FindFirstChild("KnifeStabbed")
-    if not ht then return end
-    if ks then ks:FireServer() end
-    for _,pn in ipairs(KNIFE_PARTS) do
-        local part=targetChar:FindFirstChild(pn)
-        if part then ht:FireServer(part) return end
-    end
-end
-Mono.SNAP_HEIGHT=5
-Mono.GUN_COOLDOWN=3.25
-Mono.SNAP_COOLDOWN=3.25
-Mono.snapAt=-10
-local snapping=false
-function Mono.gunOrigin()
-    local ch=LocalPlayer.Character
-    local hrp=ch and ch:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    local att=hrp:FindFirstChild("GunRaycastAttachment")
-    if att then return att.WorldCFrame end
-    return hrp.CFrame
-end
-
-function Mono.aimPoint(ch)
-    local part=ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("UpperTorso")
-        or ch:FindFirstChild("Torso") or ch:FindFirstChild("Head")
-    return part and part.Position
-end
-
-function Mono.gunBusy(lead)
-    local gun=findWeapon("Gun")
-    if not gun then return false end
-    if os.clock()-Mono.snapAt<Mono.GUN_COOLDOWN-(lead or 0) then return true end
-    return false
-end
-do
-    local cs=RS:FindFirstChild("ClientServices")
-    local ws=cs and cs:FindFirstChild("WeaponService")
-    local gf=ws and ws:FindFirstChild("GunFired")
-    if gf and gf:IsA("RemoteEvent") then
-        bind(gf.OnClientEvent,function(handle)
-            local ch=LocalPlayer.Character
-            if ch and typeof(handle)=="Instance" and handle:IsDescendantOf(ch) then
-                local rt=os.clock()-Mono.snapAt
-                if rt>0 and rt<1.5 then Mono.shotLag=(Mono.shotLag or 0.08)*0.7+rt*0.3 end
-                Mono.snapAt=os.clock()
-            end
-        end)
-    end
-end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-
-local function snapShot(target)
-    if snapping then return false end
-    local lagT=math.clamp(Mono.shotLag or 0.08,0.03,0.25)
-    local preLock=math.clamp(lagT*1.5,0.12,0.35)
-    if Mono.gunBusy(preLock) then return false end
-    local gun=findWeapon("Gun"); if not gun then return false end
-    local shoot=gun:FindFirstChild("Shoot"); if not shoot then return false end
-    local myHrp=getHRP(LocalPlayer.Character)
-    local tChar=target and target.Character
-    local tHrp=tChar and getHRP(tChar)
-    if not (myHrp and tHrp and Mono.canAct()) then return false end
-    snapping=true
-
-    local home=myHrp.CFrame
-    local homeVel=myHrp.AssemblyLinearVelocity
-    local myHum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    local homeState=myHum and myHum:GetState() or nil
-    local fired=false
-
-    pcall(function()
-        equip(gun)
-        local deadline=os.clock()+0.4
-        while os.clock()<deadline do
-            local h=getHRP(LocalPlayer.Character)
-            if h and h:FindFirstChild("GunRaycastAttachment") then break end
-            RunService.Heartbeat:Wait()
-        end
-
-        Mono.markSelfTP()
-        local aim=Mono.aimPoint(tChar)
-        if not aim then return end
-        local side=home.Position-aim
-        side=Vector3.new(side.X,0,side.Z)
-        if side.Magnitude<0.5 then
-            local lv=tHrp.CFrame.LookVector
-            side=Vector3.new(lv.X,0,lv.Z)
-        end
-        if side.Magnitude<0.5 then side=Vector3.new(0,0,1) end
-        side=side.Unit
-        local rp=RaycastParams.new()
-        rp.FilterType=Enum.RaycastFilterType.Exclude
-        rp.FilterDescendantsInstances={tChar,LocalPlayer.Character}
-        if workspace:Raycast(aim,side*Mono.SNAP_HEIGHT,rp) then side=-side end
-        local relOff=side*Mono.SNAP_HEIGHT
-
-        local chest=aim
-        local function lockOn(dur)
-            local t0=os.clock()
-            repeat
-                local h=getHRP(LocalPlayer.Character)
-                local tr=target.Character and getHRP(target.Character)
-                if not (h and tr) then return false end
-                if Mono.teleporting() then return false end
-                local nxt=Mono.aimPoint(target.Character)
-                if nxt and (nxt-chest).Magnitude>60 then return false end
-                chest=nxt or chest
-                h.CFrame=CFrame.new(chest+relOff,chest)
-                h.AssemblyLinearVelocity=Vector3.zero
-                h.AssemblyAngularVelocity=Vector3.zero
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-                Mono.markSelfTP()
-                RunService.Heartbeat:Wait()
-            until os.clock()-t0>=dur
-            return true
-        end
-
-        if not lockOn(preLock) then return end
-
-        local origin=Mono.gunOrigin()
-        if origin then
-            local tr2=target.Character and getHRP(target.Character)
-            local vel=tr2 and tr2.AssemblyLinearVelocity or Vector3.zero
-            shoot:FireServer(origin,CFrame.new(chest+vel*lagT))
-            Mono.snapAt=os.clock()
-            fired=true
-            lockOn(math.clamp(lagT*2,0.16,0.5))
-        end
-    end)
-
-    RunService.Heartbeat:Wait()
-    Mono.markSelfTP()
-    local h3=getHRP(LocalPlayer.Character)
-    if h3 then
-        h3.CFrame=home
-        h3.AssemblyLinearVelocity=homeVel
-        h3.AssemblyAngularVelocity=Vector3.zero
-    end
-    local hum3=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum3 then
-        if homeState and homeState~=Enum.HumanoidStateType.Dead then
-            pcall(function() hum3:ChangeState(homeState) end)
-        else
-            pcall(function() hum3:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-        end
-        pcall(function() hum3:Move(hum3.MoveDirection,false) end)
-    end
-    snapping=false
-    return fired
-end
-local function enemies()
-    local role=myRole(); local list={}
-    if isGunRole(role) then local m=findMurderer(); if m and alive(m) then table.insert(list,m) end
-    else for _,p in ipairs(Mono.plrs) do if p~=LocalPlayer and alive(p) then table.insert(list,p) end end end
-    return list,role
-end
-local function fovTarget()
-    local mr=myRole()
-    local center=Mono.aimViewport(); local best,bd
-    for _,p in ipairs(Mono.plrs) do
-        if p~=LocalPlayer and alive(p) then
-            local pr=roleOf(p)
-            if isEnemyOf(mr,pr) or pr=="Murderer" then
-                local hrp=getHRP(p.Character)
-                if hrp then
-                    local v,on=Camera:WorldToViewportPoint(hrp.Position)
-                    if on and v.Z>0 then
-                        local d=(Vector2.new(v.X,v.Y)-center).Magnitude
-                        if d<=aimFov and (not bd or d<bd) then bd,best=d,p end
-                    end
-                end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            end
-        end
-    end
-    return best
-end
-
-task.spawn(function() while not isDead() do
-  local okLoop,errLoop=pcall(function()
-    if flags.autoKill then
-        local list,role=enemies()
-        if role=="Murderer" then
-            local knife=findWeapon("Knife"); local ev=knife and knife:FindFirstChild("Events")
-            if ev then equip(knife)
-                for _,tgt in ipairs(list) do
-                    if not flags.autoKill then break end
-                    knifeKill(ev,tgt.Character)
-                end
-            end
-            task.wait(0.05)
-        elseif isGunRole(role) then
-            local m=list[1]
-            if m and alive(m) then snapShot(m) end
-            task.wait(0.05)
-        else task.wait(0.1) end
-    else task.wait(0.08) end
-  end)
-  if not okLoop then warn("[MONO] auto kill: "..tostring(errLoop)); task.wait(0.25) end
-end end)
-local FovCircle=create("Frame",{Name=rnd(),AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(240,240),BackgroundTransparency=1,BorderSizePixel=0,Visible=false,Parent=EspGui},
-    {create("UICorner",{CornerRadius=UDim.new(1,0)}),create("UIStroke",{Color=Color3.fromRGB(255,255,255),Thickness=1.5,Transparency=0.25})})
-bind(RunService.RenderStepped,function()
-    if flags.showFov and (flags.aimbot or flags.silentAim) then
-        FovCircle.Visible=true; FovCircle.Size=UDim2.fromOffset(aimFov*2,aimFov*2); local mp=Mono.mouseGui(); FovCircle.Position=UDim2.fromOffset(mp.X,mp.Y)
-    else FovCircle.Visible=false end
-    if flags.aimbot or Mono.mobAim then
-        local t=fovTarget()
-        if t then local th=t.Character:FindFirstChild("Head") or getHRP(t.Character)
-            if th then Camera.CFrame=Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position,th.Position),0.45) end end
-    end
-end)
-local silentAimPos
-local function crosshairAnyPlayerPos(radius)
-    local center=Mono.aimViewport()
-    local best,bd
-    for _,p in ipairs(Mono.plrs) do
-        if p~=LocalPlayer and alive(p) then
-            local ch=p.Character; local hrp=getHRP(ch)
-            if hrp then
-                local sp=Camera:WorldToViewportPoint(hrp.Position)
-                if sp.Z>0 then
-                    local d=(Vector2.new(sp.X,sp.Y)-center).Magnitude
-                    if d<=radius and (not bd or d<bd) then
-                        bd=d
-                        best=p
-                    end
-                end
-            end
-        end
-    end
-    return best and Mono.aimPointFor(best) or nil
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-end
-Mono.SILENT_HOLD=1.8
-function Mono.crosshairPlayer(radius)
-    local center=Mono.aimViewport()
-    local best,bd
-    for _,p in ipairs(Mono.plrs) do
-        if p~=LocalPlayer and alive(p) then
-            local hrp=getHRP(p.Character)
-            if hrp then
-                local sp=Camera:WorldToViewportPoint(hrp.Position)
-                if sp.Z>0 then
-                    local d=(Vector2.new(sp.X,sp.Y)-center).Magnitude
-                    if d<=radius and (not bd or d<bd) then bd=d; best=p end
-                end
-            end
-        end
-    end
-    return best
-end
-local function computeSilentTarget()
-    if myRole()~="Murderer" then Mono.silentPlr=nil return nil end
-    local p=Mono.crosshairPlayer(aimFov)
-    if p then
-        Mono.silentPlr=p
-        Mono.silentAt=os.clock()
-        return Mono.aimPointFor(p)
-    end
-    local last=Mono.silentPlr
-    if last and os.clock()-(Mono.silentAt or -10)<Mono.SILENT_HOLD and alive(last) then
-        local held=Mono.aimPointFor(last)
-        if held then return held end
-    end
-    Mono.silentPlr=nil
-    return nil
-end
-local function aimRay()
-    local c=Mono.aimCenter()
-    return Camera:ViewportPointToRay(c.X,c.Y)
-end
-local function wallAimPos()
-    local ray=aimRay()
-    local origin,dir=ray.Origin,ray.Direction.Unit
-    local far=origin+dir*300
-    local chars={}
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=LocalPlayer and alive(p) and p.Character then chars[#chars+1]=p.Character end
-    end
-    if #chars==0 then return nil,far end
-    local params=RaycastParams.new()
-    params.FilterType=Enum.RaycastFilterType.Include
-    params.FilterDescendantsInstances=chars
-    local hit=workspace:Raycast(origin,dir*300,params)
-    if hit then return hit.Position,far end
-    return crosshairAnyPlayerPos(aimFov),far
-end
-local wallSnapPos, wallFarPos, myHrpPos
-bind(RunService.Heartbeat,function()
-    silentAimPos = flags.silentAim and computeSilentTarget() or nil
-    if flags.knifeWalls or flags.gunWalls then
-        wallSnapPos, wallFarPos = wallAimPos()
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    else
-        wallSnapPos, wallFarPos = nil, nil
-    end
-    local h=getHRP(LocalPlayer.Character); myHrpPos = h and h.Position or nil
-end)
-Mono.hookOk=pcall(function()
-    if typeof(hookmetamethod)~="function" or typeof(newcclosure)~="function"
-        or typeof(checkcaller)~="function" or typeof(getnamecallmethod)~="function" then
-        error("executor has no __namecall hooking")
-    end
-    local oldNamecall
-    oldNamecall=hookmetamethod(game,"__namecall",newcclosure(function(self,...)
-        if not Unloaded and not checkcaller() and getnamecallmethod()=="FireServer" then
-            local nm=self.Name
-            if nm=="Shoot" or nm=="KnifeThrown" then
-                if nm=="Shoot" and flags.silentAim and not snapping and not Mono.gunBusy()
-                    and os.clock()-Mono.snapAt>=Mono.SNAP_COOLDOWN and isGunRole(myRole()) then
-                    local ft=fovTarget()
-                    if ft then
-                        task.spawn(function() snapShot(ft) end)
-                        return
-                    end
-                end
-                local walls=(nm=="Shoot" and flags.gunWalls) or (nm=="KnifeThrown" and flags.knifeWalls)
-                if nm=="KnifeThrown" and flags.instantKnife and os.clock()-instantFiredAt<0.6 then
-                    return
-                end
-                local silent=flags.silentAim and silentAimPos
-                local wallTarget
-                if walls then
-                    if nm=="Shoot" then wallTarget=wallSnapPos
-                    else wallTarget=wallSnapPos or wallFarPos end
-                end
-                local retarget=(silent and silentAimPos) or wallTarget or nil
-                if retarget then
-                    local n=select("#",...)
-                    if n>=2 then
-                        local a={...}
-                        if typeof(a[2])=="CFrame" then
-                            if retarget then a[2]=CFrame.new(retarget) end
-                            if walls and retarget and myHrpPos and typeof(a[1])=="CFrame" then
-                                local tp=a[2].Position
-                                local d=tp-myHrpPos
-                                d=(d.Magnitude>0.1) and d.Unit or Vector3.new(0,0,-1)
-                                a[1]=CFrame.new(tp-d*Mono.WALL_BACKOFF,tp)
-                            end
-                            return oldNamecall(self,table.unpack(a,1,n))
-                        end
-                    end
-                end
-            end
-        end
-        return oldNamecall(self,...)
-    end))
-end)
-
-local WeaponService
-pcall(function() WeaponService=require(RS:WaitForChild("ClientServices"):WaitForChild("WeaponService")) end)
-local function gameAimCFrame()
-    if WeaponService then
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        local ok,cf=pcall(function() return WeaponService:GetMouseTargetCFrame() end)
-        if ok and typeof(cf)=="CFrame" then return cf end
-    end
-    local ray=aimRay()
-    return CFrame.new(ray.Origin+ray.Direction.Unit*300)
-end
-if not Mono.hookOk then
-    Fallback.note("Weapon retargeting","direct fire",
-        "your executor cannot hook __namecall, so Mono fires the weapon remote itself instead of quietly redirecting the shot the game already sends",
-        {"Silent Aim","Gun Through Walls","Knife Through Walls","Instant Knife Throw"})
-    bind(UserInputService.InputBegan,function(input,processed)
-        if processed or isDead() then return end
-        local it=input.UserInputType
-        if it~=Enum.UserInputType.MouseButton1 and it~=Enum.UserInputType.Touch then return end
-        if not (flags.gunWalls or flags.knifeWalls or flags.silentAim) then return end
-        task.spawn(function()
-            local ch=LocalPlayer.Character
-            if not (ch and Mono.canAct()) then return end
-            local mine=getHRP(ch); if not mine then return end
-            local gun=ch:FindFirstChild("Gun")
-            if gun and gun:FindFirstChild("Shoot") then
-                if Mono.gunBusy() then return end
-                if flags.silentAim and isGunRole(myRole()) then
-                    local ft=fovTarget()
-                    if ft then snapShot(ft) return end
-                end
-                if flags.gunWalls then
-                    local snap=wallAimPos()
-                    if snap then
-                        local d=snap-mine.Position
-                        d=(d.Magnitude>0.1) and d.Unit or Vector3.new(0,0,-1)
-                        pcall(function() gun.Shoot:FireServer(CFrame.new(snap-d*2,snap),CFrame.new(snap)) end)
-                    end
-                end
-                return
-            end
-            local knife=ch:FindFirstChild("Knife")
-            local ev=knife and knife:FindFirstChild("Events")
-            local thrown=ev and ev:FindFirstChild("KnifeThrown")
-            if thrown and (flags.knifeWalls or flags.silentAim) then
-                local snap=(flags.silentAim and crosshairAnyPlayerPos(aimFov)) or wallAimPos()
-                if snap then
-                    local d=snap-mine.Position
-                    d=(d.Magnitude>0.1) and d.Unit or Vector3.new(0,0,-1)
-                    local h2=knife:FindFirstChild("Handle")
-                    local o2
-                    if flags.knifeWalls or not h2 then
-                        o2=CFrame.new(snap-d*Mono.WALL_BACKOFF,snap)
-                    else
-                        o2=h2.CFrame
-                    end
-                    pcall(function() thrown:FireServer(o2,CFrame.new(snap)) end)
-                end
-            end
-        end)
-    end)
-end
-
-local function throwKnifeNow(ignoreCooldown)
-    local ch=LocalPlayer.Character
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    if not ch then return false end
-    local knife=ch:FindFirstChild("Knife")
-    if not knife then
-        local bp=LocalPlayer:FindFirstChild("Backpack")
-        local stowed=bp and bp:FindFirstChild("Knife")
-        if stowed then
-            local hum=ch:FindFirstChildOfClass("Humanoid")
-            if hum then pcall(function() hum:EquipTool(stowed) end) end
-            knife=ch:FindFirstChild("Knife") or stowed
-        end
-    end
-    if not knife then return false end
-    local ev=knife:FindFirstChild("Events")
-    local thrown=ev and ev:FindFirstChild("KnifeThrown")
-    if not thrown then return false end
-    if knife:GetAttribute("Disabled")==true then return false end
-    if not ignoreCooldown then
-        local cd=2*(tonumber(knife:GetAttribute("ThrowSpeed")) or 1)
-        if os.clock()-instantFiredAt<cd then return false end
-    end
-    local target=silentAimPos
-    if not target then
-        if flags.knifeWalls then
-            local snap,far=wallAimPos()
-            target=snap or far
-        else
-            target=gameAimCFrame().Position
-        end
-    end
-    if not target then return false end
-    local hrp=getHRP(ch); if not hrp then return false end
-    local d=target-hrp.Position
-    d=(d.Magnitude>0.1) and d.Unit or Vector3.new(0,0,-1)
-    instantFiredAt=os.clock()
-    local handle=knife:FindFirstChild("Handle")
-    local origin
-    if flags.knifeWalls or not handle then
-        origin=CFrame.new(target-d*Mono.WALL_BACKOFF,target)
-    else
-        origin=handle.CFrame
-    end
-    thrown:FireServer(origin,CFrame.new(target))
-    return true
-end
-bind(UserInputService.InputBegan,function(input,gpe)
-    if gpe then return end
-    if input.UserInputType~=Enum.UserInputType.MouseButton2 then return end
-    if flags.instantKnife then throwKnifeNow(false) end
-end)
-task.spawn(function()
-    local ok,act=pcall(function()
-        local ic=LocalPlayer:WaitForChild("PlayerGui",10):WaitForChild("InputContext",10)
-        return ic:WaitForChild("GameplayContext",10):WaitForChild("Throw",10)
-    end)
-    if ok and act then
-        pcall(function()
-            bind(act.Pressed,function()
-                if flags.instantKnife then throwKnifeNow(false) end
-            end)
-        end)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    end
-end)
-
-local controlModule
-local function getControls()
-    if not controlModule then
-        pcall(function()
-            controlModule=require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")):GetControls()
-        end)
-    end
-    return controlModule
-end
-local lastJumpAt=-10
-local flyBV,flyBG
-local function startFly() local ch=LocalPlayer.Character; local hrp=getHRP(ch); local hum=ch and ch:FindFirstChildOfClass("Humanoid")
-    if not (hrp and hum) then return end; hum.PlatformStand=true; Mono.wantPS=true
-    flyBV=create("BodyVelocity",{MaxForce=Vector3.new(1,1,1)*9e9,P=9e4,Velocity=Vector3.zero,Parent=hrp})
-    flyBG=create("BodyGyro",{MaxTorque=Vector3.new(1,1,1)*9e9,P=9e4,CFrame=hrp.CFrame,Parent=hrp}) end
-local function stopFly() local ch=LocalPlayer.Character; local hum=ch and ch:FindFirstChildOfClass("Humanoid")
-    if hum then hum.PlatformStand=false end; Mono.wantPS=false; if flyBV then flyBV:Destroy();flyBV=nil end; if flyBG then flyBG:Destroy();flyBG=nil end end
-bind(RunService.RenderStepped,function()
-    if not flags.fly or not flyBV then return end
-    local hrp=getHRP(LocalPlayer.Character); if not hrp then return end
-    local dir=Vector3.zero; local look,right=Camera.CFrame.LookVector,Camera.CFrame.RightVector
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir+=look end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir-=look end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir+=right end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir-=right end
-    if UserInputService:IsKeyDown(Enum.KeyCode.Space) or Mono.mobUp then dir+=Vector3.new(0,1,0) end
-    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or Mono.mobDown then dir-=Vector3.new(0,1,0) end
-    if dir.Magnitude==0 then
-        local c=getControls()
-        local mv=c and c:GetMoveVector()
-        if mv and mv.Magnitude>0 then dir=dir+(look*(-mv.Z))+(right*mv.X) end
-    end
-    if os.clock()-lastJumpAt<0.25 then dir+=Vector3.new(0,1,0) end
-    flyBV.Velocity=(dir.Magnitude>0 and dir.Unit or Vector3.zero)*flags.flySpeed; flyBG.CFrame=Camera.CFrame
-end)
-do
-    local TOUCH_ONLY=UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-    local pad,btns=nil,{}
-    local function build()
-        local gui=trackGui(create("ScreenGui",{Name=rnd(),ResetOnSpawn=false,IgnoreGuiInset=false,
-            DisplayOrder=999,Parent=mountTarget}))
-        pad=create("Frame",{Name=rnd(),AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-20,1,-150),
-            Size=UDim2.fromOffset(70,252),BackgroundTransparency=1,Visible=false,Parent=gui})
-        local grip=create("Frame",{Name=rnd(),Size=UDim2.fromOffset(70,18),BackgroundColor3=Color3.fromRGB(19,19,21),
-            BackgroundTransparency=0.25,BorderSizePixel=0,Parent=pad},
-            {create("UICorner",{CornerRadius=UDim.new(1,0)}),
-             create("Frame",{Name=rnd(),AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.fromScale(0.5,0.5),
-                Size=UDim2.fromOffset(26,2),BackgroundColor3=Color3.fromRGB(150,150,155),
-                BackgroundTransparency=0.3,BorderSizePixel=0},{create("UICorner",{CornerRadius=UDim.new(1,0)})})})
-        local function pill(y,glyph,set)
-            local b=create("TextButton",{Name=rnd(),Position=UDim2.fromOffset(0,y),Size=UDim2.fromOffset(70,70),
-                BackgroundColor3=Color3.fromRGB(19,19,21),BackgroundTransparency=0.15,AutoButtonColor=false,
-                Text=glyph,TextColor3=Color3.fromRGB(238,238,240),TextSize=27,Font=Enum.Font.GothamMedium,
-                Visible=false,Parent=pad},
-                {create("UICorner",{CornerRadius=UDim.new(1,0)}),
-                 create("UIStroke",{Color=Color3.fromRGB(72,72,76),Thickness=1,Transparency=0.35})})
-            b.InputBegan:Connect(function(i)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-                if i.UserInputType==Enum.UserInputType.Touch then set(true); b.BackgroundTransparency=0 end
-            end)
-            b.InputEnded:Connect(function(i)
-                if i.UserInputType==Enum.UserInputType.Touch then set(false); b.BackgroundTransparency=0.15 end
-            end)
-            return b
-        end
-        btns.up=pill(26,"▲",function(v) Mono.mobUp=v end)
-        btns.down=pill(117,"▼",function(v) Mono.mobDown=v end)
-        btns.aim=pill(208,"◎",function(v) Mono.mobAim=v end)
-
-        local drag,startPos,startIn=false,nil,nil
-        grip.InputBegan:Connect(function(i)
-            if i.UserInputType==Enum.UserInputType.Touch then
-                drag=true; startPos=pad.Position; startIn=i.Position
-            end
-        end)
-        grip.InputEnded:Connect(function(i)
-            if i.UserInputType==Enum.UserInputType.Touch then drag=false end
-        end)
-        bind(UserInputService.InputChanged,function(i)
-            if drag and i.UserInputType==Enum.UserInputType.Touch and startPos then
-                local d=i.Position-startIn
-                pad.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,
-                    startPos.Y.Scale,startPos.Y.Offset+d.Y)
-            end
-        end)
-    end
-
-    local last=0
-    bind(RunService.Heartbeat,function()
-        if not TOUCH_ONLY then return end
-        local now=os.clock()
-        if now-last<0.25 then return end
-        last=now
-        local wantFly=flags.fly and true or false
-        local wantAim=flags.aimbot and true or false
-        if not (wantFly or wantAim) then
-            if pad then pad.Visible=false end
-            Mono.mobUp,Mono.mobDown,Mono.mobAim=false,false,false
-            return
-        end
-        if not pad then build() end
-        btns.up.Visible=wantFly
-        btns.down.Visible=wantFly
-        btns.aim.Visible=wantAim
-        btns.aim.Position=UDim2.fromOffset(0,wantFly and 208 or 26)
-        pad.Size=UDim2.fromOffset(70,26+(wantFly and 182 or 0)+(wantAim and 70 or 0))
-        pad.Visible=true
-    end)
-end
-
-local charParts,charPartsFor={},nil
-local function refreshCharParts(ch)
-    charParts={}
-    if Mono.cpConn then Mono.cpConn:Disconnect(); Mono.cpConn=nil end
-    if not ch then charPartsFor=nil return end
-    for _,p in ipairs(ch:GetDescendants()) do
-        if p:IsA("BasePart") then charParts[#charParts+1]=p end
-    end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    charPartsFor=ch
-    Mono.cpConn=ch.DescendantAdded:Connect(function(d)
-        if ch==charPartsFor and d:IsA("BasePart") then charParts[#charParts+1]=d end
-    end)
-    table.insert(conns,Mono.cpConn)
-end
-local function getCharParts(ch)
-    if ch~=charPartsFor then refreshCharParts(ch) end
-    return charParts
-end
-bind(LocalPlayer.CharacterAdded,function(ch)
-    task.defer(function() refreshCharParts(ch) end)
-end)
-if LocalPlayer.Character then refreshCharParts(LocalPlayer.Character) end
-local function uncollide(ch)
-    for _,p in ipairs(getCharParts(ch)) do
-        if p.Parent and p.CanCollide then p.CanCollide=false; Mono.unclip[p]=true end
-    end
-end
-function Mono.recollide(hum,force)
-    if (not force) and (flags.noclip or flinging or Mono.wantNoclip) then return end
-    for p in pairs(Mono.unclip) do
-        if p.Parent then p.CanCollide=true end
-    end
-    table.clear(Mono.unclip)
-    if hum then
-        pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-    end
-end
-
-bind(RunService.Stepped,function()
-    if flinging and os.clock()-(Mono.flingAt or 0)>(flags.flingSeconds or 3)+8 then flinging=false end
-    if not (flags.noclip or flinging or Mono.wantNoclip) then
-        if next(Mono.unclip) then
-            Mono.recollide(LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid"))
-        end
-        return
-    end
-    local ch=LocalPlayer.Character; if not ch then return end
-    uncollide(ch)
-end)
-bind(UserInputService.JumpRequest,function() lastJumpAt=os.clock() if flags.infJump then local hum=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid"); if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end end)
-
-local origMaxZoom=LocalPlayer.CameraMaxZoomDistance
-local function setUnlockCam(on) pcall(function() LocalPlayer.CameraMaxZoomDistance=on and 10000 or origMaxZoom end) end
-local camCams,origOccUpdate
-local function getCams()
-    if camCams then return camCams end
-    if os.clock()-(Mono.camTryAt or -10)<2 then return nil end
-    Mono.camTryAt=os.clock()
-    pcall(function() camCams=require(LocalPlayer:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule")):GetCameras() end)
-    return camCams
-end
-local function setCamThruWalls(on)
-    if Mono.camThru==on then return end
-    Mono.camThru=on
-    local cams=getCams(); if not cams then Mono.camThru=nil return end
-    local occ=cams.activeOcclusionModule; if not (occ and occ.Update) then return end
-    if on and not occ.__monoHook then
-        origOccUpdate=occ.Update; occ.__monoHook=true
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        occ.Update=function(_,_,desiredCF,desiredFocus) return desiredCF,desiredFocus end
-    elseif (not on) and occ.__monoHook then
-        occ.Update=origOccUpdate; occ.__monoHook=false
-    end
-end
-bind(RunService.Heartbeat,function()
-    if flags.unlockCam and LocalPlayer.CameraMaxZoomDistance<9999 then setUnlockCam(true) end
-    setCamThruWalls(flags.unlockCam and flags.noclip)
-end)
-
-local espStore={}
-Mono.TextService=game:GetService("TextService")
-Mono.nameHidden=setmetatable({},{__mode="k"})
-function Mono.setRobloxNames(hide)
-    for _,p in ipairs(Mono.plrs) do
-        if p~=LocalPlayer then
-            local hum=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                if hide then
-                    if Mono.nameHidden[hum]==nil then
-                        Mono.nameHidden[hum]={hum.DisplayDistanceType,hum.HealthDisplayDistance,hum.NameDisplayDistance}
-                    end
-                    if hum.DisplayDistanceType~=Enum.HumanoidDisplayDistanceType.None then
-                        hum.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
-                    end
-                else
-                    local o=Mono.nameHidden[hum]
-                    if o then
-                        pcall(function()
-                            hum.DisplayDistanceType=o[1]
-                            hum.HealthDisplayDistance=o[2]
-                            hum.NameDisplayDistance=o[3]
-                        end)
-                        Mono.nameHidden[hum]=nil
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function clearEsp(plr) local e=espStore[plr]; if not e then return end
-    if e.hl then e.hl:Destroy() end; if e.bb then e.bb:Destroy() end; espStore[plr]=nil end
-function Mono.espRole(plr)
-    local d=roundData(plr)
-    if d and d.Dead==true then return "Innocent" end
-    return roleOf(plr)
-end
-local function espColor(role) if not flags.espRoleTags then return Color3.fromRGB(214,214,220) end
-    if role=="Murderer" then return Color3.fromRGB(255,80,80) elseif isGunRole(role) then return Color3.fromRGB(90,150,255) else return Color3.fromRGB(95,225,125) end end
-local function tagOf(role) return role=="Murderer" and "[M]" or isGunRole(role) and "[S]" or "[I]" end
-local guiRects={}
-function Mono.addRect(o)
-    if not (o and o.Visible and o.AbsoluteSize.X>1 and o.AbsoluteSize.Y>1) then return end
-    if o:IsA("Frame") and o.BackgroundTransparency>=1 then
-        for _,c in ipairs(o:GetChildren()) do
-            if c:IsA("GuiObject") then Mono.addRect(c) end
-        end
-        return
-    end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    local p,s=o.AbsolutePosition,o.AbsoluteSize
-    local oy=p.Y+Mono.guiIns
-    Mono.guiN=Mono.guiN+1
-    local r=guiRects[Mono.guiN]
-    if r then r[1],r[2],r[3],r[4]=p.X,oy,p.X+s.X,oy+s.Y
-    else guiRects[Mono.guiN]={p.X,oy,p.X+s.X,oy+s.Y} end
-end
-local function refreshGuiRects(force)
-    local now=os.clock()
-    if not force and now-Mono.guiT<0.1 then return end
-    Mono.guiT=now
-    Mono.guiIns=GuiService:GetGuiInset().Y
-    Mono.guiN=0
-    local sg=Window and Window.gui
-    if sg then
-        for _,c in ipairs(sg:GetChildren()) do
-            if c:IsA("GuiObject") then Mono.addRect(c) end
-        end
-    end
-end
-local function pointBlocked(x,y)
-    for i=1,Mono.guiN do
-        local r=guiRects[i]
-        if x>=r[1] and x<=r[3] and y>=r[2] and y<=r[4] then return true end
-    end
-    return false
-end
-local function rectBlocked(x1,y1,x2,y2)
-    for i=1,Mono.guiN do
-        local r=guiRects[i]
-        if x1<=r[3] and x2>=r[1] and y1<=r[4] and y2>=r[2] then return true end
-    end
-    return false
-end
-local function ensureEsp(plr) if espStore[plr] then return espStore[plr] end
-    local e={}
-    e.hl=create("Highlight",{Name=rnd(),FillTransparency=1,OutlineTransparency=0,Enabled=false,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,Parent=EspGui})
-    e.bb=create("BillboardGui",{Name=rnd(),Size=UDim2.fromOffset(198,40),AlwaysOnTop=true,Enabled=false,
-        StudsOffsetWorldSpace=Vector3.new(0,3.2,0),Parent=EspGui})
-
-    e.scale=create("UIScale",{Scale=1,Parent=e.bb})
-    e.card=create("Frame",{Name=rnd(),AnchorPoint=Vector2.new(0.5,1),Position=UDim2.fromScale(0.5,1),
-        Size=UDim2.fromOffset(198,32),BackgroundColor3=Color3.fromRGB(16,16,18),BackgroundTransparency=0.2,
-        BorderSizePixel=0,Parent=e.bb},
-        {create("UICorner",{CornerRadius=UDim.new(0,10)}),
-         create("UIGradient",{Rotation=90,
-             Transparency=NumberSequence.new({
-                 NumberSequenceKeypoint.new(0,0.04),
-                 NumberSequenceKeypoint.new(1,0.28)})})})
-    e.edge=create("UIStroke",{Color=Color3.fromRGB(255,255,255),Thickness=1,Transparency=0.75,
-        ApplyStrokeMode=Enum.ApplyStrokeMode.Border,Parent=e.card})
-
-    e.avatar=create("ImageLabel",{Name=rnd(),AnchorPoint=Vector2.new(0,0.5),Position=UDim2.new(0,8,0.5,0),
-        Size=UDim2.fromOffset(22,22),BackgroundColor3=Color3.fromRGB(38,38,44),BackgroundTransparency=0.25,
-        ScaleType=Enum.ScaleType.Fit,Image="",Parent=e.card},
-        {create("UICorner",{CornerRadius=UDim.new(0,6)})})
-
-    e.name=create("TextLabel",{Name=rnd(),BackgroundTransparency=1,AnchorPoint=Vector2.new(0,0.5),
-        Position=UDim2.new(0,36,0.5,0),Size=UDim2.new(1,-116,0,15),Font=Enum.Font.GothamBold,TextSize=13,
-        TextXAlignment=Enum.TextXAlignment.Left,
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        Text="",TextColor3=Color3.fromRGB(255,255,255),Parent=e.card})
-
-    e.sub=create("TextLabel",{Name=rnd(),BackgroundTransparency=1,AnchorPoint=Vector2.new(1,0.5),
-        Position=UDim2.new(1,-10,0.5,0),Size=UDim2.fromOffset(74,14),Font=Enum.Font.Gotham,TextSize=11,
-        TextXAlignment=Enum.TextXAlignment.Right,Text="",TextColor3=Color3.fromRGB(176,176,188),Parent=e.card})
-
-    espStore[plr]=e; return e end
-task.spawn(function() while not isDead() do
-    local anyEsp=flags.espChams or flags.espNames or flags.espRoleTags
-    if not anyEsp then
-        if next(espStore) then for p in pairs(espStore) do clearEsp(p) end end
-        task.wait(0.5)
-        continue
-    end
-    if Mono._rnFlag~=flags.espNames or os.clock()-(Mono._rnAt or 0)>0.5 then
-        Mono._rnFlag=flags.espNames
-        Mono._rnAt=os.clock()
-        Mono.setRobloxNames(flags.espNames)
-    end
-    local camP=Camera.CFrame.Position
-    for _,plr in ipairs(Mono.plrs) do if plr~=LocalPlayer then
-        local ch,_,tHRP=Mono.hasBody(plr)
-        if anyEsp and ch then
-            local e=ensureEsp(plr); local role=Mono.espRole(plr); local col=espColor(role)
-            local wantCh=flags.espChams and true or false
-            if e._ch~=wantCh then e._ch=wantCh; e.hl.Enabled=wantCh end
-            if wantCh then
-                if e.hl.Adornee~=ch then e.hl.Adornee=ch end
-                local ft=flags.espFill and 0.6 or 1
-                if e._hlCol~=col then e._hlCol=col; e.hl.OutlineColor=col; e.hl.FillColor=col end
-                if e._hlFill~=ft then e._hlFill=ft; e.hl.FillTransparency=ft end
-            end
-            local dist=math.floor((tHRP.Position-camP).Magnitude)
-            local inRange=(flags.espMaxDist<=0 or dist<=flags.espMaxDist)
-            e.dist=dist
-            e.inRange=inRange
-            e.col=col
-            if flags.espNames and inRange then
-                e.bb.Enabled=true; e.bb.Adornee=ch:FindFirstChild("Head") or tHRP
-                local nm=plr.Name
-                if flags.espRoleTags then nm=tagOf(role).."  "..nm end
-                if e._nm~=nm then
-                    e._nm=nm
-                    e.name.Text=nm
-                    e._nw=nil
-                end
-                local rd=roundData(plr); local coins=rd and rd.Coins
-                local sub=dist.."m"
-                if coins then sub=coins.."c  ·  "..sub end
-                if e._sub~=sub then e._sub=sub; e.sub.Text=sub end
-                if e._col~=col then e._col=col; e.name.TextColor3=col; e.edge.Color=col end
-
-                local near,far=18,220
-                local t=math.clamp((dist-near)/(far-near),0,1)
-                local dim=t*0.55
-                if e._dim~=dim then
-                    e._dim=dim
-                    e.scale.Scale=1-(t*0.45)
-                    e.card.BackgroundTransparency=0.2+dim*0.5
-                    e.edge.Transparency=0.75+dim*0.2
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-                    e.name.TextTransparency=dim
-                    e.sub.TextTransparency=math.min(1,dim*1.25)
-                    e.avatar.ImageTransparency=dim
-                end
-                local wantAv=flags.espAvatar and true or false
-                if e._av~=wantAv then
-                    e._av=wantAv
-                    e.avatar.Visible=wantAv
-                    e.name.Position=UDim2.new(0,wantAv and 36 or 12,0.5,0)
-                    e._nw=nil
-                end
-                if e._nw~=(nm..sub..tostring(wantAv)) then
-                    e._nw=nm..sub..tostring(wantAv)
-                    local okN,nz=pcall(function()
-                        return Mono.TextService:GetTextSize(nm,e.name.TextSize,e.name.Font,Vector2.new(4000,40))
-                    end)
-                    local okS,sz2=pcall(function()
-                        return Mono.TextService:GetTextSize(sub,e.sub.TextSize,e.sub.Font,Vector2.new(4000,40))
-                    end)
-                    local nw=okN and nz.X or (#nm*8)
-                    local sw=okS and sz2.X or (#sub*6)
-                    local left=wantAv and 36 or 12
-                    local w=math.clamp(math.ceil(left+nw+14+sw+10),150,520)
-                    e.name.Size=UDim2.fromOffset(math.ceil(nw)+2,15)
-                    e.sub.Size=UDim2.fromOffset(math.ceil(sw)+2,14)
-                    e.card.Size=UDim2.fromOffset(w,32)
-                    e.bb.Size=UDim2.fromOffset(w,40)
-                end
-                if flags.espAvatar and e.avatar.Image=="" and os.clock()-(e._avAt or -99)>4 then
-                    local uid=plr.UserId
-                    e._avAt=os.clock()
-                    task.spawn(function()
-                        local ok,url=pcall(function()
-                            return Players:GetUserThumbnailAsync(uid,
-                                Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size48x48)
-                        end)
-                        if ok and url and e.avatar and e.avatar.Parent then e.avatar.Image=url end
-                    end)
-                end
-            else e.bb.Enabled=false end
-        else clearEsp(plr) end
-    end end
-    task.wait(0.05)
-end end)
-
-local boxStore={}
-local function clearBox(plr)
-    local b=boxStore[plr]
-    if b then for _,l in ipairs(b) do Mono.dropDraw(l) end; boxStore[plr]=nil end
-end
-local function ensureBox(plr)
-    local b=boxStore[plr]
-    if b then return b end
-    b={}
-    for i=1,4 do
-        b[i]=Mono.newLine(1)
-    end
-    boxStore[plr]=b; return b
-end
-local tracerStore={}
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-local function clearTracer(plr)
-    local t=tracerStore[plr]
-    if t then Mono.dropDraw(t); tracerStore[plr]=nil end
-end
-local function ensureTracer(plr)
-    local t=tracerStore[plr]
-    if t then return t end
-    t=Mono.newLine(2)
-    tracerStore[plr]=t; return t
-end
-local function tracerOrigin()
-    local vp=Camera.ViewportSize
-    local from=flags.espTracerFrom
-    if from=="Top" then return Vector2.new(vp.X*0.5,0)
-    elseif from=="Center" then return Vector2.new(vp.X*0.5,vp.Y*0.5)
-    elseif from=="Bottom Left" then return Vector2.new(0,vp.Y)
-    elseif from=="Bottom Right" then return Vector2.new(vp.X,vp.Y)
-    elseif from=="Mouse" then
-        local m=UserInputService:GetMouseLocation()
-        return Vector2.new(m.X,m.Y)
-    end
-    return Vector2.new(vp.X*0.5,vp.Y)
-end
-
-local CORNERS={
-    Vector3.new(-1,-1,-1),Vector3.new(-1,-1,1),Vector3.new(-1,1,-1),Vector3.new(-1,1,1),
-    Vector3.new(1,-1,-1),Vector3.new(1,-1,1),Vector3.new(1,1,-1),Vector3.new(1,1,1),
-}
-Mono.boundsCache=setmetatable({},{__mode="k"})
-Mono.bodyCache=setmetatable({},{__mode="k"})
-function Mono.bodyParts(ch)
-    local e=Mono.bodyCache[ch]
-    if e then
-        if not e.dirty then return e.list end
-    else
-        e={dirty=true,list={}}
-        Mono.bodyCache[ch]=e
-        local function soil() e.dirty=true end
-        ch.ChildAdded:Connect(soil)
-        ch.ChildRemoved:Connect(soil)
-    end
-    local l=e.list
-    table.clear(l)
-    for _,d in ipairs(ch:GetChildren()) do
-        if d:IsA("BasePart") then l[#l+1]=d end
-    end
-    e.dirty=false
-    return l
-end
-local function charBounds(ch)
-    local hrp=getHRP(ch); if not hrp then return nil end
-    local base=hrp.CFrame
-    local minX,minY,minZ=math.huge,math.huge,math.huge
-    local maxX,maxY,maxZ=-math.huge,-math.huge,-math.huge
-    local found=false
-    local body=Mono.bodyParts(ch)
-    for i=1,#body do
-        local d=body[i]
-        if d.Parent then
-            local rel=base:PointToObjectSpace(d.Position)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            local h=d.Size*0.5
-            local r=math.max(h.X,h.Y,h.Z)
-            if rel.X-h.X<minX then minX=rel.X-h.X end
-            if rel.X+h.X>maxX then maxX=rel.X+h.X end
-            if rel.Y-h.Y<minY then minY=rel.Y-h.Y end
-            if rel.Y+h.Y>maxY then maxY=rel.Y+h.Y end
-            if rel.Z-r<minZ then minZ=rel.Z-r end
-            if rel.Z+r>maxZ then maxZ=rel.Z+r end
-            found=true
-        end
-    end
-    if not found then return base,Vector3.new(4,6,2) end
-    local size=Vector3.new(maxX-minX,maxY-minY,maxZ-minZ)
-    local off=Vector3.new((minX+maxX)*0.5,(minY+maxY)*0.5,(minZ+maxZ)*0.5)
-    local prev=Mono.boundsCache[ch]
-    if prev then
-        local a=0.25
-        size=prev.size:Lerp(size,a)
-        off=prev.off:Lerp(off,a)
-        prev.size,prev.off=size,off
-    else
-        Mono.boundsCache[ch]={size=size,off=off}
-    end
-    return base*CFrame.new(off),size
-end
-local box3Store={}
-local function clearBox3(plr)
-    local b=box3Store[plr]
-    if b then for _,l in ipairs(b) do Mono.dropDraw(l) end; box3Store[plr]=nil end
-end
-local function ensureBox3(plr)
-    local b=box3Store[plr]
-    if b then return b end
-    b={}
-    for i=1,12 do b[i]=Mono.newLine(1) end
-    box3Store[plr]=b; return b
-end
-local BOX3_EDGES={
-    {1,2},{1,3},{1,5},{2,4},{2,6},{3,4},{3,7},{4,8},{5,6},{5,7},{6,8},{7,8},
-}
-
-local R15Bones={{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},{"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},{"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},{"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},{"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}}
-local R6Bones={{"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"}}
-local skelStore={}
-local function clearSkel(plr)
-    local s=skelStore[plr]
-    if not s then return end
-    for _,l in ipairs(s.lines) do Mono.dropDraw(l) end
-    skelStore[plr]=nil
-end
-local function ensureSkel(plr,ch)
-    local bones=ch:FindFirstChild("UpperTorso") and R15Bones or R6Bones
-    local s=skelStore[plr]
-    if s and s.bones==bones and s.char==ch then return s end
-    if s then clearSkel(plr) end
-    s={bones=bones,lines={},char=ch,uniq={},pair={},vx={},vy={},vok={}}
-    local idx={}
-    for i=1,#bones do
-        s.lines[i]=Mono.newLine(2)
-        local ja,jb
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        for k=1,2 do
-            local p=ch:FindFirstChild(bones[i][k])
-            local j
-            if p then
-                j=idx[p]
-                if not j then s.uniq[#s.uniq+1]=p; j=#s.uniq; idx[p]=j end
-            end
-            if k==1 then ja=j else jb=j end
-        end
-        s.pair[i]={ja,jb}
-    end
-    skelStore[plr]=s; return s
-end
-bind(RunService.RenderStepped,function()
-    local doBox,doSkel,doTracer,doBox3=flags.espBox,flags.espSkeleton,flags.espTracers,flags.espBox3D
-    if not doBox and next(boxStore) then for p in pairs(boxStore) do clearBox(p) end end
-    if not doSkel and next(skelStore) then for p in pairs(skelStore) do clearSkel(p) end end
-    if not doTracer and next(tracerStore) then for p in pairs(tracerStore) do clearTracer(p) end end
-    if not doBox3 and next(box3Store) then for p in pairs(box3Store) do clearBox3(p) end end
-    if not (doBox or doSkel or doTracer or doBox3) then return end
-    refreshGuiRects()
-    local needCorners=doBox or doBox3
-    local camCF=Camera.CFrame
-    local camPos,camLook=camCF.Position,camCF.LookVector
-    local tOrigin=doTracer and tracerOrigin() or nil
-    for _,plr in ipairs(Mono.plrs) do if plr~=LocalPlayer then
-        local ch,_,cullRoot=Mono.hasBody(plr)
-        if ch then
-            if cullRoot and (cullRoot.Position-camPos):Dot(camLook)<=0 then
-                local hb=boxStore[plr]
-                if hb then for i=1,#hb do hb[i].Visible=false end end
-                local h3=box3Store[plr]
-                if h3 then for i=1,#h3 do h3[i].Visible=false end end
-                local ht=tracerStore[plr]
-                if ht then ht.Visible=false end
-                local hs=skelStore[plr]
-                if hs then
-                    for i=1,#hs.lines do local l=hs.lines[i]; if l then l.Visible=false end end
-                end
-                continue
-            end
-            local col=espColor(Mono.espRole(plr))
-
-            local pts,okPts
-            local bx1,by1,bx2,by2
-            local allAhead=false
-            if needCorners then
-                local cf,size=charBounds(ch)
-                if cf then
-                    pts,okPts={},true
-                    bx1,by1,bx2,by2=math.huge,math.huge,-math.huge,-math.huge
-                    local half=size*0.5
-                    local hx,hy,hz=half.X,half.Y,half.Z
-                    local ahead=0
-                    for i=1,8 do
-                        local c=CORNERS[i]
-                        local v=Camera:WorldToViewportPoint(
-                            cf:PointToWorldSpace(Vector3.new(c.X*hx,c.Y*hy,c.Z*hz)))
-                        pts[i]=Vector2.new(v.X,v.Y)
-                        if v.Z>0 then
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-                            ahead=ahead+1
-                            if v.X<bx1 then bx1=v.X end
-                            if v.X>bx2 then bx2=v.X end
-                            if v.Y<by1 then by1=v.Y end
-                            if v.Y>by2 then by2=v.Y end
-                        end
-                    end
-                    allAhead=(ahead==8)
-                    if ahead<4 then okPts=false end
-                    if okPts and ((bx2-bx1)<1 or (by2-by1)<1) then okPts=false end
-                else okPts=false end
-            end
-            local blocked=okPts and rectBlocked(bx1,by1,bx2,by2) or false
-
-            if doBox then
-                local b=ensureBox(plr)
-                if okPts and not blocked then
-                    local tl,tr=Vector2.new(bx1,by1),Vector2.new(bx2,by1)
-                    local bl,br=Vector2.new(bx1,by2),Vector2.new(bx2,by2)
-                    local segs={{tl,tr},{tr,br},{br,bl},{bl,tl}}
-                    for i=1,4 do
-                        local seg,l=segs[i],b[i]
-                        l.From,l.To,l.Color,l.Visible=seg[1],seg[2],col,true
-                    end
-                else
-                    for _,l in ipairs(b) do l.Visible=false end
-                end
-            end
-            if doBox3 then
-                local b=ensureBox3(plr)
-                if okPts and allAhead and not blocked then
-                    for i=1,12 do
-                        local e2=BOX3_EDGES[i]
-                        local l=b[i]
-                        l.From,l.To,l.Color,l.Visible=pts[e2[1]],pts[e2[2]],col,true
-                    end
-                else
-                    for _,l in ipairs(b) do l.Visible=false end
-                end
-            end
-            if doTracer then
-                local t=ensureTracer(plr)
-                local tx,ty
-                local thrp=cullRoot
-                local far=false
-                if thrp and flags.espMaxDist>0 then
-                    far=(thrp.Position-camPos).Magnitude>flags.espMaxDist
-                end
-                if not far then
-                    if okPts then
-                        tx,ty=(bx1+bx2)*0.5,by2
-                    elseif thrp then
-                        local v=Camera:WorldToViewportPoint(thrp.Position-Vector3.new(0,3,0))
-                        if v.Z>0 then tx,ty=v.X,v.Y end
-                    end
-                end
-                if tx and not pointBlocked(tx,ty) then
-                    t.From=tOrigin; t.To=Vector2.new(tx,ty); t.Color=col; t.Visible=true
-                else t.Visible=false end
-            end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            if doSkel then
-                local s=ensureSkel(plr,ch)
-                local rootHrp=cullRoot
-                local vis=false
-                if rootHrp then
-                    local rv=Camera:WorldToViewportPoint(rootHrp.Position)
-                    local vp=Camera.ViewportSize
-                    vis=rv.Z>0 and rv.X>-250 and rv.X<vp.X+250 and rv.Y>-250 and rv.Y<vp.Y+250
-                end
-                if not vis then
-                    for i=1,#s.lines do local l=s.lines[i]; if l then l.Visible=false end end
-                else
-                    local uq,vx,vy,vok=s.uniq,s.vx,s.vy,s.vok
-                    for j=1,#uq do
-                        local p=uq[j]
-                        if p.Parent then
-                            local v=Camera:WorldToViewportPoint(p.Position)
-                            vx[j],vy[j],vok[j]=v.X,v.Y,v.Z>0
-                        else vok[j]=false end
-                    end
-                    for i=1,#s.bones do
-                        local line=s.lines[i]
-                        if line then
-                            local pr=s.pair[i]
-                            local ja,jb=pr[1],pr[2]
-                            if ja and jb and vok[ja] and vok[jb]
-                                and not pointBlocked(vx[ja],vy[ja]) and not pointBlocked(vx[jb],vy[jb]) then
-                                line.From=Vector2.new(vx[ja],vy[ja]); line.To=Vector2.new(vx[jb],vy[jb])
-                                line.Color=col; line.Visible=true
-                            else line.Visible=false end
-                        end
-                    end
-                end
-            end
-        else
-            if doBox then clearBox(plr) end
-            if doSkel then clearSkel(plr) end
-            if doTracer then clearTracer(plr) end
-            if doBox3 then clearBox3(plr) end
-        end
-    end end
-end)
-bind(Players.PlayerRemoving,function(plr) clearEsp(plr); clearSkel(plr); clearBox(plr); clearTracer(plr); clearBox3(plr) end)
-
-local coinContainerRef
-local function getCoinContainer()
-    if coinContainerRef and coinContainerRef.Parent then return coinContainerRef end
-    local map=CollectionService:GetTagged("CurrentMap")[1]
-    coinContainerRef=(map and map:FindFirstChild("CoinContainer")) or workspace:FindFirstChild("CoinContainer",true)
-    return coinContainerRef
-end
-local function coinTaken(d) local c=d:GetAttribute("Collected"); return c==true or c=="true" end
-local function freshCoins()
-    local out={}
-    local tagged=CollectionService:GetTagged("ServerCoinPart")
-    if #tagged>0 then
-        for _,d in ipairs(tagged) do
-            if d:IsA("BasePart") and d.Parent and not coinTaken(d) then out[#out+1]=d end
-        end
-        return out
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    end
-    local c=getCoinContainer()
-    if c then for _,d in ipairs(c:GetChildren()) do if d:IsA("BasePart") and (d:GetAttribute("CoinID")~=nil or d.Name=="Coin_Server") and not coinTaken(d) then out[#out+1]=d end end end
-    return out
-end
-local coinCache={}
-task.spawn(function() while not isDead() do
-    if flags.coinEsp or flags.autoCoins then
-        coinCache=freshCoins(); task.wait(0.2)
-    else
-        if #coinCache>0 then coinCache={} end
-        task.wait(1)
-    end
-end end)
-local coinEspStore={}
-task.spawn(function() while not isDead() do
-    if flags.coinEsp then local seen={}
-        for _,coin in ipairs(coinCache) do seen[coin]=true
-            if not coinEspStore[coin] then
-                local vis=coin:FindFirstChild("CoinVisual"); local ad=(vis and vis:FindFirstChild("MainCoin")) or vis or coin
-                coinEspStore[coin]=create("Highlight",{Name=rnd(),Adornee=ad,FillColor=Color3.fromRGB(255,205,55),FillTransparency=0.25,OutlineColor=Color3.fromRGB(255,235,150),OutlineTransparency=0,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,Parent=EspGui}) end end
-        for coin,hl in pairs(coinEspStore) do if not seen[coin] or not coin.Parent then hl:Destroy();coinEspStore[coin]=nil end end
-    elseif next(coinEspStore) then for coin,hl in pairs(coinEspStore) do hl:Destroy();coinEspStore[coin]=nil end end
-    task.wait(0.15)
-end end)
-
-local GameplayR=RS:WaitForChild("Remotes"):WaitForChild("Gameplay")
-
-for _,rn in ipairs({"TeleportToPart","RoundStart","RoundEndFade","LoadingMap","GameOver","VictoryScreen"}) do
-    local r=GameplayR:FindFirstChild(rn)
-    if r and r:IsA("RemoteEvent") then bind(r.OnClientEvent,Mono.markTeleport) end
-end
-bind(LocalPlayer.CharacterAdded,Mono.markTeleport)
-
-local coinBagFull=false
-local CoinCollectedR=GameplayR:FindFirstChild("CoinCollected")
-local CoinsStartedR=GameplayR:FindFirstChild("CoinsStarted")
-if CoinCollectedR then bind(CoinCollectedR.OnClientEvent,function(_,collected,capacity)
-    if type(collected)=="number" and type(capacity)=="number" and capacity>0 and collected>=capacity then
-        if not coinBagFull then
-            coinBagFull=true
-            if flags.autoCoins then notify("Coin bag full, auto collect stopped",4) end
-        end
-    end
-end) end
-if CoinsStartedR then bind(CoinsStartedR.OnClientEvent,function() coinBagFull=false end) end
-
-local farmBlack={}
-task.spawn(function()
-    local target,since,farming,prevWS
-    local function standDown()
-        if not farming then return end
-        farming=false
-        local ch2=LocalPlayer.Character
-        local hum2=ch2 and ch2:FindFirstChildOfClass("Humanoid")
-        if hum2 then pcall(function() hum2.PlatformStand=false; if prevWS then hum2.WalkSpeed=prevWS end end) end
-        Mono.wantPS=false
-        Mono.wantNoclip=false
-        Mono.recollide(hum2)
-        unstick(ch2)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        prevWS=nil
-    end
-    while not isDead() do
-        if flags.autoCoins and not coinBagFull and alive(LocalPlayer) and not Mono.teleporting() then
-            local ch=LocalPlayer.Character; local hrp=getHRP(ch); local hum=ch and ch:FindFirstChildOfClass("Humanoid")
-            if hrp and hum then
-                local coin,bd
-                for _,c in ipairs(coinCache) do
-                    if c.Parent and not coinTaken(c) and not (farmBlack[c] and os.clock()<farmBlack[c]) then
-                        local d=(c.Position-hrp.Position).Magnitude
-                        if d<=Mono.COIN_MAX_DIST and (not bd or d<bd) then bd,coin=d,c end
-                    end
-                end
-                if coin then
-                    if not farming then farming=true; prevWS=hum.WalkSpeed; pcall(function() hum.PlatformStand=true end); Mono.wantPS=true; Mono.wantNoclip=true end
-                    local spd=COLLECT_SPEED
-                    pcall(function() hum.WalkSpeed=spd end)
-                    if coin~=target then target=coin; since=os.clock() end
-                    if os.clock()-since>5 then farmBlack[coin]=os.clock()+8; target=nil; task.wait()
-                    else
-                        local dt=RunService.RenderStepped:Wait()
-                        uncollide(ch)
-                        local dir=coin.Position-hrp.Position
-                        if dir.Magnitude>2 then hrp.CFrame=CFrame.new(hrp.Position+dir.Unit*math.min(dir.Magnitude,spd*dt)); hrp.AssemblyLinearVelocity=Vector3.zero end
-                        if typeof(firetouchinterest)=="function" then pcall(function() firetouchinterest(hrp,coin,0);firetouchinterest(hrp,coin,1) end) end
-                    end
-                else
-                    standDown()
-                    target=nil; task.wait(0.25)
-                end
-            else task.wait(0.1) end
-        else
-            standDown()
-            target=nil; task.wait(0.2)
-        end
-    end
-end)
-
-local function findDroppedGun()
-    for _,p in ipairs(CollectionService:GetTagged("GunDrop")) do
-        if p:IsA("BasePart") and p:IsDescendantOf(workspace) then return p end
-    end
-    local map=CollectionService:GetTagged("CurrentMap")[1]
-    if map then
-        local g=map:FindFirstChild("GunDrop")
-        if g and g:IsA("BasePart") then return g end
-    end
-    for _,d in ipairs(workspace:GetChildren()) do
-        if d:IsA("BasePart") and d.Name=="GunDrop" then return d end
-        if d:IsA("Model") then
-            local g=d:FindFirstChild("GunDrop")
-            if g and g:IsA("BasePart") then return g end
-        end
-    end
-end
-local droppedGun
-local gunEspHL,gunEspBB
-task.spawn(function() while not isDead() do
-    if not flags.gunEsp then
-        if gunEspHL then gunEspHL.Enabled=false end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        if gunEspBB then gunEspBB.Enabled=false end
-        task.wait(0.5)
-        continue
-    end
-    local h=droppedGun
-    if h and h.Parent then
-        if not gunEspHL then gunEspHL=create("Highlight",{Name=rnd(),FillColor=Color3.fromRGB(90,150,255),FillTransparency=0.35,OutlineColor=Color3.fromRGB(170,210,255),OutlineTransparency=0,DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,Parent=EspGui}) end
-        if not gunEspBB then
-            gunEspBB=create("BillboardGui",{Name=rnd(),Size=UDim2.fromOffset(160,18),AlwaysOnTop=true,StudsOffsetWorldSpace=Vector3.new(0,2,0),Parent=EspGui},
-                {create("TextLabel",{BackgroundTransparency=1,Size=UDim2.fromScale(1,1),Font=Enum.Font.GothamBold,TextSize=12,TextColor3=Color3.fromRGB(140,190,255),TextStrokeTransparency=.4,Text="GUN"})})
-        end
-        gunEspHL.Adornee=h; gunEspHL.Enabled=true
-        gunEspBB.Adornee=h; gunEspBB.Enabled=flags.gunEspDist
-        if flags.gunEspDist then
-            local hrp=getHRP(LocalPlayer.Character)
-            local dist=hrp and math.floor((h.Position-hrp.Position).Magnitude) or 0
-            local lbl=gunEspBB:FindFirstChildOfClass("TextLabel"); if lbl then lbl.Text="DROPPED GUN  ·  "..dist.."m" end
-        end
-    else
-        if gunEspHL then gunEspHL.Enabled=false end
-        if gunEspBB then gunEspBB.Enabled=false end
-    end
-    task.wait(0.1)
-end end)
-local grabbing=false
-local function touchGun(h)
-    local hrp=getHRP(LocalPlayer.Character)
-    if not (hrp and h and h.Parent) then return false end
-    if typeof(firetouchinterest)=="function" then
-        pcall(function()
-            for _=1,4 do
-                firetouchinterest(hrp,h,0)
-                firetouchinterest(hrp,h,1)
-            end
-        end)
-    end
-    return findWeapon("Gun")~=nil
-end
-function Mono.canAct()
-    if Mono.teleporting() then return false end
-    local ch=LocalPlayer.Character
-    if not ch or not ch.Parent then return false end
-    local hum=ch:FindFirstChildOfClass("Humanoid")
-    if not (hum and hum.Health>0) then return false end
-    if not getHRP(ch) then return false end
-    if LocalPlayer:GetAttribute("Alive")==false then return false end
-    local d=roundData(LocalPlayer)
-    if d and d.Dead==true then return false end
-    return true
-end
-local function grabGunOnce(target)
-    if grabbing then return false end
-    local h=target or droppedGun or findDroppedGun()
-    local hrp=getHRP(LocalPlayer.Character)
-    if not (h and h.Parent and hrp and Mono.canAct()) then return false end
-    grabbing=true
-    if touchGun(h) then
-        notify("Grabbed the Sheriff gun")
-        grabbing=false
-        return true
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    end
-    local back=hrp.CFrame
-    for _=1,10 do
-        local myhrp=getHRP(LocalPlayer.Character)
-        if not (myhrp and h.Parent) then break end
-        if not Mono.canAct() then break end
-        Mono.markSelfTP()
-        myhrp.CFrame=CFrame.new(h.Position); myhrp.AssemblyLinearVelocity=Vector3.zero
-        if touchGun(h) then break end
-        RunService.Heartbeat:Wait()
-    end
-    local myhrp=getHRP(LocalPlayer.Character)
-    if myhrp then myhrp.CFrame=back; myhrp.AssemblyLinearVelocity=Vector3.zero end
-    local got=findWeapon("Gun")~=nil
-    if got then notify("Grabbed the Sheriff gun") end
-    grabbing=false
-    return got
-end
-local function onGunAppeared(inst)
-    if not (inst and inst:IsA("BasePart") and inst:IsDescendantOf(workspace)) then return end
-    droppedGun=inst
-    if flags.autoGun and not grabbing and myRole()~="Murderer" and not findWeapon("Gun") and Mono.canAct() then
-        task.spawn(grabGunOnce,inst)
-    end
-end
-pcall(function()
-    bind(CollectionService:GetInstanceAddedSignal("GunDrop"),onGunAppeared)
-    bind(CollectionService:GetInstanceRemovedSignal("GunDrop"),function(i)
-        if droppedGun==i then droppedGun=nil end
-    end)
-end)
-bind(workspace.DescendantAdded,function(d)
-    if d.Name=="GunDrop" then task.defer(onGunAppeared,d) end
-end)
-task.spawn(function() while not isDead() do
-    if flags.gunEsp or flags.autoGun then
-        local g=findDroppedGun()
-        droppedGun=g
-        if g and flags.autoGun and not grabbing and myRole()~="Murderer" and not findWeapon("Gun") and Mono.canAct() then
-            grabGunOnce(g)
-        end
-    elseif droppedGun then droppedGun=nil end
-    task.wait((flags.gunEsp or flags.autoGun) and 0.1 or 0.6)
-end end)
-
-Mono.lightStore=nil
-Mono.shadowOrig=nil
-function Mono.shadowsOff()
-    if Mono.shadowOrig==nil then Mono.shadowOrig=Lighting.GlobalShadows end
-    pcall(function() Lighting.GlobalShadows=false end)
-end
-function Mono.shadowsRestore()
-    if flags.fullbright or flags.fpsBoost then return end
-    if Mono.shadowOrig~=nil then
-        pcall(function() Lighting.GlobalShadows=Mono.shadowOrig end)
-        Mono.shadowOrig=nil
-    end
-end
-function Mono.brightApply()
-    if not Mono.lightStore then
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        Mono.lightStore={Lighting.Brightness,Lighting.ClockTime,Lighting.Ambient,
-            Lighting.OutdoorAmbient,Lighting.FogEnd,Lighting.FogStart,Lighting.ExposureCompensation}
-    end
-    pcall(function()
-        Lighting.Brightness=math.max(Lighting.Brightness,3)
-        Lighting.ClockTime=14
-        Lighting.Ambient=Color3.new(1,1,1)
-        Lighting.OutdoorAmbient=Color3.new(1,1,1)
-        Lighting.FogStart=1e6
-        Lighting.FogEnd=1e6
-        Lighting.ExposureCompensation=0
-    end)
-    Mono.shadowsOff()
-end
-function Mono.brightRestore()
-    local s=Mono.lightStore
-    if s then
-        pcall(function()
-            Lighting.Brightness,Lighting.ClockTime,Lighting.Ambient=s[1],s[2],s[3]
-            Lighting.OutdoorAmbient,Lighting.FogEnd,Lighting.FogStart,Lighting.ExposureCompensation=s[4],s[5],s[6],s[7]
-        end)
-        Mono.lightStore=nil
-    end
-    Mono.shadowsRestore()
-end
-function Mono.gfxApply()
-    local atm=Lighting:FindFirstChildOfClass("Atmosphere")
-    if atm and not Mono.atmStore then
-        Mono.atmStore={atm,atm.Density,atm.Haze,atm.Glare}
-        pcall(function() atm.Density=0; atm.Haze=0; atm.Glare=0 end)
-    end
-    Mono.shadowsOff()
-end
-function Mono.gfxRestore()
-    local a=Mono.atmStore
-    if a then
-        pcall(function() if a[1].Parent then a[1].Density=a[2]; a[1].Haze=a[3]; a[1].Glare=a[4] end end)
-        Mono.atmStore=nil
-    end
-    Mono.shadowsRestore()
-end
-local function setFullbright(on)
-    if on then Mono.brightApply() else Mono.brightRestore() end
-end
-local fpsStore,fpsConn
-local function fxKill(e,store)
-    if store[e]~=nil then return end
-    if e:IsA("PostEffect") then if e.Enabled then e.Enabled=false; store[e]={"en"} end
-    elseif e:IsA("ParticleEmitter") or e:IsA("Trail") or e:IsA("Smoke") or e:IsA("Fire") or e:IsA("Sparkles") or e:IsA("Beam") then if e.Enabled then e.Enabled=false; store[e]={"en"} end
-    elseif e:IsA("Decal") or e:IsA("Texture") then store[e]={"tr",e.Transparency}; e.Transparency=1
-    elseif e:IsA("SurfaceAppearance") then store[e]={"par",e.Parent}; e.Parent=nil
-    elseif e:IsA("BasePart") then
-        local mat,refl=e.Material,e.Reflectance
-        local tex=e:IsA("MeshPart") and e.TextureID or nil
-        if mat~=Enum.Material.SmoothPlastic or refl~=0 or (tex and tex~="") then
-            store[e]={"part",mat,refl,tex}
-            pcall(function()
-                e.Material=Enum.Material.SmoothPlastic
-                e.Reflectance=0
-                if tex and tex~="" then e.TextureID="" end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            end)
-        end
-    end
-end
-local function setFPSBoost(on)
-    if on then
-        fpsStore={changed=Mono.fxPending or {}}
-        Mono.fxPending=nil
-        Mono.gfxApply()
-        local terrain=workspace:FindFirstChildOfClass("Terrain")
-        if terrain then
-            local okD,d=pcall(function() return terrain.Decoration end)
-            if okD then fpsStore.decor=d; pcall(function() terrain.Decoration=false end) end
-            fpsStore.water={terrain.WaterWaveSize,terrain.WaterWaveSpeed,terrain.WaterReflectance}
-            terrain.WaterWaveSize=0;terrain.WaterWaveSpeed=0;terrain.WaterReflectance=0
-        end
-        fpsConn=workspace.DescendantAdded:Connect(function(e) if flags.fpsBoost and fpsStore then task.defer(fxKill,e,fpsStore.changed) end end)
-        task.spawn(function() local s=fpsStore.changed; local n=0
-            for _,e in ipairs(Lighting:GetDescendants()) do fxKill(e,s) end
-            for _,e in ipairs(workspace:GetDescendants()) do
-                if not (flags.fpsBoost and fpsStore and fpsStore.changed==s) then return end
-                fxKill(e,s); n+=1; if n%900==0 then RunService.Heartbeat:Wait() end
-            end
-        end)
-    elseif fpsStore then
-        local s=fpsStore.changed
-        Mono.fxPending=s
-        Mono.gfxRestore()
-        local terrain=workspace:FindFirstChildOfClass("Terrain")
-        if terrain and fpsStore.water then terrain.WaterWaveSize,terrain.WaterWaveSpeed,terrain.WaterReflectance=fpsStore.water[1],fpsStore.water[2],fpsStore.water[3] end
-        if terrain and fpsStore.decor~=nil then pcall(function() terrain.Decoration=fpsStore.decor end) end
-        if fpsConn then fpsConn:Disconnect();fpsConn=nil end; fpsStore=nil
-        task.spawn(function() local n=0 for e,info in pairs(s) do
-            if Mono.fxPending~=s then return end
-            pcall(function()
-            if info[1]=="en" then e.Enabled=true
-            elseif info[1]=="tr" then e.Transparency=info[2]
-            elseif info[1]=="par" then e.Parent=info[2]
-            elseif info[1]=="part" then
-                e.Material=info[2]; e.Reflectance=info[3]
-                if info[4] and info[4]~="" then e.TextureID=info[4] end
-            end end)
-            s[e]=nil
-            n+=1; if n%900==0 then RunService.Heartbeat:Wait() end end
-            if Mono.fxPending==s then Mono.fxPending=nil end end)
-    end
-end
-unstick=function(ch)
-    if not ch then return end
-    local hrp=getHRP(ch); if not hrp then return end
-    task.spawn(function()
-        local params=RaycastParams.new()
-        params.FilterType=Enum.RaycastFilterType.Exclude
-        params.FilterDescendantsInstances={ch}
-        local from=hrp.Position+Vector3.new(0,6,0)
-        local hit=workspace:Raycast(from,Vector3.new(0,-200,0),params)
-        Mono.markSelfTP()
-        if hit then
-            hrp.CFrame=CFrame.new(hit.Position+Vector3.new(0,3.5,0))
-        else
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            hrp.CFrame=hrp.CFrame+Vector3.new(0,4,0)
-        end
-        hrp.AssemblyLinearVelocity=Vector3.zero
-        RunService.Heartbeat:Wait()
-        for p in pairs(Mono.unclip) do
-            if p.Parent and p.Name~="HumanoidRootPart" then p.CanCollide=true end
-        end
-        table.clear(Mono.unclip)
-    end)
-end
-local function tpTo(pos)
-    local hrp=getHRP(LocalPlayer.Character); if not hrp then return false end
-    Mono.markSelfTP()
-    hrp.CFrame=CFrame.new(pos+Vector3.new(0,3,0))
-    return true
-end
-
-local function resolvePlayer(v)
-    if typeof(v)=="Instance" and v:IsA("Player") then return v end
-    if type(v)=="table" then
-        for k,on in pairs(v) do
-            local cand=(on==true) and k or on
-            if typeof(cand)=="Instance" and cand:IsA("Player") then return cand end
-            if type(cand)=="string" then local p=resolvePlayer(cand); if p then return p end end
-        end
-        return nil
-    end
-    if type(v)=="string" and #v>0 then
-        local p=Players:FindFirstChild(v); if p and p:IsA("Player") then return p end
-        local lv=v:lower()
-        for _,q in ipairs(Mono.plrs) do
-            if q.Name:lower()==lv or (q.DisplayName or ""):lower()==lv then return q end
-        end
-    end
-    return nil
-end
-
-Mono.canClaim=(typeof(sethiddenproperty)=="function")
-if not Mono.canClaim then
-    Fallback.note("Fling","velocity only",
-        "your executor has no sethiddenproperty, so Mono cannot claim the target's physics and has to rely on raw velocity, which lands far less often",
-        {"Fling Player","Fling All Players","Auto Fling Murderer","Auto Fling Sheriff"})
-end
-Mono.flungAt=setmetatable({},{__mode="k"})
-Mono.FLING_MAX_DY=140
-Mono.FLING_MAX_RISE=320
-function Mono.voidY()
-    local ok,v=pcall(function() return workspace.FallenPartsDestroyHeight end)
-    return (ok and type(v)=="number") and v or -500
-end
-function Mono.alreadyFlung(p)
-    local hrp=p and p.Character and getHRP(p.Character)
-    if not hrp then return true end
-    if os.clock()-(Mono.flungAt[p] or -60)<4 then return true end
-    if hrp.AssemblyLinearVelocity.Magnitude>100 then return true end
-    if hrp.Position.Y<Mono.voidY()+150 then return true end
-    local mine=getHRP(LocalPlayer.Character)
-    if mine then
-        local dy=hrp.Position.Y-mine.Position.Y
-        if dy<-60 or dy>120 then return true end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    end
-    return false
-end
-
-local function flingPlayer(p,keepPos)
-    if flinging then return false,"already flinging someone" end
-    local myCh=LocalPlayer.Character; local myHrp=getHRP(myCh)
-    local hum=myCh and myCh:FindFirstChildOfClass("Humanoid")
-    local tHrp=p and p.Character and getHRP(p.Character)
-    if not (myHrp and hum and tHrp) then return false,"they have no character right now" end
-    local back=keepPos or myHrp.CFrame
-    if Mono.teleporting() then return false,"the round just moved you, try again in a second" end
-    if math.abs(tHrp.Position.Y-back.Position.Y)>Mono.FLING_MAX_DY then return false,"they are too far above or below you" end
-    if tHrp.AssemblyLinearVelocity.Magnitude>340 then return false,"they are already flying, wait for them to land" end
-
-    Mono.flingAt=os.clock()
-    flinging=true
-    local moved=false
-    local movel=0.1
-    local t0=os.clock()
-    local claimed
-    while os.clock()-t0<flags.flingSeconds do
-        if Mono.teleporting() then break end
-        RunService.Heartbeat:Wait()
-        local h=getHRP(LocalPlayer.Character)
-        local t=p.Character and getHRP(p.Character)
-        if not (h and t and h.Parent and t.Parent) then break end
-        local tp=t.Position
-        if tp.Y<Mono.voidY()+400 then break end
-        if t.AssemblyLinearVelocity.Magnitude>340 then break end
-        if tp.Y>back.Position.Y+Mono.FLING_MAX_RISE then break end
-        if tp.Y<back.Position.Y-Mono.FLING_MAX_DY then break end
-        h.CFrame=t.CFrame
-        moved=true
-        Mono.flungAt[p]=os.clock()
-        if Mono.canClaim then
-            pcall(function() sethiddenproperty(h,"PhysicsRepRootPart",t) end)
-            claimed=h
-        end
-        local vel=h.AssemblyLinearVelocity
-        h.AssemblyLinearVelocity=vel*flags.flingPower+Vector3.new(0,flags.flingPower,0)
-        RunService.RenderStepped:Wait()
-        if not h.Parent then break end
-        h.AssemblyLinearVelocity=vel
-        RunService.Stepped:Wait()
-        if not h.Parent then break end
-        h.AssemblyLinearVelocity=vel+Vector3.new(0,movel,0)
-        movel=-movel
-    end
-
-    local function release(part)
-        if part and Mono.canClaim then pcall(function() sethiddenproperty(part,"PhysicsRepRootPart",nil) end) end
-    end
-    release(claimed)
-    local nowHrp=getHRP(LocalPlayer.Character)
-    if nowHrp and nowHrp~=claimed then release(nowHrp) end
-
-    if not moved then
-        flinging=false
-        Mono.recollide(LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid"),true)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        return false,"could not get a grip on them, try again"
-    end
-
-    local home=CFrame.new(back.Position+Vector3.new(0,4,0))
-    for _=1,6 do
-        local ch2=LocalPlayer.Character
-        if not ch2 then break end
-        for _,pp in ipairs(getCharParts(ch2)) do
-            if pp.Parent then
-                pp.AssemblyLinearVelocity=Vector3.zero
-                pp.AssemblyAngularVelocity=Vector3.zero
-            end
-        end
-        RunService.Heartbeat:Wait()
-    end
-    local h2=getHRP(LocalPlayer.Character)
-    if h2 then
-        h2.CFrame=home
-        h2.AssemblyLinearVelocity=Vector3.zero
-        h2.AssemblyAngularVelocity=Vector3.zero
-    end
-    flinging=false
-    local hum2=LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    Mono.recollide(hum2,true)
-    local watch=os.clock()
-    while os.clock()-watch<1.5 do
-        RunService.Heartbeat:Wait()
-        if Mono.teleporting() then break end
-        local h3=getHRP(LocalPlayer.Character)
-        if not h3 then break end
-        local lv=h3.AssemblyLinearVelocity
-        local av=h3.AssemblyAngularVelocity
-        if badVec(lv) or badVec(av) or lv.Magnitude>200 or av.Magnitude>25 then
-            h3.AssemblyLinearVelocity=Vector3.zero
-            h3.AssemblyAngularVelocity=Vector3.zero
-            h3.CFrame=home
-        end
-    end
-    Mono.recollide(LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid"),true)
-    return true
-end
-local function flingAll()
-    local myHrp=getHRP(LocalPlayer.Character)
-    if not myHrp then notify("You have no character"); return end
-    local home=myHrp.CFrame
-    task.spawn(function()
-        local n=0
-        for _,p in ipairs(Mono.plrs) do
-            if p~=LocalPlayer and Mono.hasBody(p) then
-                if flingPlayer(p,home) then n=n+1 end
-                task.wait(0.1)
-            end
-        end
-        local h=getHRP(LocalPlayer.Character)
-        if h then h.CFrame=home; h.AssemblyLinearVelocity=Vector3.zero end
-        notify("Flung "..n.." player"..(n==1 and "" or "s"))
-    end)
-end
-task.spawn(function() while not isDead() do
-    if (flags.autoFlingMurderer or flags.autoFlingSheriff)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        and Mono.hasBody(LocalPlayer) and not flinging and not Mono.teleporting() then
-        local want
-        for _,p in ipairs(Mono.plrs) do
-            if p~=LocalPlayer and alive(p) and p.Character and getHRP(p.Character) then
-                local r=roleOf(p)
-                if ((flags.autoFlingMurderer and r=="Murderer")
-                    or (flags.autoFlingSheriff and isGunRole(r)))
-                    and not Mono.alreadyFlung(p) then
-                    want=p; break
-                end
-            end
-        end
-        if want then flingPlayer(want) end
-    end
-    task.wait(0.5)
-end end)
-
-local MURD_ALERT_RANGE=50
-local murdNotif=nil
-local murdInRange=false
-local function closeMurdNotif()
-    murdInRange=false
-    if murdNotif then
-        pcall(function() murdNotif:Close() end)
-        murdNotif=nil
-    end
-end
-bind(RunService.Heartbeat,function()
-    if not flags.murdererNotify then closeMurdNotif() return end
-    local hrp=getHRP(LocalPlayer.Character)
-    local m=findMurderer()
-    local mh=(m and m~=LocalPlayer and alive(m)) and getHRP(m.Character) or nil
-    if not (hrp and mh) then closeMurdNotif() return end
-    local d=math.floor((mh.Position-hrp.Position).Magnitude)
-    if d>MURD_ALERT_RANGE then
-        if murdInRange then closeMurdNotif() end
-        return
-    end
-    if not murdInRange then
-        murdInRange=true
-        murdNotif=Window:Notify({
-            Title="Murderer Nearby",
-            Content=(m.DisplayName or m.Name).."  ·  "..d.."m",
-            Icon="triangle-alert",
-            Duration=4,
-        })
-    end
-end)
-
-local GiveWeaponR=GameplayR:FindFirstChild("GiveWeapon")
-if GiveWeaponR then bind(GiveWeaponR.OnClientEvent,function(w) if w=="Knife" or w=="Gun" then notify("You are the "..(w=="Knife" and "MURDERER" or "SHERIFF").."!",3) end end) end
-
-do
-    local function feedNotify(name,killType,role,color)
-        local tag = role and (" ["..(role=="Murderer" and "M" or isGunRole(role) and "S" or "I").."]") or ""
-        Window:Notify({Title="Kill Feed",Content=tostring(name)..tag.."  ·  "..tostring(killType or "Eliminated"),Duration=4,Color=color})
-    end
-    local recentKillEvent={}
-    local KillEventR=GameplayR:FindFirstChild("KillEvent")
-    if KillEventR then bind(KillEventR.OnClientEvent,function(victim,roleColor,_,killType)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        if not victim then return end
-        local nm=tostring(victim)
-        recentKillEvent[nm]=os.clock()
-        if flags.killFeed then
-            local p=Players:FindFirstChild(nm)
-            feedNotify(nm,killType,p and roleOf(p) or nil,
-                typeof(roleColor)=="Color3" and roleColor or nil)
-        end
-    end) end
-    local lastDead={}
-    local function scanDeaths()
-        if not (CRC and CRC.PlayerData) then return end
-        for name,d in pairs(CRC.PlayerData) do
-            local dead = (d.Dead==true)
-            local was = lastDead[name]
-            if was==false and dead then
-                local seen=recentKillEvent[name]
-                if flags.killFeed and not (seen and os.clock()-seen<2) then
-                    feedNotify(name,nil,d.Role)
-                end
-            end
-            lastDead[name]=dead
-        end
-    end
-    local function watchDeaths(plr)
-        if plr==LocalPlayer then return end
-        local function hookChar(ch)
-            local hum=ch and ch:FindFirstChildOfClass("Humanoid")
-            if not hum then return end
-            local c
-            c=hum.Died:Connect(function()
-                local nm=plr.Name
-                local seen=recentKillEvent[nm]
-                if flags.killFeed and not (seen and os.clock()-seen<2) then
-                    recentKillEvent[nm]=os.clock()
-                    feedNotify(plr.DisplayName or nm,nil,roleOf(plr))
-                end
-            end)
-            table.insert(conns,c)
-        end
-        if plr.Character then hookChar(plr.Character) end
-        table.insert(conns,plr.CharacterAdded:Connect(function(ch)
-            task.defer(function() hookChar(ch) end)
-        end))
-    end
-    for _,p in ipairs(Mono.plrs) do watchDeaths(p) end
-    bind(Players.PlayerAdded,watchDeaths)
-    local PlayerDataChangedR=GameplayR:FindFirstChild("PlayerDataChanged")
-    if PlayerDataChangedR then bind(PlayerDataChangedR.OnClientEvent,function() task.defer(scanDeaths) end) end
-    local RoundStartR=GameplayR:FindFirstChild("RoundStart")
-    if RoundStartR then bind(RoundStartR.OnClientEvent,function()
-        lastDead={}; recentKillEvent={}; coinBagFull=false
-        task.defer(scanDeaths)
-    end) end
-    task.spawn(function() while not isDead() do
-        if flags.killFeed then scanDeaths(); task.wait(0.2) else task.wait(0.75) end
-    end end)
-end
-
-bind(TeleportService.TeleportInitFailed,function(_,_,_,_)
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-    local p=hopFallbackPlace
-    if not p then return end
-    hopFallbackPlace=nil
-    notify("That server was full, letting Roblox pick one")
-    pcall(function() TeleportService:Teleport(p,LocalPlayer) end)
-end)
-Mono.afkFires=0
-bind(LocalPlayer.Idled,function()
-    if not flags.antiAfk then return end
-    if not VirtualUser then pcall(function() VirtualUser=game:GetService("VirtualUser") end) end
-    if not VirtualUser then return end
-    local ch=LocalPlayer.Character
-    local armed=false
-    if ch then
-        for _,t in ipairs(ch:GetChildren()) do
-            if t:IsA("Tool") then armed=true break end
-        end
-    end
-    local ok=pcall(function()
-        VirtualUser:CaptureController()
-        if armed then
-            VirtualUser:MoveMouse(Vector2.new(0,0))
-            VirtualUser:MoveMouse(Vector2.new(2,2))
-        else
-            VirtualUser:ClickButton2(Vector2.new())
-        end
-    end)
-    if not ok then return end
-    Mono.afkFires=Mono.afkFires+1
-    if Mono.afkFires==1 then notify("Anti AFK is working, you will not be kicked",4) end
-end)
-
-do
-    local TrapSystem=RS:FindFirstChild("TrapSystem")
-    local trapHls={}
-    local function dropTrap(part)
-        local h=trapHls[part]
-        if h then pcall(function() h.hl:Destroy() end); pcall(function() h.bb:Destroy() end); trapHls[part]=nil end
-    end
-    local function addTrap(part)
-        if trapHls[part] or not part:IsA("BasePart") then return end
-        local hl=create("Highlight",{Name=rnd(),Adornee=part,FillColor=Color3.fromRGB(255,90,255),
-            FillTransparency=0.4,OutlineColor=Color3.fromRGB(255,170,255),OutlineTransparency=0,
-            DepthMode=Enum.HighlightDepthMode.AlwaysOnTop,Enabled=false,Parent=EspGui})
-        local bb=create("BillboardGui",{Name=rnd(),Size=UDim2.fromOffset(90,16),AlwaysOnTop=true,
-            StudsOffsetWorldSpace=Vector3.new(0,2,0),Adornee=part,Enabled=false,Parent=EspGui},
-            {create("TextLabel",{BackgroundTransparency=1,Size=UDim2.fromScale(1,1),Font=Enum.Font.GothamBold,
-                TextSize=12,TextColor3=Color3.fromRGB(255,150,255),TextStrokeTransparency=.4,Text="TRAP"})})
-        trapHls[part]={hl=hl,bb=bb}
-    end
-    for _,d in ipairs(workspace:GetDescendants()) do
-        if d.Name=="TrapVisual" then addTrap(d) end
-    end
-    bind(workspace.DescendantAdded,function(d)
-        if d.Name=="TrapVisual" then task.defer(addTrap,d) end
-    end)
-    bind(workspace.DescendantRemoving,function(d)
-        if trapHls[d] then dropTrap(d) end
-    end)
-    task.spawn(function() while not isDead() do
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        for part,h in pairs(trapHls) do
-            if not part.Parent then dropTrap(part)
-            else
-                h.hl.Enabled=flags.trapEsp
-                h.bb.Enabled=flags.trapEsp
-            end
-        end
-        task.wait(0.1)
-    end end)
-
-    if TrapSystem then
-        local thl=TrapSystem:FindFirstChild("TrapHitLocal")
-        if thl then
-            bind(thl.OnClientEvent,function()
-                if not flags.antiTrap then return end
-                task.spawn(function()
-                    local ch=LocalPlayer.Character
-                    local hum=ch and ch:FindFirstChildOfClass("Humanoid")
-                    if not hum then return end
-                    local want=16
-                    pcall(function() want=tonumber(UI.walkSpeed) or 16 end)
-                    local t0=os.clock()
-                    while os.clock()-t0<4.6 do
-                        if hum.Parent then
-                            if hum.WalkSpeed<want then hum.WalkSpeed=want end
-                            if hum.JumpPower<40 then hum.UseJumpPower=true; hum.JumpPower=50 end
-                        end
-                        RunService.Heartbeat:Wait()
-                    end
-                end)
-            end)
-        end
-    end
-end
-do
-    local MAX_LINEAR=200
-    local MAX_ANGULAR=20
-    local ANCHOR_MIN=35
-    local lastGood=nil
-    local lastGoodAt=0
-    local otherParts={}
-    local flipped=setmetatable({},{__mode="k"})
-    local nParts=0
-    local function addPart(d)
-        if d:IsA("BasePart") then
-            nParts=nParts+1
-            otherParts[nParts]=d
-            if flags.antiFling and d.CanCollide then d.CanCollide=false; flipped[d]=true end
-        end
-    end
-    local function restoreOthers()
-        for d in pairs(flipped) do
-            if d and d.Parent and d:IsA("BasePart") then d.CanCollide=true end
-        end
-        table.clear(flipped)
-    end
-    Mono.antiFlingRestore=restoreOthers
-    local function hookChar(ch)
-        if not ch then return end
-        for _,d in ipairs(ch:GetDescendants()) do addPart(d) end
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-        bind(ch.DescendantAdded,function(d)
-            if flags.antiFling then task.defer(addPart,d) end
-        end)
-    end
-    local function rebuildOthers()
-        table.clear(otherParts)
-        nParts=0
-        for _,p in ipairs(Mono.plrs) do
-            if p~=LocalPlayer and p.Character then
-                for _,d in ipairs(p.Character:GetDescendants()) do addPart(d) end
-            end
-        end
-    end
-    local function watch(p)
-        if p==LocalPlayer then return end
-        hookChar(p.Character)
-        bind(p.CharacterAdded,function(ch) task.defer(function() hookChar(ch); rebuildOthers() end) end)
-    end
-    for _,p in ipairs(Mono.plrs) do watch(p) end
-    bind(Players.PlayerAdded,function(p) watch(p); task.defer(rebuildOthers) end)
-    bind(Players.PlayerRemoving,function() task.defer(rebuildOthers) end)
-    task.spawn(function() while not isDead() do
-        if flags.antiFling then rebuildOthers() end
-        task.wait(3)
-    end end)
-
-    local function selfBusy()
-        return flinging or flags.fly
-    end
-    local function guard()
-        if not flags.antiFling or selfBusy() then return end
-        local ch=LocalPlayer.Character
-        local hrp=getHRP(ch)
-        if not hrp then lastGood=nil return end
-
-        if badCF(hrp.CFrame) then
-            if lastGood then pcall(function() hrp.CFrame=lastGood end) end
-            hrp.AssemblyLinearVelocity=Vector3.zero
-            hrp.AssemblyAngularVelocity=Vector3.zero
-            return
-        end
-
-        local lv=hrp.AssemblyLinearVelocity
-        if badVec(lv) then hrp.AssemblyLinearVelocity=Vector3.zero
-        elseif lv.Magnitude>MAX_LINEAR then hrp.AssemblyLinearVelocity=lv.Unit*MAX_LINEAR end
-        local av=hrp.AssemblyAngularVelocity
-        if badVec(av) or av.Magnitude>MAX_ANGULAR then hrp.AssemblyAngularVelocity=Vector3.zero end
-
-        local hum0=ch:FindFirstChildOfClass("Humanoid")
-        local maxRise=60
-        if hum0 and hum0.UseJumpPower then maxRise=math.max(60,hum0.JumpPower*1.4) end
-        local lv2=hrp.AssemblyLinearVelocity
-        if (not flags.infJump) and lv2.Y>maxRise then
-            hrp.AssemblyLinearVelocity=Vector3.new(lv2.X,maxRise,lv2.Z)
-        end
-
-        local cp=getCharParts(ch)
-        for i=1,#cp do
-            local p=cp[i]
-            if p.Parent then
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-                if badVec(p.AssemblyLinearVelocity) then p.AssemblyLinearVelocity=Vector3.zero end
-                local pav=p.AssemblyAngularVelocity
-                if badVec(pav) or pav.Magnitude>MAX_ANGULAR then p.AssemblyAngularVelocity=Vector3.zero end
-                if badCF(p.CFrame) and lastGood then pcall(function() p.CFrame=lastGood end) end
-            end
-        end
-
-        if not Mono.wantPS then
-            if hum0 and hum0.PlatformStand then hum0.PlatformStand=false end
-        end
-
-        local now=os.clock()
-        local exempt = Mono.teleporting() or Mono.selfTeleporting() or flags.autoCoins
-        if lastGood and not exempt then
-            local dt=math.clamp(now-lastGoodAt,1/240,0.5)
-            local allow=math.max(ANCHOR_MIN,(MAX_LINEAR+100)*dt)
-            if (hrp.Position-lastGood.Position).Magnitude>allow then
-                pcall(function() hrp.CFrame=lastGood end)
-                hrp.AssemblyLinearVelocity=Vector3.zero
-                hrp.AssemblyAngularVelocity=Vector3.zero
-                return
-            end
-        end
-        lastGood=hrp.CFrame
-        lastGoodAt=now
-    end
-    local function sweepCollide()
-        if not flags.antiFling or flinging then return end
-        for i=1,nParts do
-            local d=otherParts[i]
-            if d and d.Parent and d.CanCollide then d.CanCollide=false; flipped[d]=true end
-        end
-    end
-    bind(RunService.Heartbeat,sweepCollide)
-    bind(RunService.Stepped,guard)
-    bind(RunService.Heartbeat,guard)
-    bind(RunService.RenderStepped,guard)
-
-    local MOVERS={"BodyVelocity","BodyAngularVelocity","BodyThrust","BodyForce","BodyPosition","BodyGyro",
-        "LinearVelocity","AngularVelocity","VectorForce","Torque","AlignPosition","AlignOrientation",
-        "RocketPropulsion"}
-    local function isMover(d)
-        for _,c in ipairs(MOVERS) do if d:IsA(c) then return true end end
-        return false
-    end
-    local function killMover(d)
-        if d==flyBV or d==flyBG or flags.fly or flinging then return end
-        if d.Parent then pcall(function() d:Destroy() end) end
-    end
-    local function watchSelf(ch)
-        if not ch then return end
-        bind(ch.DescendantAdded,function(d)
-            if not flags.antiFling or flags.fly then return end
-            if not isMover(d) then return end
-            task.defer(killMover,d)
-        end)
-    end
-    task.spawn(function() while not isDead() do
-        if flags.antiFling and not flags.fly and not flinging then
-            local ch=LocalPlayer.Character
--- Script and UI originally created by and uploaded by https://robloxscripts.com/user/Fleece
-            if ch then
-                for _,d in ipairs(ch:GetDescendants()) do
-                    if isMover(d) then killMover(d) end
-                end
-            end
-        end
-        task.wait(0.5)
-    end end)
-    watchSelf(LocalPlayer.Character)
-    bind(LocalPlayer.CharacterAdded,watchSelf)
-end
-
--- H3XA VIP bridge: expose Mono runtime without loading Mono's separate interface.
-do
-    local env = (getgenv and getgenv()) or _G
-    Window.gui = (Converted and Converted["_Menu"]) or nil
-    local VIP = env.H3XA_VIP or {}
-    VIP.flags = flags
-    VIP.Mono = Mono
-    VIP.Window = Window
-    VIP.targetPlayer = VIP.targetPlayer or nil
-    function VIP:Notify(msg, duration)
-        return notify(msg, duration)
-    end
-    function VIP:SetFlag(name, value)
-        value = value and true or false
-        flags[name] = value
-        if name == "fly" then
-            if value then startFly() else stopFly() end
-        elseif name == "antiFling" and not value and Mono.antiFlingRestore then
-            pcall(Mono.antiFlingRestore)
-        end
-        return value
-    end
-    function VIP:SetValue(name, value)
-        if name == "aimFov" then aimFov = tonumber(value) or aimFov
-        elseif name == "snapHeight" then Mono.SNAP_HEIGHT = tonumber(value) or Mono.SNAP_HEIGHT
-        elseif flags[name] ~= nil then flags[name] = value
-        else return false end
-        return true
-    end
-    function VIP:Action(name)
-        if name == "flingAll" then return flingAll() end
-        if name == "teleportNearestCoin" then
-            local hrp = getHRP(LocalPlayer.Character)
-            if not hrp then return false, "No tienes personaje ahora mismo." end
-            local pool = coinCache
-            if #pool == 0 then pool = freshCoins() end
-            local best, bd
-            for _, c in ipairs(pool) do
-                if c.Parent and not coinTaken(c) then
-                    local d = (c.Position - hrp.Position).Magnitude
-                    if not bd or d < bd then bd, best = d, c end
-                end
-            end
-            if not best then return false, "No hay monedas en el mapa." end
-            local ok = tpTo(best.Position)
-            return ok, ok and "Teletransportado a la moneda más cercana." or "No se pudo teletransportar."
-        end
-        return false, "Acción no disponible."
-    end
-    function VIP:GetConfig()
-        local out = { flags = {}, values = { aimFov = aimFov } }
-        for k,v in pairs(flags) do
-            if type(v) == "boolean" or type(v) == "number" or type(v) == "string" then out.flags[k] = v end
-        end
-        return out
-    end
-    function VIP:LoadConfig(data)
-        if type(data) ~= "table" then return false, "Config inválida." end
-        if type(data.flags) == "table" then
-            for k,v in pairs(data.flags) do
-                if flags[k] ~= nil and (type(v) == type(flags[k])) then self:SetFlag(k, v) end
-            end
-        end
-        if data.values and tonumber(data.values.aimFov) then aimFov = tonumber(data.values.aimFov) end
-        return true
-    end
-    env.H3XA_VIP = VIP
 end
 
 coroutine.wrap(CEBY_routine)()
