@@ -4605,7 +4605,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
 				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
 				["Extras"] = "rbxassetid://10734966248",         -- lucide-star
-				["VIP"] = "rbxassetid://6034287719"               -- premium/VIP badge (standalone)
+				["VIP"] = "rbxassetid://97854828246256"           -- lucide spritesheet (gem uses ImageRect)
 			}
 
 			-- Sidebar glass cards
@@ -4643,12 +4643,20 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 					icon.AnchorPoint = Vector2.new(0, 0.5)
 					icon.Position = UDim2.new(0, 12, 0.5, 0)
 					icon.Size = UDim2.fromOffset(selected and 17 or 15, selected and 17 or 15)
-					icon.Image = categoryIcons[category] or "rbxassetid://10734966248"
 					icon.ImageColor3 = Color3.fromRGB(255, 255, 255)
 					icon.ImageTransparency = selected and 0 or 0.35
 					icon.ScaleType = Enum.ScaleType.Fit
 					icon.ZIndex = 2
 					icon.Parent = b
+					-- VIP: diamante real (Lucide gem en spritesheet)
+					if category == "VIP" then
+						icon.Image = "rbxassetid://97854828246256"
+						icon.ImageRectOffset = Vector2.new(800, 625)
+						icon.ImageRectSize = Vector2.new(24, 24)
+						icon.ImageColor3 = selected and Color3.fromRGB(180, 220, 255) or Color3.fromRGB(160, 200, 255)
+					else
+						icon.Image = categoryIcons[category] or "rbxassetid://10734966248"
+					end
 
 					local label = Instance.new("TextLabel")
 					label.Name = "Label"
