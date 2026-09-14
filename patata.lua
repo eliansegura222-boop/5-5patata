@@ -4528,7 +4528,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 			end
 
 			-- Categorías reales para MM2: el nombre del juego ya no se usa como categoría.
-			local categoryNames = {"ESPs", "Sheriff", "Murderer", "Combat", "Movement", "Utility", "Extras"}
+			local categoryNames = {"ESPs", "Sheriff", "Murderer", "Combat", "Movement", "Utility", "Extras", "VIP"}
 			local _lang = ((getgenv and getgenv()) or _G).H3XA_MM2_LANGUAGE or H3XA_MM2_LANGUAGE or "EN"
 			local categoryAliases = {
 				["ESPs"] = _lang == "ES" and "VISUALES" or "VISUALS",
@@ -4537,7 +4537,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Combat"] = _lang == "ES" and "COMBATE" or "COMBAT",
 				["Movement"] = _lang == "ES" and "MOVIMIENTO" or "MOVEMENT",
 				["Utility"] = _lang == "ES" and "UTILIDAD" or "UTILITY",
-				["Extras"] = _lang == "ES" and "EXTRAS" or "EXTRAS"
+				["Extras"] = _lang == "ES" and "EXTRAS" or "EXTRAS",
+				["VIP"] = "VIP"
 			}
 			local function isCategoryHeader(item)
 				return item and item["Type"] == "Text" and item["Args"] and categoryAliases[item["Args"][1]] ~= nil
@@ -4566,7 +4567,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Combat"] = "rbxassetid://10734977012",        -- lucide-target
 				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
 				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
-				["Extras"] = "rbxassetid://10734966248"         -- lucide-star
+				["Extras"] = "rbxassetid://10734966248",        -- lucide-star
+				["VIP"] = "rbxassetid://10723423531"            -- lucide-gem (diamond)
 			}
 
 			-- Sidebar glass cards
@@ -9326,17 +9328,17 @@ table.insert(module, {
 
 
 
+
 	-- ============================================================
-	-- VIP  (Mono MM2 logic, Hexa UI)
-	-- 3 subcategorias: Combat / Visuals / Utility
-	-- Interfaz principal de Hexa sin cambios.
+	-- VIP CATEGORY (registered in Hexa sidebar with gem/diamond icon)
+	-- Subsections are section cards INSIDE VIP (not main categories)
+	-- Logic ported from Mono MM2, wired to Hexa helpers/UI
 	-- ============================================================
 	table.insert(module, {
 		Type = "Text",
 		Args = {"VIP"}
 	})
 
-	-- Estado compartido VIP (logica Mono)
 	local VIP = {
 		autoKill = false,
 		silentAim = false,
@@ -9360,7 +9362,6 @@ table.insert(module, {
 	local Players = game:GetService("Players")
 	local RunService = game:GetService("RunService")
 	local UserInputService = game:GetService("UserInputService")
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local Workspace = game:GetService("Workspace")
 	local Camera = Workspace.CurrentCamera
 	local LocalPlayer = Players.LocalPlayer
@@ -9394,7 +9395,6 @@ table.insert(module, {
 		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
 		return hum and hum.Health > 0
 	end
-	-- Usa helpers de Hexa si existen en este scope; si no, fallback Mono
 	local function vipFindMurderer()
 		if type(findMurderer) == "function" then
 			local ok, r = pcall(findMurderer)
@@ -9416,11 +9416,10 @@ table.insert(module, {
 		return false
 	end
 	local function vipIsMurderer(plr)
-		local m = vipFindMurderer()
-		return m == plr
+		return vipFindMurderer() == plr
 	end
 
-	-- ---------- FOV visual ----------
+	-- FOV circle
 	local fovGui = Instance.new("ScreenGui")
 	fovGui.Name = "H3XA_VIP_FOV"
 	fovGui.IgnoreGuiInset = true
@@ -9475,13 +9474,12 @@ table.insert(module, {
 		return best
 	end
 
-	-- ---------- Combat logic (Mono) ----------
+	-- Auto Kill (Mono logic)
 	local lastShot = 0
 	vipBind(RunService.Heartbeat, function()
 		if not VIP.autoKill then return end
 		local hrp = getHRP(LocalPlayer.Character)
 		if not hrp then return end
-
 		if vipIsMurderer(LocalPlayer) then
 			for _, p in ipairs(Players:GetPlayers()) do
 				if p ~= LocalPlayer and alive(p) then
@@ -9519,7 +9517,7 @@ table.insert(module, {
 		end
 	end)
 
-	-- Knife walls / instant / silent aim on throw
+	-- Knife walls / instant / silent
 	vipBind(UserInputService.InputBegan, function(inp, gp)
 		if gp then return end
 		if not (VIP.knifeWalls or VIP.instantKnife or VIP.silentAim) then return end
@@ -9527,7 +9525,6 @@ table.insert(module, {
 		local isThrow = (inp.UserInputType == Enum.UserInputType.MouseButton1)
 			or (inp.KeyCode == Enum.KeyCode.Q)
 		if not isThrow then return end
-
 		local target = VIP.silentAim and closestInFOV() or nil
 		local pos
 		if target then
@@ -9549,7 +9546,7 @@ table.insert(module, {
 		end
 	end)
 
-	-- ---------- Fling (Mono) ----------
+	-- Fling
 	local function flingPlayer(target)
 		local myHrp = getHRP(LocalPlayer.Character)
 		local thrp = getHRP(target.Character)
@@ -9587,7 +9584,7 @@ table.insert(module, {
 		end)
 	end
 
-	-- ---------- Coins ----------
+	-- Coins
 	local coinCache = {}
 	local function refreshCoins()
 		coinCache = {}
@@ -9619,7 +9616,7 @@ table.insert(module, {
 		end
 	end)
 
-	-- ---------- Anti Fling ----------
+	-- Anti Fling
 	local lastGoodCF = nil
 	vipBind(RunService.Heartbeat, function()
 		if not VIP.antiFling or flinging then return end
@@ -9643,7 +9640,7 @@ table.insert(module, {
 		end
 	end)
 
-	-- ---------- Murderer Notify ----------
+	-- Murderer Notify
 	local murdInRange = false
 	vipBind(RunService.Heartbeat, function()
 		if not VIP.murdererNotify then murdInRange = false return end
@@ -9659,7 +9656,7 @@ table.insert(module, {
 		end
 	end)
 
-	-- ---------- ESP VIP ----------
+	-- ESP
 	local vipEspFolder = Instance.new("Folder")
 	vipEspFolder.Name = "H3XA_VIP_ESP"
 	pcall(function()
@@ -9752,7 +9749,7 @@ table.insert(module, {
 		end
 	end)
 
-	-- ---------- Fly VIP ----------
+	-- Fly
 	local flyBV, flyBG, flyConn
 	local function stopVIPFly()
 		if flyConn then pcall(function() flyConn:Disconnect() end) flyConn = nil end
@@ -9791,12 +9788,10 @@ table.insert(module, {
 		end)
 	end
 
-	-- ============================================================
-	-- SUBCATEGORIA 1: Combat
-	-- ============================================================
+	-- ---- Subsections INSIDE VIP (names must NOT match main categoryAliases) ----
 	table.insert(module, {
 		Type = "Text",
-		Args = {"Combat"}
+		Args = {"Combat Features"}
 	})
 	table.insert(module, {
 		Type = "Toggle",
@@ -9842,12 +9837,9 @@ table.insert(module, {
 		end}
 	})
 
-	-- ============================================================
-	-- SUBCATEGORIA 2: Visuals
-	-- ============================================================
 	table.insert(module, {
 		Type = "Text",
-		Args = {"Visuals"}
+		Args = {"Visual Features"}
 	})
 	table.insert(module, {
 		Type = "Toggle",
@@ -9874,12 +9866,9 @@ table.insert(module, {
 		end}
 	})
 
-	-- ============================================================
-	-- SUBCATEGORIA 3: Utility
-	-- ============================================================
 	table.insert(module, {
 		Type = "Text",
-		Args = {"Utility"}
+		Args = {"Utility Features"}
 	})
 	table.insert(module, {
 		Type = "Toggle",
