@@ -4590,7 +4590,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
 				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
 				["Extras"] = "rbxassetid://10734966248",         -- lucide-star
-				["VIP"] = "rbxassetid://10723407389"              -- lucide-gem (diamond)
+				["VIP"] = "rbxassetid://10709781946"              -- lucide-crown (VIP)
 			}
 
 			-- Sidebar glass cards
@@ -8076,25 +8076,6 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 			end
 		end
 	end)
-table.insert(module, {
-		Type = "Toggle",
-		Args = {"Instakill murderer as sheriff", function(Self, tog)
-			instakillshoot = tog
-		end}
-	})
-
-table.insert(module, {
-		Type = "Button",
-		Args = {"Teleport to dropped gun", function(Self)
-			if not getMap():FindFirstChild("GunDrop") then fu.notification("No dropped gun to be teleported to.") return end
-			local previousPosition = localplayer.Character:GetPivot()
-			localplayer.Character:PivotTo(getMap():FindFirstChild("GunDrop"):GetPivot())
-			localplayer.Backpack.ChildAdded:Wait()
-			localplayer.Character:PivotTo(previousPosition)
-		end,}
-	})
-
-
 	table.insert(module, {
 		Type = "Button",
 		Args = {"Fling Murderer", function()
@@ -8307,36 +8288,6 @@ table.insert(module, {
 
 table.insert(module, {
 		Type = "Button",
-		Args = {"Kill EVERYONE as murderer", function()
-			if findMurderer() ~= localplayer then fu.notification("You're not murderer.") return end
-	
-			if not localplayer.Character:FindFirstChild("Knife") then
-				local hum = localplayer.Character:FindFirstChild("Humanoid")
-				if localplayer.Backpack:FindFirstChild("Knife") then
-					localplayer.Character:FindFirstChild("Humanoid"):EquipTool(localplayer.Backpack:FindFirstChild("Knife"))
-				else
-					fu.notification("You don't have the knife..?")
-					return
-				end
-			end
-	
-			for _, player in ipairs(game.Players:GetPlayers()) do
-				if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player ~= localplayer then
-					player.Character:FindFirstChild("HumanoidRootPart").Anchored = true
-					player.Character:FindFirstChild("HumanoidRootPart").CFrame = localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame + localplayer.Character:FindFirstChild("HumanoidRootPart").CFrame.LookVector * 1 
-	
-				end	
-			end
-	
-			local args = {
-				[1] = "Slash"
-			}
-			localplayer.Character.Knife.Stab:FireServer(unpack(args))
-		end,}
-	})
-
-table.insert(module, {
-		Type = "Button",
 		Args = {"Hold everyone hostage", function()
 			if findMurderer() ~= localplayer then fu.notification("You're not murderer. This'll only be useful if you're the murderer.") return end
 	
@@ -8448,48 +8399,6 @@ table.insert(module, {
 	table.insert(module, {
 		Type = "ButtonGrid",
 		Args = {2, {
-			Teleport_to_lobby = function(Self)
-				local char = localplayer.Character
-				if not char then
-					fu.notification("You're not a valid character.")
-					return
-				end
-				local lobby = workspace:FindFirstChild("Lobby")
-				if not lobby then
-					-- fallback común en MM2
-					lobby = workspace:FindFirstChild("Lobby", true)
-				end
-				if not lobby then
-					fu.notification("No lobby to teleport to.")
-					return
-				end
-				local spawnPos = nil
-				local spawns = lobby:FindFirstChild("Spawns")
-				if spawns then
-					local spawn = spawns:FindFirstChildWhichIsA("SpawnLocation") or spawns:FindFirstChildWhichIsA("BasePart")
-					if spawn then spawnPos = spawn.Position end
-				end
-				if not spawnPos then
-					local spawn = lobby:FindFirstChildWhichIsA("SpawnLocation", true)
-					if spawn then spawnPos = spawn.Position end
-				end
-				if not spawnPos then
-					local ok, pivot = pcall(function() return lobby:GetPivot().Position end)
-					if ok and pivot then spawnPos = pivot end
-				end
-				if not spawnPos then
-					fu.notification("No lobby to teleport to.")
-					return
-				end
-				local target = CFrame.new(spawnPos + Vector3.new(0, 4, 0))
-				if char:FindFirstChild("HumanoidRootPart") then
-					char:PivotTo(target)
-				else
-					char:MoveTo(spawnPos + Vector3.new(0, 4, 0))
-				end
-				fu.notification("Teleported to lobby.")
-			end,
-	
 			Teleport_to_map = function(Self)
 				local map = getMap()
 				if not map then
@@ -9179,6 +9088,29 @@ table.insert(module, {
 		Type = "Range",
 		Args = {"Aimbot FOV Radius", 50, 300, 10, function(Self, val)
 			RE.FOVRadius = val
+			if VIP then VIP.aimFov = val end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Silent Aim", function(Self, state)
+			RE.SilentAim = state
+			if VIP then VIP.silentAim = state end
+			if state then
+				fu.notification("Silent Aim: on some executors this may not work correctly.")
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Show FOV Circle", function(Self, state)
+			if VIP then VIP.showFov = state end
+			-- also drive RE aimbot circle if present
+			pcall(function()
+				if FOVCircle then FOVCircle.Visible = state or RE.Aimbot end
+			end)
 		end}
 	})
 
@@ -9244,6 +9176,72 @@ table.insert(module, {
 		Type = "Toggle",
 		Args = {"Noclip", function(Self, state)
 			RE.Noclip = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Auto Grab Gun", function(Self, state)
+			autoGetDroppedGun = state
+			if VIP then VIP.autoGun = state end
+			if state then fu.notification("Auto Grab Gun ON") end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Teleport to dropped gun", function(Self)
+			local map = getMap and getMap() or nil
+			local gun = (map and map:FindFirstChild("GunDrop")) or Workspace:FindFirstChild("GunDrop")
+			if not gun then fu.notification("No dropped gun to be teleported to.") return end
+			local char = localplayer.Character
+			if not char then fu.notification("You're not a valid character.") return end
+			local previousPosition = char:GetPivot()
+			char:PivotTo(gun:GetPivot())
+			task.spawn(function()
+				local ok = pcall(function() localplayer.Backpack.ChildAdded:Wait() end)
+				task.wait(0.35)
+				if localplayer.Character then
+					pcall(function() localplayer.Character:PivotTo(previousPosition) end)
+				end
+			end)
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Auto Collect Coins", function(Self, state)
+			if VIP then VIP.autoCoins = state end
+			if state then fu.notification("Auto Collect Coins ON") end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Teleport to Nearest Coin", function()
+			local hrp = (VIP and vipGetHRP and vipGetHRP(localplayer.Character)) or (localplayer.Character and localplayer.Character:FindFirstChild("HumanoidRootPart"))
+			if not hrp then
+				-- fallback if VIP helpers not ready yet at click time they should exist
+				hrp = localplayer.Character and localplayer.Character:FindFirstChild("HumanoidRootPart")
+			end
+			if not hrp then fu.notification("No character"); return end
+			local best, bd
+			local root = Workspace or workspace
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("BasePart") then
+					local n = d.Name:lower()
+					if n:find("coin") or d:GetAttribute("CoinID") ~= nil then
+						local dist = (d.Position - hrp.Position).Magnitude
+						if not bd or dist < bd then bd, best = dist, d end
+					end
+				end
+			end
+			if best then
+				hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 3, 0))
+				fu.notification("Teleported to coin")
+			else
+				fu.notification("No coins on map")
+			end
 		end}
 	})
 
@@ -9802,29 +9800,9 @@ table.insert(module, {
 		Type = "Toggle",
 		Args = {"Auto Kill", function(Self, state)
 			VIP.autoKill = state
-			if state then vipNotify("Auto Kill ON") end
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Toggle",
-		Args = {"Silent Aim VIP", function(Self, state)
-			VIP.silentAim = state
-			RE.SilentAim = state
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Range",
-		Args = {"VIP FOV Radius", 40, 400, 10, function(Self, val)
-			VIP.aimFov = val
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Toggle",
-		Args = {"Show FOV Circle", function(Self, state)
-			VIP.showFov = state
+			if state then
+				fu.notification("Auto Kill: on some executors / devices this may not work correctly.")
+			end
 		end}
 	})
 
@@ -9832,6 +9810,9 @@ table.insert(module, {
 		Type = "Toggle",
 		Args = {"Knife Through Walls", function(Self, state)
 			VIP.knifeWalls = state
+			if state then
+				fu.notification("Knife Through Walls: on some executors this may not work correctly.")
+			end
 		end}
 	})
 
@@ -9839,12 +9820,15 @@ table.insert(module, {
 		Type = "Toggle",
 		Args = {"Instant Knife Throw", function(Self, state)
 			VIP.instantKnife = state
+			if state then
+				fu.notification("Instant Knife Throw: on some executors this may not work correctly.")
+			end
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Fly VIP", function(Self, state)
+		Args = {"Fly", function(Self, state)
 			VIP.fly = state
 			if state then vipStartFly() else vipStopFly() end
 		end}
@@ -9852,7 +9836,7 @@ table.insert(module, {
 
 	table.insert(module, {
 		Type = "Range",
-		Args = {"Fly Speed VIP", 20, 250, 5, function(Self, val)
+		Args = {"Fly Speed", 20, 250, 5, function(Self, val)
 			VIP.flySpeed = val
 		end}
 	})
@@ -9873,60 +9857,29 @@ table.insert(module, {
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Tracers VIP", function(Self, state)
+		Args = {"Tracers", function(Self, state)
 			VIP.espTracers = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Skeleton ESP VIP", function(Self, state)
+		Args = {"Skeleton ESP", function(Self, state)
 			VIP.espSkeleton = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Coin ESP VIP", function(Self, state)
+		Args = {"Coin ESP", function(Self, state)
 			VIP.coinEsp = state
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Toggle",
-		Args = {"Auto Collect Coins", function(Self, state)
-			VIP.autoCoins = state
-			if state then vipNotify("Auto Collect Coins ON") end
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Button",
-		Args = {"Teleport to Nearest Coin", function()
-			local hrp = vipGetHRP(localplayer.Character)
-			if not hrp then vipNotify("No character"); return end
-			local best, bd
-			for _, d in ipairs(Workspace:GetDescendants()) do
-				if d:IsA("BasePart") then
-					local n = d.Name:lower()
-					if n:find("coin") or d:GetAttribute("CoinID") ~= nil then
-						local dist = (d.Position - hrp.Position).Magnitude
-						if not bd or dist < bd then bd, best = dist, d end
-					end
-				end
-			end
-			if best then
-				hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 3, 0))
-				vipNotify("Teleported to coin")
-			else
-				vipNotify("No coins on map")
-			end
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Button",
 		Args = {"Fling All Players", function()
+			fu.notification("Fling All: on some executors / devices this may not work correctly.")
 			task.spawn(vipFlingAll)
 		end}
 	})
@@ -9942,20 +9895,6 @@ table.insert(module, {
 		Type = "Toggle",
 		Args = {"Anti Trap", function(Self, state)
 			VIP.antiTrap = state
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Toggle",
-		Args = {"Murderer Notify", function(Self, state)
-			VIP.murdererNotify = state
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Toggle",
-		Args = {"Auto Grab Gun VIP", function(Self, state)
-			VIP.autoGun = state
 		end}
 	})
 
