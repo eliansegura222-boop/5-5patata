@@ -1193,6 +1193,21 @@ local H3XA_MM2_ES = {
     ["MURDERER NEAR"] = "ASESINO CERCA",
 
     ["VIP"] = "VIP",
+    ["No character"] = "No hay personaje",
+    ["No coins on map"] = "No hay monedas en el mapa",
+    ["Teleported to coin"] = "Teletransportado a la moneda",
+
+    ["Weapon"] = "Arma",
+    ["Farm"] = "Farm",
+    ["Offense"] = "Ofensiva",
+    ["Flight"] = "Vuelo",
+    ["Vision"] = "Visión",
+    ["Protection"] = "Protección",
+    ["Silent Aim: on some executors this may not work correctly."] = "Silent Aim: en algunos ejecutores puede no funcionar correctamente.",
+    ["Auto Kill: on some executors / devices this may not work correctly."] = "Auto Kill: en algunos ejecutores o dispositivos puede no funcionar correctamente.",
+    ["Knife Through Walls: on some executors this may not work correctly."] = "Cuchillo a través de paredes: en algunos ejecutores puede no funcionar correctamente.",
+    ["Instant Knife Throw: on some executors this may not work correctly."] = "Lanzamiento instantáneo: en algunos ejecutores puede no funcionar correctamente.",
+    ["Fling All: on some executors / devices this may not work correctly."] = "Fling a todos: en algunos ejecutores o dispositivos puede no funcionar correctamente.",
     ["Auto Kill"] = "Auto Kill",
     ["Silent Aim VIP"] = "Silent Aim VIP",
     ["Show FOV Circle"] = "Mostrar círculo FOV",
@@ -4590,7 +4605,7 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
 				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
 				["Extras"] = "rbxassetid://10734966248",         -- lucide-star
-				["VIP"] = "rbxassetid://10709781946"              -- lucide-crown (VIP)
+				["VIP"] = "rbxassetid://6034287719"               -- premium/VIP badge (standalone)
 			}
 
 			-- Sidebar glass cards
@@ -9098,7 +9113,7 @@ table.insert(module, {
 			RE.SilentAim = state
 			if VIP then VIP.silentAim = state end
 			if state then
-				fu.notification("Silent Aim: on some executors this may not work correctly.")
+				fu.notification(H3XA_MM2_T("Silent Aim: on some executors this may not work correctly."))
 			end
 		end}
 	})
@@ -9180,11 +9195,16 @@ table.insert(module, {
 	})
 
 	table.insert(module, {
+		Type = "Text",
+		Args = {"Weapon"}
+	})
+
+	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Auto Grab Gun", function(Self, state)
 			autoGetDroppedGun = state
 			if VIP then VIP.autoGun = state end
-			if state then fu.notification("Auto Grab Gun ON") end
+			if state then fu.notification(H3XA_MM2_T("Auto Grab Gun") .. " ON") end
 		end}
 	})
 
@@ -9193,9 +9213,9 @@ table.insert(module, {
 		Args = {"Teleport to dropped gun", function(Self)
 			local map = getMap and getMap() or nil
 			local gun = (map and map:FindFirstChild("GunDrop")) or Workspace:FindFirstChild("GunDrop")
-			if not gun then fu.notification("No dropped gun to be teleported to.") return end
+			if not gun then fu.notification(H3XA_MM2_T("No dropped gun to be teleported to.")) return end
 			local char = localplayer.Character
-			if not char then fu.notification("You're not a valid character.") return end
+			if not char then fu.notification(H3XA_MM2_T("You're not a valid character.")) return end
 			local previousPosition = char:GetPivot()
 			char:PivotTo(gun:GetPivot())
 			task.spawn(function()
@@ -9209,10 +9229,15 @@ table.insert(module, {
 	})
 
 	table.insert(module, {
+		Type = "Text",
+		Args = {"Farm"}
+	})
+
+	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Auto Collect Coins", function(Self, state)
 			if VIP then VIP.autoCoins = state end
-			if state then fu.notification("Auto Collect Coins ON") end
+			if state then fu.notification(H3XA_MM2_T("Auto Collect Coins") .. " ON") end
 		end}
 	})
 
@@ -9221,10 +9246,9 @@ table.insert(module, {
 		Args = {"Teleport to Nearest Coin", function()
 			local hrp = (VIP and vipGetHRP and vipGetHRP(localplayer.Character)) or (localplayer.Character and localplayer.Character:FindFirstChild("HumanoidRootPart"))
 			if not hrp then
-				-- fallback if VIP helpers not ready yet at click time they should exist
 				hrp = localplayer.Character and localplayer.Character:FindFirstChild("HumanoidRootPart")
 			end
-			if not hrp then fu.notification("No character"); return end
+			if not hrp then fu.notification(H3XA_MM2_T("No character")); return end
 			local best, bd
 			local root = Workspace or workspace
 			for _, d in ipairs(root:GetDescendants()) do
@@ -9238,9 +9262,9 @@ table.insert(module, {
 			end
 			if best then
 				hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 3, 0))
-				fu.notification("Teleported to coin")
+				fu.notification(H3XA_MM2_T("Teleported to coin"))
 			else
-				fu.notification("No coins on map")
+				fu.notification(H3XA_MM2_T("No coins on map"))
 			end
 		end}
 	})
@@ -9797,11 +9821,16 @@ table.insert(module, {
 	})
 
 	table.insert(module, {
+		Type = "Text",
+		Args = {"Offense"}
+	})
+
+	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Auto Kill", function(Self, state)
 			VIP.autoKill = state
 			if state then
-				fu.notification("Auto Kill: on some executors / devices this may not work correctly.")
+				fu.notification(H3XA_MM2_T("Auto Kill: on some executors / devices this may not work correctly."))
 			end
 		end}
 	})
@@ -9811,7 +9840,7 @@ table.insert(module, {
 		Args = {"Knife Through Walls", function(Self, state)
 			VIP.knifeWalls = state
 			if state then
-				fu.notification("Knife Through Walls: on some executors this may not work correctly.")
+				fu.notification(H3XA_MM2_T("Knife Through Walls: on some executors this may not work correctly."))
 			end
 		end}
 	})
@@ -9821,9 +9850,14 @@ table.insert(module, {
 		Args = {"Instant Knife Throw", function(Self, state)
 			VIP.instantKnife = state
 			if state then
-				fu.notification("Instant Knife Throw: on some executors this may not work correctly.")
+				fu.notification(H3XA_MM2_T("Instant Knife Throw: on some executors this may not work correctly."))
 			end
 		end}
+	})
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Flight"}
 	})
 
 	table.insert(module, {
@@ -9839,6 +9873,11 @@ table.insert(module, {
 		Args = {"Fly Speed", 20, 250, 5, function(Self, val)
 			VIP.flySpeed = val
 		end}
+	})
+
+	table.insert(module, {
+		Type = "Text",
+		Args = {"Vision"}
 	})
 
 	table.insert(module, {
@@ -9877,9 +9916,14 @@ table.insert(module, {
 	})
 
 	table.insert(module, {
+		Type = "Text",
+		Args = {"Protection"}
+	})
+
+	table.insert(module, {
 		Type = "Button",
 		Args = {"Fling All Players", function()
-			fu.notification("Fling All: on some executors / devices this may not work correctly.")
+			fu.notification(H3XA_MM2_T("Fling All: on some executors / devices this may not work correctly."))
 			task.spawn(vipFlingAll)
 		end}
 	})
