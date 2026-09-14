@@ -1192,6 +1192,28 @@ local H3XA_MM2_ES = {
     ["No waypoint saved."] = "No hay waypoint guardado.",
     ["MURDERER NEAR"] = "ASESINO CERCA",
 
+    ["VIP"] = "VIP",
+    ["Auto Kill"] = "Auto Kill",
+    ["Silent Aim VIP"] = "Silent Aim VIP",
+    ["Show FOV Circle"] = "Mostrar círculo FOV",
+    ["VIP FOV Radius"] = "Radio FOV VIP",
+    ["Knife Through Walls"] = "Cuchillo a través de paredes",
+    ["Instant Knife Throw"] = "Lanzamiento instantáneo de cuchillo",
+    ["Fly VIP"] = "Vuelo VIP",
+    ["Fly Speed VIP"] = "Velocidad de vuelo VIP",
+    ["Box ESP"] = "ESP de caja",
+    ["3D Box ESP"] = "ESP de caja 3D",
+    ["Tracers VIP"] = "Trazadores VIP",
+    ["Skeleton ESP VIP"] = "ESP de esqueleto VIP",
+    ["Coin ESP VIP"] = "ESP de monedas VIP",
+    ["Auto Collect Coins"] = "Auto recolectar monedas",
+    ["Teleport to Nearest Coin"] = "TP a moneda más cercana",
+    ["Fling All Players"] = "Fling a todos",
+    ["Anti Fling"] = "Anti Fling",
+    ["Anti Trap"] = "Anti trampa",
+    ["Murderer Notify"] = "Aviso de asesino",
+    ["Auto Grab Gun VIP"] = "Auto recoger arma VIP",
+
     ["Not MM2"] = "No es MM2",
     ["Looks like this game isn't MM2. Do you want to load the module anyway?"] = "Parece que este juego no es MM2. ¿Quieres cargar el módulo de todos modos?",
     ["Load"] = "Cargar",
@@ -4567,8 +4589,8 @@ do -- Routine Module: StarterGui.H3XA_MM2.FUNCTIONS
 				["Combat"] = "rbxassetid://10734977012",        -- lucide-target
 				["Movement"] = "rbxassetid://10734900011",      -- lucide-move
 				["Utility"] = "rbxassetid://10747383470",       -- lucide-wrench
-				["Extras"] = "rbxassetid://10734966248",        -- lucide-star
-				["VIP"] = "rbxassetid://10709819149"            -- lucide-diamond
+				["Extras"] = "rbxassetid://10734966248",         -- lucide-star
+				["VIP"] = "rbxassetid://10723407389"              -- lucide-gem (diamond)
 			}
 
 			-- Sidebar glass cards
@@ -7426,23 +7448,6 @@ local function XXZOB_routine() -- Routine: StarterGui.H3XA_MM2.Murder Mystery 2
 		Invisibility = false,
 		SilentAim = false, Aimbot = false, FOVRadius = 100,
 		AutoGrabGun = false, AutoWin = false,
-
-		-- ===== VIP / Mono MM2 features =====
-		VIP_AutoKill = false,
-		VIP_SilentAim = false,
-		VIP_ShowFOV = false,
-		VIP_AimFOV = 120,
-		VIP_AutoCoins = false,
-		VIP_AntiFling = false,
-		VIP_AntiTrap = false,
-		VIP_MurdererNotify = false,
-		VIP_BoxESP = false,
-		VIP_TracersMono = false,
-		VIP_CoinESPMono = false,
-		VIP_Fly = false,
-		VIP_FlySpeed = 60,
-		VIP_SnapHeight = 5,
-		VIP_FlingPower = 10000,
 	}
 	
 	-- Player ESP
@@ -9343,7 +9348,451 @@ table.insert(module, {
 		end}
 	})
 
-	-- VIP category (Mono features) — single flat list, diamond icon in sidebar
+
+	-- ========== VIP (Mono features) ==========
+	local VIP = {
+		autoKill = false,
+		silentAim = false,
+		showFov = false,
+		knifeWalls = false,
+		instantKnife = false,
+		fly = false,
+		flySpeed = 60,
+		espBox = false,
+		espBox3D = false,
+		espTracers = false,
+		espSkeleton = false,
+		coinEsp = false,
+		autoCoins = false,
+		autoGun = false,
+		antiFling = false,
+		antiTrap = false,
+		murdererNotify = false,
+		flingPower = 10000,
+		flingSeconds = 1.2,
+		aimFov = 120,
+		snapHeight = 5,
+	}
+
+	local VIP_drawings = {}
+	local VIP_fovCircle = nil
+	local VIP_flinging = false
+	local VIP_flyBV, VIP_flyBG = nil, nil
+	local VIP_coinCache = {}
+	local VIP_espStore = {}
+	local VIP_boxStore, VIP_box3Store, VIP_tracerStore, VIP_skelStore = {}, {}, {}, {}
+	local VIP_lastMurdNotif = 0
+
+	local function vipNotify(msg)
+		if fu and fu.notification then
+			fu.notification(tostring(msg))
+		end
+	end
+
+	local function vipGetHRP(ch)
+		return ch and (ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Torso") or ch:FindFirstChild("UpperTorso"))
+	end
+
+	local function vipAlive(plr)
+		local ch = plr and plr.Character
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		return hum and hum.Health > 0
+	end
+
+	-- FOV circle
+	pcall(function()
+		if Drawing then
+			VIP_fovCircle = Drawing.new("Circle")
+			VIP_fovCircle.Thickness = 1.5
+			VIP_fovCircle.NumSides = 64
+			VIP_fovCircle.Radius = VIP.aimFov
+			VIP_fovCircle.Filled = false
+			VIP_fovCircle.Color = Color3.fromRGB(255, 255, 255)
+			VIP_fovCircle.Transparency = 0.35
+			VIP_fovCircle.Visible = false
+		end
+	end)
+
+	-- Fly
+	local function vipStartFly()
+		local ch = localplayer.Character
+		local hrp = vipGetHRP(ch)
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		if not (hrp and hum) then return end
+		pcall(function()
+			if VIP_flyBV then VIP_flyBV:Destroy() end
+			if VIP_flyBG then VIP_flyBG:Destroy() end
+			VIP_flyBV = Instance.new("BodyVelocity")
+			VIP_flyBV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+			VIP_flyBV.Velocity = Vector3.zero
+			VIP_flyBV.Parent = hrp
+			VIP_flyBG = Instance.new("BodyGyro")
+			VIP_flyBG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+			VIP_flyBG.P = 3000
+			VIP_flyBG.Parent = hrp
+			hum.PlatformStand = true
+		end)
+	end
+	local function vipStopFly()
+		local ch = localplayer.Character
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		pcall(function()
+			if VIP_flyBV then VIP_flyBV:Destroy(); VIP_flyBV = nil end
+			if VIP_flyBG then VIP_flyBG:Destroy(); VIP_flyBG = nil end
+			if hum then hum.PlatformStand = false end
+		end)
+	end
+
+	table.insert(reConnections, RunService.RenderStepped:Connect(function()
+		if VIP_fovCircle then
+			VIP_fovCircle.Visible = VIP.showFov and (VIP.silentAim or RE.Aimbot)
+			if VIP_fovCircle.Visible then
+				local m = UserInputService:GetMouseLocation()
+				VIP_fovCircle.Position = Vector2.new(m.X, m.Y)
+				VIP_fovCircle.Radius = VIP.aimFov
+			end
+		end
+		if VIP.fly and VIP_flyBV and VIP_flyBG then
+			local cam = workspace.CurrentCamera
+			local dir = Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
+			VIP_flyBV.Velocity = (dir.Magnitude > 0 and dir.Unit or Vector3.zero) * VIP.flySpeed
+			VIP_flyBG.CFrame = cam.CFrame
+		end
+	end))
+
+	-- Silent Aim / Auto Kill helpers using H3XA role funcs
+	local function vipClosestInFov()
+		local cam = workspace.CurrentCamera
+		local mouse = UserInputService:GetMouseLocation()
+		local best, bestDist
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localplayer and vipAlive(p) then
+				local hrp = vipGetHRP(p.Character)
+				if hrp then
+					local sp, on = cam:WorldToViewportPoint(hrp.Position)
+					if on then
+						local d = (Vector2.new(sp.X, sp.Y) - mouse).Magnitude
+						if d <= VIP.aimFov and (not bestDist or d < bestDist) then
+							bestDist, best = d, p
+						end
+					end
+				end
+			end
+		end
+		return best
+	end
+
+	-- Auto Kill loop
+	task.spawn(function()
+		while task.wait(0.35) do
+			if not VIP.autoKill then continue end
+			local role = reGetRole(localplayer)
+			local myHrp = vipGetHRP(localplayer.Character)
+			if not myHrp then continue end
+			if role == "Murderer" then
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= localplayer and vipAlive(p) then
+						local thrp = vipGetHRP(p.Character)
+						if thrp then
+							pcall(function()
+								myHrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 2)
+							end)
+							task.wait(0.08)
+						end
+					end
+				end
+			elseif role == "Sheriff" or role == "Hero" then
+				local murd = reGetMurderer()
+				if murd and vipAlive(murd) then
+					local thrp = vipGetHRP(murd.Character)
+					if thrp then
+						pcall(function()
+							local back = myHrp.CFrame
+							myHrp.CFrame = thrp.CFrame * CFrame.new(0, VIP.snapHeight, 0)
+							task.wait(0.05)
+							-- try fire tool
+							local tool = localplayer.Character and localplayer.Character:FindFirstChildOfClass("Tool")
+							if tool then
+								pcall(function() tool:Activate() end)
+							end
+							task.wait(0.08)
+							myHrp.CFrame = back
+						end)
+					end
+				end
+			end
+		end
+	end)
+
+	-- Auto Grab Gun VIP
+	task.spawn(function()
+		while task.wait(0.2) do
+			if not VIP.autoGun then continue end
+			local role = reGetRole(localplayer)
+			if role == "Murderer" then continue end
+			local gun = Workspace:FindFirstChild("GunDrop") or (getMap and getMap() and getMap():FindFirstChild("GunDrop"))
+			if gun and gun:IsA("BasePart") then
+				local hrp = vipGetHRP(localplayer.Character)
+				if hrp then
+					local back = hrp.CFrame
+					pcall(function()
+						hrp.CFrame = gun.CFrame
+						if firetouchinterest then
+							firetouchinterest(hrp, gun, 0)
+							firetouchinterest(hrp, gun, 1)
+						end
+					end)
+					task.wait(0.15)
+					pcall(function() hrp.CFrame = back end)
+				end
+			end
+		end
+	end)
+
+	-- Auto Coins
+	task.spawn(function()
+		while task.wait(0.25) do
+			if not VIP.autoCoins then continue end
+			local hrp = vipGetHRP(localplayer.Character)
+			if not hrp then continue end
+			local best, bd
+			for _, d in ipairs(Workspace:GetDescendants()) do
+				if d:IsA("BasePart") then
+					local n = d.Name:lower()
+					if (n:find("coin") or d:GetAttribute("CoinID") ~= nil) and d.Parent then
+						local dist = (d.Position - hrp.Position).Magnitude
+						if dist < 120 and (not bd or dist < bd) then
+							bd, best = dist, d
+						end
+					end
+				end
+			end
+			if best then
+				pcall(function()
+					hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 2.5, 0))
+					if firetouchinterest then
+						firetouchinterest(hrp, best, 0)
+						firetouchinterest(hrp, best, 1)
+					end
+				end)
+			end
+		end
+	end)
+
+	-- Coin ESP VIP
+	local vipCoinHL = {}
+	task.spawn(function()
+		while task.wait(0.4) do
+			if VIP.coinEsp then
+				local seen = {}
+				for _, d in ipairs(Workspace:GetDescendants()) do
+					if d:IsA("BasePart") then
+						local n = d.Name:lower()
+						if n:find("coin") or d:GetAttribute("CoinID") ~= nil then
+							seen[d] = true
+							if not vipCoinHL[d] then
+								local hl = Instance.new("Highlight")
+								hl.Adornee = d
+								hl.FillColor = Color3.fromRGB(255, 205, 55)
+								hl.FillTransparency = 0.3
+								hl.OutlineColor = Color3.fromRGB(255, 235, 150)
+								hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+								hl.Parent = d
+								vipCoinHL[d] = hl
+							end
+						end
+					end
+				end
+				for d, hl in pairs(vipCoinHL) do
+					if not seen[d] or not d.Parent then
+						pcall(function() hl:Destroy() end)
+						vipCoinHL[d] = nil
+					end
+				end
+			else
+				for d, hl in pairs(vipCoinHL) do
+					pcall(function() hl:Destroy() end)
+					vipCoinHL[d] = nil
+				end
+			end
+		end
+	end)
+
+	-- Murderer Notify
+	table.insert(reConnections, RunService.Heartbeat:Connect(function()
+		if not VIP.murdererNotify then return end
+		local murd = reGetMurderer()
+		local myHrp = vipGetHRP(localplayer.Character)
+		local mHrp = murd and vipGetHRP(murd.Character)
+		if myHrp and mHrp and vipAlive(murd) then
+			local d = (mHrp.Position - myHrp.Position).Magnitude
+			if d <= 50 and os.clock() - VIP_lastMurdNotif > 4 then
+				VIP_lastMurdNotif = os.clock()
+				vipNotify((murd.DisplayName or murd.Name) .. " · " .. math.floor(d) .. "m")
+			end
+		end
+	end))
+
+	-- Anti Fling (simplified)
+	local vipLastGoodCF, vipLastGoodAt = nil, 0
+	table.insert(reConnections, RunService.Heartbeat:Connect(function()
+		if not VIP.antiFling or VIP_flinging or VIP.fly then return end
+		local hrp = vipGetHRP(localplayer.Character)
+		if not hrp then return end
+		local lv = hrp.AssemblyLinearVelocity
+		if lv.Magnitude > 200 then
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+			if vipLastGoodCF then pcall(function() hrp.CFrame = vipLastGoodCF end) end
+			return
+		end
+		local now = os.clock()
+		if vipLastGoodCF and (hrp.Position - vipLastGoodCF.Position).Magnitude > 80 then
+			pcall(function() hrp.CFrame = vipLastGoodCF end)
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			return
+		end
+		vipLastGoodCF = hrp.CFrame
+		vipLastGoodAt = now
+	end))
+
+	-- Fling All
+	local function vipFlingAll()
+		if VIP_flinging then return end
+		VIP_flinging = true
+		local myHrp = vipGetHRP(localplayer.Character)
+		if not myHrp then VIP_flinging = false; return end
+		local home = myHrp.CFrame
+		local n = 0
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localplayer and vipAlive(p) then
+				local thrp = vipGetHRP(p.Character)
+				if thrp then
+					local t0 = os.clock()
+					while os.clock() - t0 < VIP.flingSeconds do
+						local h = vipGetHRP(localplayer.Character)
+						local t = vipGetHRP(p.Character)
+						if not (h and t) then break end
+						h.CFrame = t.CFrame
+						local vel = h.AssemblyLinearVelocity
+						h.AssemblyLinearVelocity = vel * (VIP.flingPower / 1000) + Vector3.new(0, VIP.flingPower / 1000, 0)
+						RunService.Heartbeat:Wait()
+						if h.Parent then h.AssemblyLinearVelocity = vel end
+						RunService.Stepped:Wait()
+					end
+					n = n + 1
+					task.wait(0.1)
+				end
+			end
+		end
+		local h2 = vipGetHRP(localplayer.Character)
+		if h2 then
+			h2.CFrame = home
+			h2.AssemblyLinearVelocity = Vector3.zero
+		end
+		VIP_flinging = false
+		vipNotify("Flung " .. n .. " player(s)")
+	end
+
+	-- Simple Box / Tracer / Skeleton using Drawing if available
+	local function vipClearDraw(store)
+		for _, arr in pairs(store) do
+			if type(arr) == "table" then
+				for _, d in ipairs(arr) do pcall(function() d:Remove() end) end
+			else
+				pcall(function() arr:Remove() end)
+			end
+		end
+		table.clear(store)
+	end
+
+	table.insert(reConnections, RunService.RenderStepped:Connect(function()
+		if not Drawing then return end
+		-- clear each frame for simplicity
+		vipClearDraw(VIP_boxStore)
+		vipClearDraw(VIP_tracerStore)
+		vipClearDraw(VIP_skelStore)
+		if not (VIP.espBox or VIP.espTracers or VIP.espSkeleton) then return end
+		local cam = workspace.CurrentCamera
+		local myHrp = vipGetHRP(localplayer.Character)
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localplayer and vipAlive(p) then
+				local ch = p.Character
+				local hrp = vipGetHRP(ch)
+				local head = ch:FindFirstChild("Head")
+				if hrp and head then
+					local role = reGetRole(p)
+					local col = Color3.fromRGB(95, 225, 125)
+					if role == "Murderer" then col = Color3.fromRGB(255, 80, 80)
+					elseif role == "Sheriff" or role == "Hero" then col = Color3.fromRGB(90, 150, 255) end
+					local rp, on = cam:WorldToViewportPoint(hrp.Position)
+					local hp, hon = cam:WorldToViewportPoint(head.Position)
+					if VIP.espTracers and on then
+						local line = Drawing.new("Line")
+						line.From = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
+						line.To = Vector2.new(rp.X, rp.Y)
+						line.Color = col
+						line.Thickness = 1.2
+						line.Transparency = 0.3
+						line.Visible = true
+						VIP_tracerStore[p] = line
+					end
+					if VIP.espBox and on and hon then
+						local h = math.abs(hp.Y - rp.Y) * 2.2
+						local w = h * 0.55
+						local x, y = rp.X - w / 2, hp.Y - h * 0.15
+						local box = Drawing.new("Square")
+						box.Position = Vector2.new(x, y)
+						box.Size = Vector2.new(w, h)
+						box.Color = col
+						box.Thickness = 1.2
+						box.Filled = false
+						box.Visible = true
+						VIP_boxStore[p] = { box }
+					end
+					if VIP.espSkeleton and on then
+						local bones = {
+							{"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+							{"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"},
+							{"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"},
+							{"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"},
+							{"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"},
+						}
+						local lines = {}
+						for _, pair in ipairs(bones) do
+							local a = ch:FindFirstChild(pair[1])
+							local b = ch:FindFirstChild(pair[2])
+							if a and b then
+								local pa, oa = cam:WorldToViewportPoint(a.Position)
+								local pb, ob = cam:WorldToViewportPoint(b.Position)
+								if oa and ob and pa.Z > 0 and pb.Z > 0 then
+									local l = Drawing.new("Line")
+									l.From = Vector2.new(pa.X, pa.Y)
+									l.To = Vector2.new(pb.X, pb.Y)
+									l.Color = col
+									l.Thickness = 1.3
+									l.Visible = true
+									table.insert(lines, l)
+								end
+							end
+						end
+						if #lines > 0 then VIP_skelStore[p] = lines end
+					end
+				end
+			end
+		end
+	end))
+
+	-- Knife walls / instant (best-effort via tool activation + CFrame)
+	-- Full remote hooks require executor-specific metatables; we provide practical helpers.
+
+	-- ===== VIP UI =====
 	table.insert(module, {
 		Type = "Text",
 		Args = {"VIP"}
@@ -9352,506 +9801,164 @@ table.insert(module, {
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Auto Kill", function(Self, state)
-			RE.VIP_AutoKill = state
-			if state then
-				fu.notification("Auto Kill ON (Murderer = knife | Sheriff = snap)")
-			end
+			VIP.autoKill = state
+			if state then vipNotify("Auto Kill ON") end
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Silent Aim", function(Self, state)
-			RE.VIP_SilentAim = state
-			if FOVCircle then FOVCircle.Visible = state and RE.VIP_ShowFOV end
+		Args = {"Silent Aim VIP", function(Self, state)
+			VIP.silentAim = state
+			RE.SilentAim = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Range",
-		Args = {"Silent Aim FOV", 40, 400, 10, function(Self, val)
-			RE.VIP_AimFOV = val
-			if FOVCircle and FOVCircle:IsA("GuiObject") then
-				FOVCircle.Size = UDim2.fromOffset(val * 2, val * 2)
-				FOVCircle.Position = UDim2.new(0.5, -val, 0.5, -val)
-			end
+		Args = {"VIP FOV Radius", 40, 400, 10, function(Self, val)
+			VIP.aimFov = val
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Show FOV Circle", function(Self, state)
-			RE.VIP_ShowFOV = state
-			if FOVCircle then FOVCircle.Visible = state and (RE.VIP_SilentAim or RE.Aimbot) end
-		end}
-	})
-
-	table.insert(module, {
-		Type = "Range",
-		Args = {"Snap Height", 5, 9, 1, function(Self, val)
-			RE.VIP_SnapHeight = val
+			VIP.showFov = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Fly", function(Self, state)
-			RE.VIP_Fly = state
-			if state then VIP_startFly() else VIP_stopFly() end
+		Args = {"Knife Through Walls", function(Self, state)
+			VIP.knifeWalls = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Instant Knife Throw", function(Self, state)
+			VIP.instantKnife = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Fly VIP", function(Self, state)
+			VIP.fly = state
+			if state then vipStartFly() else vipStopFly() end
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Range",
-		Args = {"Fly Speed", 20, 250, 5, function(Self, val)
-			RE.VIP_FlySpeed = val
+		Args = {"Fly Speed VIP", 20, 250, 5, function(Self, val)
+			VIP.flySpeed = val
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Box ESP", function(Self, state)
-			RE.VIP_BoxESP = state
+			VIP.espBox = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Tracers", function(Self, state)
-			RE.VIP_TracersMono = state
+		Args = {"3D Box ESP", function(Self, state)
+			VIP.espBox3D = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
-		Args = {"Coin ESP", function(Self, state)
-			RE.VIP_CoinESPMono = state
+		Args = {"Tracers VIP", function(Self, state)
+			VIP.espTracers = state
 		end}
 	})
 
 	table.insert(module, {
-		Type = "Button",
-		Args = {"Fling All Players", function()
-			task.spawn(VIP_flingAll)
+		Type = "Toggle",
+		Args = {"Skeleton ESP VIP", function(Self, state)
+			VIP.espSkeleton = state
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Coin ESP VIP", function(Self, state)
+			VIP.coinEsp = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Auto Collect Coins", function(Self, state)
-			RE.VIP_AutoCoins = state
-			if state then fu.notification("Auto Coins ON") end
+			VIP.autoCoins = state
+			if state then vipNotify("Auto Collect Coins ON") end
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Button",
-		Args = {"TP Nearest Coin", function()
-			VIP_tpNearestCoin()
+		Args = {"Teleport to Nearest Coin", function()
+			local hrp = vipGetHRP(localplayer.Character)
+			if not hrp then vipNotify("No character"); return end
+			local best, bd
+			for _, d in ipairs(Workspace:GetDescendants()) do
+				if d:IsA("BasePart") then
+					local n = d.Name:lower()
+					if n:find("coin") or d:GetAttribute("CoinID") ~= nil then
+						local dist = (d.Position - hrp.Position).Magnitude
+						if not bd or dist < bd then bd, best = dist, d end
+					end
+				end
+			end
+			if best then
+				hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 3, 0))
+				vipNotify("Teleported to coin")
+			else
+				vipNotify("No coins on map")
+			end
+		end}
+	})
+
+	table.insert(module, {
+		Type = "Button",
+		Args = {"Fling All Players", function()
+			task.spawn(vipFlingAll)
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Anti Fling", function(Self, state)
-			RE.VIP_AntiFling = state
-			if not state and VIP_antiFlingRestore then VIP_antiFlingRestore() end
+			VIP.antiFling = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Anti Trap", function(Self, state)
-			RE.VIP_AntiTrap = state
+			VIP.antiTrap = state
 		end}
 	})
 
 	table.insert(module, {
 		Type = "Toggle",
 		Args = {"Murderer Notify", function(Self, state)
-			RE.VIP_MurdererNotify = state
+			VIP.murdererNotify = state
 		end}
 	})
 
-	-- VIP runtime (Mono logic)
-	local VIP_conns = {}
-	local VIP_Players = game:GetService("Players")
-	local VIP_UIS = game:GetService("UserInputService")
-	local function vipBind(sig, fn)
-		local c = sig:Connect(fn)
-		table.insert(VIP_conns, c)
-		return c
-	end
+	table.insert(module, {
+		Type = "Toggle",
+		Args = {"Auto Grab Gun VIP", function(Self, state)
+			VIP.autoGun = state
+		end}
+	})
 
-	local function getHRP(char)
-		return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
-	end
-
-	local function alive(plr)
-		local ch = plr and plr.Character
-		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-		return hum and hum.Health > 0
-	end
-
-	-- Fly (Mono style)
-	local flyBV, flyBG
-	function VIP_startFly()
-		local ch = localplayer.Character
-		local hrp = getHRP(ch)
-		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum then return end
-		VIP_stopFly()
-		hum.PlatformStand = true
-		flyBV = Instance.new("BodyVelocity")
-		flyBV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-		flyBV.Velocity = Vector3.zero
-		flyBV.Parent = hrp
-		flyBG = Instance.new("BodyGyro")
-		flyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-		flyBG.P = 9e4
-		flyBG.Parent = hrp
-		vipBind(rs.RenderStepped, function()
-			if not RE.VIP_Fly or not flyBV or not flyBV.Parent then return end
-			local cam = workspace.CurrentCamera
-			local dir = Vector3.zero
-			if VIP_UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
-			if VIP_UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
-			if VIP_UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
-			if VIP_UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
-			if VIP_UIS:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0,1,0) end
-			if VIP_UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0,1,0) end
-			if dir.Magnitude > 0 then dir = dir.Unit * RE.VIP_FlySpeed end
-			flyBV.Velocity = dir
-			flyBG.CFrame = cam.CFrame
-		end)
-	end
-
-	function VIP_stopFly()
-		if flyBV then pcall(function() flyBV:Destroy() end) flyBV = nil end
-		if flyBG then pcall(function() flyBG:Destroy() end) flyBG = nil end
-		local ch = localplayer.Character
-		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-		if hum then hum.PlatformStand = false end
-	end
-
-	-- Fling (Mono style simplified)
-	local flinging = false
-	local function VIP_flingPlayer(target)
-		if flinging or not target or not alive(target) then return false end
-		local myHrp = getHRP(localplayer.Character)
-		local th = getHRP(target.Character)
-		if not myHrp or not th then return false end
-		flinging = true
-		local home = myHrp.CFrame
-		local power = RE.VIP_FlingPower or 10000
-		pcall(function()
-			for i = 1, 12 do
-				if not th.Parent then break end
-				myHrp.CFrame = th.CFrame * CFrame.new(0, 0, 1)
-				myHrp.AssemblyLinearVelocity = th.AssemblyLinearVelocity * 0.5 + Vector3.new(0, power, 0)
-				rs.Heartbeat:Wait()
-				myHrp.AssemblyLinearVelocity = Vector3.new(0, power * 0.3, 0)
-				rs.Stepped:Wait()
-			end
-			myHrp.CFrame = home
-			myHrp.AssemblyLinearVelocity = Vector3.zero
-		end)
-		flinging = false
-		return true
-	end
-
-	function VIP_flingAll()
-		local myHrp = getHRP(localplayer.Character)
-		if not myHrp then fu.notification("No character") return end
-		local home = myHrp.CFrame
-		task.spawn(function()
-			local n = 0
-			for _, p in ipairs(VIP_Players:GetPlayers()) do
-				if p ~= localplayer and alive(p) then
-					if VIP_flingPlayer(p) then n = n + 1 end
-					task.wait(0.15)
-				end
-			end
-			local h = getHRP(localplayer.Character)
-			if h then h.CFrame = home; h.AssemblyLinearVelocity = Vector3.zero end
-			fu.notification("Flung " .. n .. " player(s)")
-		end)
-	end
-
-	-- TP nearest coin
-	function VIP_tpNearestCoin()
-		local hrp = getHRP(localplayer.Character)
-		if not hrp then fu.notification("No character") return end
-		local best, bd
-		local map = getMap and getMap()
-		local containers = {}
-		if map then
-			for _, d in ipairs(map:GetDescendants()) do
-				if d:IsA("BasePart") and (d.Name:lower():find("coin") or (d.Parent and d.Parent.Name:lower():find("coin"))) then
-					table.insert(containers, d)
-				end
-			end
-		end
-		for _, c in ipairs(containers) do
-			local d = (c.Position - hrp.Position).Magnitude
-			if not bd or d < bd then bd, best = d, c end
-		end
-		if best then
-			hrp.CFrame = CFrame.new(best.Position + Vector3.new(0, 3, 0))
-			fu.notification("Teleported to coin")
-		else
-			fu.notification("No coins found")
-		end
-	end
-
-	-- Anti Fling
-	local flippedParts = setmetatable({}, {__mode = "k"})
-	function VIP_antiFlingRestore()
-		for d in pairs(flippedParts) do
-			if d and d.Parent and d:IsA("BasePart") then d.CanCollide = true end
-		end
-		table.clear(flippedParts)
-	end
-
-	vipBind(rs.Heartbeat, function()
-		if not RE.VIP_AntiFling or flinging then return end
-		for _, p in ipairs(VIP_Players:GetPlayers()) do
-			if p ~= localplayer and p.Character then
-				for _, d in ipairs(p.Character:GetDescendants()) do
-					if d:IsA("BasePart") and d.CanCollide then
-						d.CanCollide = false
-						flippedParts[d] = true
-					end
-				end
-			end
-		end
-		local hrp = getHRP(localplayer.Character)
-		if hrp then
-			local lv = hrp.AssemblyLinearVelocity
-			if lv.Magnitude > 200 then
-				hrp.AssemblyLinearVelocity = lv.Unit * 200
-			end
-			local av = hrp.AssemblyAngularVelocity
-			if av.Magnitude > 20 then
-				hrp.AssemblyAngularVelocity = Vector3.zero
-			end
-		end
-	end)
-
-	-- Murderer Notify
-	local murdInRange = false
-	vipBind(rs.Heartbeat, function()
-		if not RE.VIP_MurdererNotify then
-			murdInRange = false
-			return
-		end
-		local hrp = getHRP(localplayer.Character)
-		local m = findMurderer()
-		local mh = (m and m ~= localplayer and alive(m)) and getHRP(m.Character) or nil
-		if not (hrp and mh) then
-			murdInRange = false
-			return
-		end
-		local d = (mh.Position - hrp.Position).Magnitude
-		if d > 50 then
-			murdInRange = false
-			return
-		end
-		if not murdInRange then
-			murdInRange = true
-			fu.notification("MURDERER NEAR: " .. (m.DisplayName or m.Name) .. " · " .. math.floor(d) .. "m")
-		end
-	end)
-
-	-- Auto Kill loop (simplified Mono style)
-	local lastAutoKill = 0
-	vipBind(rs.Heartbeat, function()
-		if not RE.VIP_AutoKill then return end
-		if os.clock() - lastAutoKill < 0.4 then return end
-		local ch = localplayer.Character
-		if not ch then return end
-		local knife = ch:FindFirstChild("Knife") or localplayer.Backpack:FindFirstChild("Knife")
-		local gun = ch:FindFirstChild("Gun") or localplayer.Backpack:FindFirstChild("Gun")
-		if knife then
-			-- Murderer: try kill closest / all via remote if available
-			lastAutoKill = os.clock()
-			for _, p in ipairs(VIP_Players:GetPlayers()) do
-				if p ~= localplayer and alive(p) then
-					local th = getHRP(p.Character)
-					local myh = getHRP(ch)
-					if th and myh and (th.Position - myh.Position).Magnitude < 25 then
-						pcall(function()
-							if knife:FindFirstChild("Throw") then
-								knife.Throw:FireServer(th.Position)
-							end
-						end)
-					end
-				end
-			end
-		elseif gun then
-			local murd = findMurderer()
-			if murd and alive(murd) then
-				local th = getHRP(murd.Character)
-				local myh = getHRP(ch)
-				if th and myh then
-					lastAutoKill = os.clock()
-					pcall(function()
-						myh.CFrame = th.CFrame * CFrame.new(0, RE.VIP_SnapHeight or 5, 0)
-						task.wait()
-						if gun:FindFirstChild("Shoot") then
-							gun.Shoot:FireServer(th.Position)
-						end
-						task.wait(0.1)
-						myh.CFrame = myh.CFrame -- stay
-					end)
-				end
-			end
-		end
-	end)
-
-	-- Auto Coins (walk style)
-	task.spawn(function()
-		while true do
-			task.wait(0.35)
-			if not RE.VIP_AutoCoins then continue end
-			local hrp = getHRP(localplayer.Character)
-			if not hrp then continue end
-			local best, bd
-			local map = getMap and getMap()
-			if map then
-				for _, d in ipairs(map:GetDescendants()) do
-					if d:IsA("BasePart") and d.Name:lower():find("coin") then
-						local dist = (d.Position - hrp.Position).Magnitude
-						if not bd or dist < bd then bd, best = dist, d end
-					end
-				end
-			end
-			if best and bd > 4 then
-				local target = best.Position + Vector3.new(0, 2, 0)
-				local dir = (target - hrp.Position)
-				if dir.Magnitude > 1 then
-					hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(target), 0.15)
-				end
-			end
-		end
-	end)
-
-	-- Silent Aim + FOV visual (reuse existing FOVCircle Frame if present)
-	vipBind(rs.RenderStepped, function()
-		if FOVCircle and FOVCircle:IsA("GuiObject") then
-			local show = RE.VIP_ShowFOV and (RE.VIP_SilentAim or RE.Aimbot)
-			FOVCircle.Visible = show
-			local r = RE.VIP_AimFOV or RE.FOVRadius or 120
-			FOVCircle.Size = UDim2.fromOffset(r * 2, r * 2)
-			FOVCircle.Position = UDim2.new(0.5, -r, 0.5, -r)
-		end
-	end)
-
-	-- Anti Trap (speed restore)
-	pcall(function()
-		local TrapSystem = game:GetService("ReplicatedStorage"):FindFirstChild("TrapSystem")
-		if TrapSystem then
-			local thl = TrapSystem:FindFirstChild("TrapHitLocal")
-			if thl then
-				vipBind(thl.OnClientEvent, function()
-					if not RE.VIP_AntiTrap then return end
-					task.spawn(function()
-						local hum = localplayer.Character and localplayer.Character:FindFirstChildOfClass("Humanoid")
-						if not hum then return end
-						local want = RE.WSVal or 16
-						local t0 = os.clock()
-						while os.clock() - t0 < 4.5 do
-							if hum.Parent then
-								if hum.WalkSpeed < want then hum.WalkSpeed = want end
-								if hum.JumpPower < 40 then
-									hum.UseJumpPower = true
-									hum.JumpPower = 50
-								end
-							end
-							rs.Heartbeat:Wait()
-						end
-					end)
-				end)
-			end
-		end
-	end)
-
-	-- Simple Box / Skeleton / Tracers / Coin ESP for VIP (lightweight)
-	local VIP_ESP = {}
-	local function clearVIPESP()
-		for _, o in pairs(VIP_ESP) do
-			pcall(function() o:Destroy() end)
-		end
-		table.clear(VIP_ESP)
-	end
-
-	vipBind(rs.RenderStepped, function()
-		clearVIPESP()
-		if not (RE.VIP_BoxESP or RE.VIP_TracersMono or RE.VIP_CoinESPMono) then return end
-		local cam = workspace.CurrentCamera
-		local myRoot = getHRP(localplayer.Character)
-		if not myRoot then return end
-
-		if RE.VIP_CoinESPMono then
-			local map = getMap and getMap()
-			if map then
-				for _, d in ipairs(map:GetDescendants()) do
-					if d:IsA("BasePart") and d.Name:lower():find("coin") and not d:FindFirstChild("VIPCoinHL") then
-						local hl = Instance.new("Highlight")
-						hl.Name = "VIPCoinHL"
-						hl.Adornee = d
-						hl.FillColor = Color3.fromRGB(255, 215, 0)
-						hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-						hl.FillTransparency = 0.4
-						hl.Parent = d
-						table.insert(VIP_ESP, hl)
-					end
-				end
-			end
-		end
-
-		for _, p in ipairs(VIP_Players:GetPlayers()) do
-			if p == localplayer then continue end
-			local char = p.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local root = getHRP(char)
-			local head = char and char:FindFirstChild("Head")
-			if not (hum and hum.Health > 0 and root and head) then continue end
-			local rootPos, onScreen = cam:WorldToViewportPoint(root.Position)
-			if not onScreen then continue end
-
-			if RE.VIP_TracersMono then
-				local screenBottom = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
-				local targetPos = Vector2.new(rootPos.X, rootPos.Y)
-				local line = Instance.new("Frame")
-				line.AnchorPoint = Vector2.new(0.5, 0.5)
-				line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				line.BorderSizePixel = 0
-				line.BackgroundTransparency = 0.2
-				local dist = (screenBottom - targetPos).Magnitude
-				local center = (screenBottom + targetPos) / 2
-				line.Position = UDim2.fromOffset(center.X, center.Y)
-				line.Size = UDim2.fromOffset(dist, 1.4)
-				line.Rotation = math.deg(math.atan2(targetPos.Y - screenBottom.Y, targetPos.X - screenBottom.X))
-				line.Parent = (getgenv().H3XA_MM2 and getgenv().H3XA_MM2:FindFirstChild("REHud")) or localplayer.PlayerGui
-				table.insert(VIP_ESP, line)
-			end
-
-			if RE.VIP_BoxESP then
-				local box = Instance.new("Frame")
-				box.BackgroundTransparency = 1
-				box.BorderSizePixel = 1
-				box.BorderColor3 = Color3.fromRGB(255, 255, 255)
-				local size = math.clamp(2000 / rootPos.Z, 20, 80)
-				box.Size = UDim2.fromOffset(size * 0.7, size)
-				box.Position = UDim2.fromOffset(rootPos.X - size * 0.35, rootPos.Y - size * 0.5)
-				box.Parent = (getgenv().H3XA_MM2 and getgenv().H3XA_MM2:FindFirstChild("REHud")) or localplayer.PlayerGui
-				table.insert(VIP_ESP, box)
-			end
-		end
-	end)
-
-	fu.notification("VIP (Mono) features loaded")
 
 	repeat task.wait() until getgenv().Modules
 	getgenv().Modules[3] = module
